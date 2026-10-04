@@ -1,0 +1,26 @@
+---
+title: Docker من الصفر لحد Compose
+highlight: Docker
+subtitle: containers · images · volumes · Dockerfile · docker compose
+description: يعني إيه container وليه أحسن من VM، وإزاي تبني image وتحفظ داتا الـ database بالـ volumes، وتشغّل React و Node و Postgres بأمر واحد.
+emoji: 🐳
+order: 9
+tags: [devops, backend]
+note: مبنية على مذكرتي الشخصية عن Docker، وكمّلت أجزاءها اللي ناقصة (الـ app والـ compose) بأسلوبي. الأوامر والـ flags بتتغير، فراجع الـ docs الرسمية قبل ما تعتمد على أي حاجة في production.
+---
+
+المذكرة ماشية على <Hl c="y">٦ فصول + شيت</Hl>. الأول الفكرة وليه Docker موجود أصلًا، وبعدين بيشتغل إزاي من جوه. بعد كده نبني أول <En>image</En>، ونحفظ الداتا بالـ <En>volumes</En>، ونعمل <En>Dockerfile</En> لتطبيق حقيقي، وفي الآخر نربط كله بـ <En>docker compose</En>.
+
+<Box type="story" icon="🍱" title="تشبيه المذكرة كلها في سطرين">
+
+من غير Docker: كل ما الفرونت عايز يجرّب الـ API، يستنى الباك اند يرفع نسخة على سيرفر الـ test. وكل واحد عنده Node بنسخة شكل، و Postgres متسطّب بإعدادات شكل.
+
+مع Docker: الباك اند بيعمل **علبة أكل جاهزة** (image) فيها الأكل والمعلقة والملح، ويحطها في التلاجة المشتركة (Docker Hub). الفرونت يسحبها ويسخّنها (`docker run`)، وطعمها هو هو على أي جهاز.
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+نزّل <En>Docker Desktop</En> لو على Windows أو macOS، أو <En>Docker Engine</En> لو على Linux. اتأكد إن `docker version` و `docker compose version` شغالين. المراجع اللي كنت بذاكر منها: كورس DevOps Directive على يوتيوب والريبو بتاعه، والـ cheat sheet الرسمي من docs.docker.com.
+
+</Box>

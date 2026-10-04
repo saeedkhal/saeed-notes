@@ -1,0 +1,160 @@
+---
+title: الداتا اللي متموتش — Volumes و Bind mounts
+short: Volumes
+order: 4
+label: فصل ٤
+badge: التطبيق · فصل ٤
+en: volume mount · bind mount · --mount vs -v · Postgres data
+keywords: volume · bind · -v · pgdata
+goal: تحفظ داتا الـ database بره الـ container، وتعرف إمتى volume وإمتى bind mount.
+part: التطبيق
+color: c4
+---
+
+## المشكلة
+
+مسحت الـ container؟ كل اللي اتكتب جوّاه راح. طب لو الـ container ده Postgres؟ يبقى لازم ملفات الداتا تعيش **بره** الـ container، والـ container بس يشاور عليها. ده اسمه <En>mount</En>، وفي منه نوعين أساسيين:
+
+<Grid2>
+<Card title="📦 Volume mount" c={2}>
+
+Docker هو اللي بيدير المكان. بيتخزّن جوه مساحة Docker نفسه (على Linux تحت `/var/lib/docker/volumes`، وعلى Desktop جوه الـ VM). إنت تتعامل معاه باسمه بس.
+
+</Card>
+<Card title="📂 Bind mount" c={4}>
+
+إنت اللي بتحدد فولدر على جهازك بالمسار، والـ container يشوفه زي ما هو. أي تعديل من ناحية يبان في الناحية التانية فورًا.
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🧳" title="الشنطة والدولاب">
+
+الـ **volume** زي إنك تسيب شنطتك في أمانات الفندق: الفندق بيشيلها ويرجّعهالك بالرقم، ومتعرفش هي في أنهي رف.
+
+الـ **bind mount** زي إنك تجيب الدولاب بتاعك من البيت وتحطه في الأوضة: إنت عارف مكانه بالظبط وبتقدر تفتحه من البيت كمان.
+
+</Box>
+
+## 🧪 Lab: volume
+
+<File name="terminal">
+
+```bash
+# أنشئ volume باسم
+docker volume create my-volume
+
+# شغّل container واربط الـ volume على /my-data جوّاه
+docker run -it --rm --mount source=my-volume,destination=/my-data ubuntu:22.04
+# نفس الكلام بالصيغة القصيرة:
+# docker run -it --rm -v my-volume:/my-data ubuntu:22.04
+
+# جوه الـ container:
+echo "Hello from the container!" > /my-data/hello.txt
+exit
+```
+
+</File>
+
+الـ container اتمسح بسبب `--rm`. شغّل واحد جديد بنفس الـ volume واعمل `cat /my-data/hello.txt`: <Hl c="g">الملف لسه موجود</Hl>.
+
+## 🧪 Lab: bind mount
+
+`PWD` معناها <En>present working directory</En>، يعني الفولدر اللي إنت فاتح منه الـ terminal.
+
+<File name="terminal">
+
+```bash
+mkdir -p my-data
+docker run -it --rm --mount type=bind,source="${PWD}"/my-data,destination=/my-data ubuntu:22.04
+# أو: docker run -it --rm -v "${PWD}"/my-data:/my-data ubuntu:22.04
+
+# جوه الـ container:
+echo "Hello from the container!" > /my-data/hello.txt
+exit
+
+# على جهازك:
+cat my-data/hello.txt
+```
+
+</File>
+
+<Box type="tip" title="--mount ولا -v؟">
+
+الاتنين بيعملوا نفس الحاجة. `-v` أقصر، و `--mount` أوضح وبيرفض لو المسار مش موجود بدل ما يعمل فولدر فاضي من غير ما يقولك. للسكريبتات والـ docs، `--mount` أأمن.
+
+</Box>
+
+## التطبيق الحقيقي: Postgres
+
+كل database بتخزّن الداتا في مسار معين جوه الـ container، وده اللي لازم تربطه:
+
+| الـ database | مسار الداتا جوه الـ image الرسمية |
+| --- | --- |
+| Postgres (لحد 17) | `/var/lib/postgresql/data` |
+| MySQL | `/var/lib/mysql` |
+| MongoDB | `/data/db` |
+
+<Box type="warn" title="Postgres 18 غيّر المسار">
+
+من النسخة 18، الـ image الرسمية بقت متوقعة إنك تربط `/var/lib/postgresql` نفسه (والداتا بتتحط في فولدر باسم النسخة جوّاه). عشان كده الأمثلة هنا مثبّتة على `postgres:17`. لو هتستخدم نسخة أحدث، راجع صفحة الـ image على Docker Hub.
+
+</Box>
+
+**بـ volume:**
+
+<File name="terminal">
+
+```bash
+docker run --name my-postgres \
+  -e POSTGRES_PASSWORD=secret \
+  -v pgdata:/var/lib/postgresql/data \
+  -p 5432:5432 \
+  -d postgres:17
+```
+
+</File>
+
+امسح الـ container واعمل واحد جديد بنفس السطر: الـ volume `pgdata` لسه موجود، فلما تفتح الداتابيز من DataGrip أو أي client <Hl c="y">هتلاقي الجداول والداتا زي ما هي</Hl>.
+
+**بـ bind mount:**
+
+<File name="terminal">
+
+```bash
+mkdir -p pgdata   # أنشئ الفولدر لو مش موجود
+docker run --name my-postgres \
+  -e POSTGRES_PASSWORD=secret \
+  -v "${PWD}/pgdata":/var/lib/postgresql/data \
+  -p 5432:5432 \
+  -d postgres:17
+```
+
+</File>
+
+<Box type="warn" title="الـ bind mount مع الـ databases">
+
+على mac و Windows ممكن تقابل مشاكل permissions أو بطء، لأن الملفات بتعدّي من الـ VM. للـ databases، الـ **named volume** هو الاختيار الآمن. الـ bind mount أحلى للكود وإنت بتطوّر (hot reload).
+
+</Box>
+
+## إدارة الـ volumes
+
+<File name="terminal">
+
+```bash
+docker volume ls
+docker volume inspect pgdata
+docker volume rm pgdata      # ⚠️ الداتا هتروح
+docker volume prune          # امسح كل volume مش مربوط بـ container
+```
+
+</File>
+
+<Checklist id="docker-volumes" title="خلّصت الفصل لما" items={["تشرح ليه داتا الـ container بتضيع وإزاي الـ mount بيحل ده", "تفرّق volume عن bind mount وتعرف إمتى كل واحد", "تشغّل Postgres بـ volume وتتأكد إن الداتا عاشت بعد مسح الـ container", "تعرف مسار الداتا لـ Postgres و MySQL و Mongo", "تعرف إن `docker volume rm` بيمسح الداتا فعلًا"]} />
+
+<Quiz>
+<Q n={1} q="مسحت container الـ Postgres. الداتا راحت؟">لأ، طالما كانت على volume أو bind mount. هتروح بس لو مسحت الـ volume نفسه.</Q>
+<Q n={2} q="عايز تعدّل الكود من VS Code والـ container يشوف التعديل فورًا. أنهي نوع؟">bind mount.</Q>
+<Q n={3} q="ليه المثال مثبّت على postgres:17 مش postgres بس؟">عشان الـ latest ممكن يتغير (زي ما 18 غيّر مسار الداتا)، والـ tag الثابت بيخلّي السلوك متوقع.</Q>
+</Quiz>

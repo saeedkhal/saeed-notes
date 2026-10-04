@@ -1,0 +1,95 @@
+---
+title: Docker بيشتغل إزاي من جوه؟
+short: من جوه
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: namespaces · cgroups · union filesystem · daemon · Docker Desktop vs Engine
+keywords: namespaces · cgroups · overlayfs · dockerd
+goal: تعرف الـ ٣ building blocks اللي Docker مبني عليها، ومسار الأمر من الـ CLI للـ registry، والفرق بين Desktop و Engine.
+part: البداية
+color: c2
+---
+
+## التلات أعمدة اللي Docker مبني عليها
+
+Docker مش سحر. هو بيجمّع ٣ مميزات موجودة أصلًا في <En>Linux kernel</En>:
+
+<Grid2>
+<Card title="🚪 Namespaces" c={1}>
+
+**العزل**: كل container يشوف نفسه لوحده. ليه `PID` خاص، و hostname خاص، و IP وبورتات خاصة، وشجرة ملفات خاصة. ميعرفش إن في containers تانية جنبه.
+
+</Card>
+<Card title="⚖️ Control groups" c={3}>
+
+**الحدود**: الـ `cgroups` بتقول الـ container ده مسموحله بكام RAM وكام CPU وقد إيه I/O. عشان container واحد طمعان ميوقّعش السيرفر كله.
+
+</Card>
+</Grid2>
+
+<Card title="📚 Union filesystem" c={5}>
+
+**الطبقات**: الـ image مكوّنة من طبقات (layers) فوق بعض، و read-only. لو عشر containers من نفس الـ image، الطبقات دي **مش بتتنسخ عشر مرات**. كلهم بيقروا من نفس المكان، وكل container بياخد طبقة كتابة رفيعة فوق لوحده. الشائع على Linux اسمه `overlay2`.
+
+</Card>
+
+<Box type="story" icon="🏨" title="أوضة في فندق">
+
+**Namespaces** = باب أوضتك: مش شايف النزلاء التانيين.
+**cgroups** = عدّاد الكهربا والمية بتاع الأوضة: ليك حد معيّن.
+**Union FS** = المطعم والسلم والأسانسير المشتركين: محدش بيبني مطعم لكل أوضة.
+
+</Box>
+
+## الأمر بيمشي إزاي؟
+
+لما تكتب `docker run nginx`:
+
+<Flow items={[{"t": "docker CLI", "c": 1, "s": "اللي إنت بتكتب فيه"}, "→", {"t": "dockerd", "c": 2, "s": "الـ daemon عن طريق API"}, "→", {"t": "Registry", "c": 3, "s": "يسحب الـ image لو مش موجودة"}, "→", {"t": "containerd + runc", "c": 4, "s": "يشغّلوا الـ container"}]} />
+
+- الـ **client**: ممكن يكون الـ CLI أو الواجهة الرسومية بتاعة Docker Desktop.
+- الـ **Docker daemon** (`dockerd`): العقل. بياخد الأوامر، يبني الـ images، ينشئ الـ containers، ويكلّم الـ registry عشان `pull` و `push`.
+- الـ **Credential helper**: بيحفظ بيانات الدخول للـ registry في مكان آمن (keychain على mac مثلًا، أو `pass` على Linux) بدل ما تتكتب نص عادي.
+- الـ **Registry**: مخزن الـ images، زي Docker Hub أو GitHub Container Registry.
+
+الـ images اللي بتنزّلها بتتخزّن محليًا. على Linux مكانها الافتراضي تحت `/var/lib/docker/`.
+
+## Docker Desktop على Windows و mac
+
+الـ containers محتاجة Linux kernel. فـ Docker Desktop على Windows أو macOS بيشغّل <Hl c="b">Linux VM صغيرة</Hl> في الخلفية، وجواها الـ daemon والـ containers (واختياريًا Kubernetes). الـ CLI اللي عندك على الجهاز بيكلّم الـ daemon اللي جوه الـ VM.
+
+<Box type="warn" title="خلي بالك">
+
+عشان كده أداء الـ bind mounts على mac و Windows أبطأ من Linux: الملفات بتعدّي من الـ host للـ VM. وعشان كده كمان الـ volumes على Desktop مش هتلاقيها في `/var/lib/docker` على جهازك، هي جوه الـ VM.
+
+</Box>
+
+## Docker Desktop ولا Docker Engine؟
+
+| | 🖥️ Docker Desktop | 🐳 Docker Engine |
+| --- | --- | --- |
+| هو إيه؟ | تطبيق كامل: Engine + واجهة رسومية + أدوات زيادة | الأساس بس لتشغيل الـ containers |
+| بيشتغل فين؟ | Windows و macOS (بـ Linux VM جواه)، وفي نسخة Linux | Linux مباشرة من غير VM |
+| مناسب لمين؟ | أسهل للبداية وللمطوّر على جهازه | السيرفرات والـ CI، شغل CLI |
+| بييجي معاه | Kubernetes محلي، Credential helpers، Extensions | `dockerd` و CLI (والـ compose plugin بيتسطّب لوحده) |
+
+<Box type="tip" title="ملحوظة على الترخيص">
+
+Docker Desktop مجاني للأفراد والشركات الصغيرة، بس الشركات الكبيرة محتاجة اشتراك. راجع شروط الترخيص الحالية في موقعهم.
+
+</Box>
+
+## ركن جانبي: الـ firmware
+
+كان عندي في المذكرة سؤال جانبي عن الـ <En>firmware</En>: ده software متسطّب على الـ hardware نفسه، وهو حلقة الوصل اللي بتشغّل الجهاز قبل الـ OS. شاشة "Press F2 to setup" جاية منه، وهو اللي بيقرر أنهي OS يقوم.
+
+نوعين: <En>BIOS</En> القديم، و <En>UEFI</En> الأحدث. الويندوز القديم (٨ وأقل) كان ماشي مع BIOS في الغالب، والويندوز الحديث محتاج UEFI، أما Linux فيقوم على الاتنين. مالوش علاقة مباشرة بـ Docker، بس حلو تعرف الطبقات من تحت لفوق: firmware ← kernel ← container.
+
+<Checklist id="docker-internals" title="خلّصت الفصل لما" items={["تسمّي التلات أعمدة (building blocks) وتشرح كل واحد في سطر", "تعرف ليه الـ images بتوفّر مساحة بالطبقات", "ترسم المسار من `docker run` لحد ما الـ container يقوم", "تعرف ليه Docker Desktop على mac محتاج VM", "تفرّق Docker Desktop عن Docker Engine"]} />
+
+<Quiz>
+<Q n={1} q="container بياكل الـ RAM كله ووقّع السيرفر. أنهي block كان المفروض يمنع ده؟">الـ cgroups، بحد زي `--memory 512m`.</Q>
+<Q n={2} q="ليه container مش شايف processes الـ containers التانية؟">عشان الـ PID namespace بتاعه منفصل.</Q>
+<Q n={3} q="مين اللي بيسحب الـ image من Docker Hub: الـ CLI ولا الـ daemon؟">الـ daemon. الـ CLI بس بيبعتله الأمر.</Q>
+</Quiz>

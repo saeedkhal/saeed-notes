@@ -1,0 +1,145 @@
+---
+title: Dockerfile لتطبيق حقيقي — Node و React
+short: تطبيق حقيقي
+order: 5
+label: فصل ٥
+badge: التطبيق · فصل ٥
+en: COPY · WORKDIR · layer cache · .dockerignore · multi-stage build
+keywords: layer cache · multi-stage · .dockerignore
+goal: تكتب Dockerfile لـ API بـ Node وواحد لـ React app، وتفهم الـ layer cache والـ multi-stage عشان الـ image تبقى صغيرة وسريعة.
+part: التطبيق
+color: c5
+---
+
+## الـ instructions الأساسية
+
+| الـ instruction | بيعمل إيه |
+| --- | --- |
+| `FROM` | الـ base image |
+| `WORKDIR` | فولدر الشغل جوه الـ image (ويتعمل لو مش موجود) |
+| `COPY` | ينسخ ملفات من الـ build context للـ image |
+| `RUN` | أمر وقت البناء، بيعمل طبقة |
+| `ENV` | متغيّر بيئة ثابت في الـ image |
+| `EXPOSE` | توثيق للبورت اللي التطبيق بيسمع عليه (مش بيفتحه) |
+| `USER` | يشغّل اللي بعده بمستخدم معين بدل root |
+| `CMD` | الأمر الافتراضي لما الـ container يقوم |
+
+## سر السرعة: الـ layer cache
+
+كل instruction بتعمل طبقة، و Docker بيعمل **cache** لكل طبقة. لو الطبقة وكل اللي قبلها متغيّروش، بيستخدم الكاش. أول ما طبقة تتغيّر، <Hl c="o">كل اللي بعدها يتبني من جديد</Hl>.
+
+عشان كده الترتيب مهم: الحاجات اللي بتتغير قليل (الـ dependencies) فوق، والحاجات اللي بتتغير كتير (الكود) تحت.
+
+<Box type="story" icon="🥙" title="ساندوتش الشاورما">
+
+لو غيّرت الصوص، مش هتعيد شوي اللحمة من الأول. بس لو غيّرت اللحمة، لازم تعيد كل اللي فوقها. حط اللحمة (`npm ci`) تحت، والصوص (الكود) فوق.
+
+</Box>
+
+## 🧪 Lab: API بـ Node
+
+<File name="Dockerfile">
+
+```dockerfile
+FROM node:22-alpine
+WORKDIR /app
+
+# انسخ ملفات الـ dependencies الأول بس → الكاش يفضل شغال لما الكود يتغير
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# بعدين الكود
+COPY . .
+
+ENV NODE_ENV=production
+EXPOSE 3000
+USER node
+CMD ["node", "src/index.js"]
+```
+
+</File>
+
+<Box type="warn" title="الغلطة المشهورة">
+
+لو كتبت `COPY . .` **قبل** `npm ci`، أي تعديل في أي ملف كود هيكسر الكاش ويعيد تسطيب كل الـ packages في كل build.
+
+</Box>
+
+ولو بتستخدم pnpm، فعّله بـ `corepack enable` جوه الـ image وانسخ `pnpm-lock.yaml` بدل `package-lock.json` (راجع الـ docs لأمر التسطيب المناسب).
+
+## .dockerignore
+
+زي `.gitignore` بس للـ build context. من غيره، `COPY . .` هينسخ `node_modules` بتاعتك (وممكن تكون لنظام تشغيل تاني!) و `.env` بأسرارك.
+
+<File name=".dockerignore">
+
+```text
+node_modules
+dist
+.git
+.env
+*.log
+Dockerfile
+docker-compose.yml
+```
+
+</File>
+
+## 🧪 Lab: React app بـ multi-stage
+
+React بعد الـ build مجرد ملفات static. مش محتاج Node في الـ production خالص، محتاج web server زي nginx. هنا ييجي الـ <En>multi-stage build</En>: stage يبني، و stage تاني ياخد الناتج بس.
+
+<File name="Dockerfile">
+
+```dockerfile
+# Stage 1: البناء
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: التشغيل — nginx بس + ملفات الـ build
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+```
+
+</File>
+
+<Flow items={[{"t": "build stage", "c": 1, "s": "node + node_modules + كود ≈ مئات الميجات"}, "→", {"t": "COPY --from", "c": 3, "s": "dist بس"}, "→", {"t": "final image", "c": 5, "s": "nginx + static ≈ عشرات الميجات"}]} />
+
+<Box type="tip" title="SPA و nginx">
+
+لو بتستخدم client-side routing (React Router أو TanStack Router)، nginx محتاج يرجّع `index.html` لأي مسار مش موجود، وإلا الـ refresh على `/about` هيدّي 404. ده بيتعمل بسطر `try_files` في config بتاع nginx، راجع الـ docs.
+
+</Box>
+
+<Box type="warn" title="متغيّرات البيئة في React">
+
+متغيّرات زي `VITE_API_URL` بتتحط في الكود **وقت الـ build**، مش وقت التشغيل. يعني `-e` على الـ container مش هيغيّرها. لو محتاجها تختلف، مرّرها كـ `ARG` وقت البناء أو اعمل config بيتحمّل وقت التشغيل.
+
+</Box>
+
+## ابني وشغّل
+
+<File name="terminal">
+
+```bash
+docker build -t my-api ./api
+docker run -d --name api -p 3000:3000 my-api
+
+docker build -t my-web ./web
+docker run -d --name web -p 8080:80 my-web
+```
+
+</File>
+
+<Checklist id="docker-app" title="خلّصت الفصل لما" items={["ترتب الـ Dockerfile بحيث الـ dependencies تتكاش", "تكتب .dockerignore وتعرف ليه `.env` لازم يبقى فيه", "تعمل multi-stage لـ React وتفهم ليه الـ image صغرت", "تعرف إن `EXPOSE` توثيق بس و `-p` هو اللي بيفتح", "تشغّل التطبيق بـ `USER node` مش root"]} />
+
+<Quiz>
+<Q n={1} q="غيّرت سطر في src/index.js. أنهي طبقات هتتبني تاني؟">من `COPY . .` وانت نازل. طبقة `npm ci` هتيجي من الكاش.</Q>
+<Q n={2} q="ليه final image بتاعة React مفيهاش node_modules؟">عشان الـ multi-stage: آخر stage بياخد `dist` بس من الـ build stage.</Q>
+<Q n={3} q="عملت docker run -e VITE_API_URL=... والـ React لسه بيكلم الـ URL القديم. ليه؟">متغيّرات Vite بتتحط وقت الـ build، مش وقت التشغيل.</Q>
+</Quiz>

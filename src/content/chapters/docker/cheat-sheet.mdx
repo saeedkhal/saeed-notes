@@ -1,0 +1,41 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: One-page recall for Docker
+keywords: cheatsheet · run · volume · compose
+goal: تفتكر الأوامر والحلول من غير ما ترجع للفصول.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["\"على جهازي شغالة\"", "اعمل image فيها كل حاجة وشغّلها في أي حتة"],
+  ["عايز OS مختلف تمامًا أو عزل hardware", "VM مش container"],
+  ["image من Docker تشتغل على Podman؟", "أيوه، الاتنين ماشيين على OCI"],
+  ["container واكل الـ RAM كله", "cgroups: `--memory` و `--cpus`"],
+  ["عايز shell جوه image", "`docker run -it --rm IMAGE sh`"],
+  ["عايز تدخل container شغال", "`docker exec -it NAME sh`"],
+  ["شغال في الخلفية ومش شايف حاجة", "`docker logs -f NAME`"],
+  ["مش قادر توصل للتطبيق من المتصفح", "`-p HOST:CONTAINER`. والتطبيق يسمع على 0.0.0.0 مش 127.0.0.1"],
+  ["الداتا ضاعت لما مسحت الـ container", "named volume على مسار الداتا"],
+  ["عايز تعديل الكود يبان فورًا", "bind mount أو `docker compose watch`"],
+  ["الـ build بيعيد npm install كل مرة", "انسخ package files وشغّل install قبل `COPY . .`"],
+  ["الـ image كبيرة جدًا", "alpine أو slim + multi-stage + `.dockerignore`"],
+  ["`.env` اتنسخ جوه الـ image", "ضيفه لـ `.dockerignore`"],
+  ["React مش شايف متغيّر البيئة الجديد", "متغيّرات Vite وقت الـ build، مش `-e`"],
+  ["الـ api مش لاقي الـ db في compose", "استخدم اسم الـ service `db` مش `localhost`"],
+  ["الـ api بيقوم قبل ما Postgres يجهز", "healthcheck + `condition: service_healthy`"],
+  ["عايز تمسح الداتا وتبدأ من الأول", "`docker compose down -v`"],
+  ["الهارد اتملى", "`docker system prune` (واقرا هيمسح إيه)"],
+]} />
+
+<Checklist id="docker-cheat" title="خلّصت المذكرة لما" items={["تبني image وتشغّلها بالـ flags الصح", "تحفظ داتا Postgres بـ volume", "تكتب Dockerfile متكاش و multi-stage", "تشغّل stack كامل بـ docker compose"]} />
+
+<Quiz>
+<Q n={1} q="image ولا container: أنهي اللي read-only؟">الـ image. الـ container طبقة كتابة فوقها.</Q>
+<Q n={2} q="volume ولا bind mount لداتا database؟">named volume.</Q>
+<Q n={3} q="compose ولا Kubernetes لمشروع على سيرفر واحد؟">compose كفاية. Kubernetes لما يبقى عندك cluster.</Q>
+</Quiz>

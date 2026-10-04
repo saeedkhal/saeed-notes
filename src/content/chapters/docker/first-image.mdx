@@ -1,0 +1,157 @@
+---
+title: أول image بإيدك وأوامر docker run
+short: أول image
+order: 3
+label: فصل ٣
+badge: التطبيق · فصل ٣
+en: docker pull · Dockerfile · docker build · docker run flags
+keywords: pull · build · run · -it · -d · --rm
+goal: تبني image من ubuntu فيها ping، وتشغّلها، وتفهم أهم flags بتاعة docker run.
+part: التطبيق
+color: c3
+---
+
+## الهدف: ubuntu فيها ping
+
+الـ image الرسمية بتاعة ubuntu خفيفة جدًا، لدرجة إن `ping` مش فيها. هنعمل image جديدة مبنية عليها ومتسطّب فيها `ping`.
+
+## 🧪 Lab: خطوة خطوة
+
+**١. نزّل الـ base image**
+
+<File name="terminal">
+
+```bash
+docker pull ubuntu:22.04
+# jammy هو اسم نسخة 22.04، فـ ubuntu:jammy نفس الـ image
+```
+
+</File>
+
+**٢. اكتب Dockerfile** في فولدر فاضي:
+
+<File name="Dockerfile">
+
+```dockerfile
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+</File>
+
+- `FROM`: بنبدأ من أنهي image.
+- `RUN`: أمر بيتنفذ **وقت البناء**، ونتيجته بتبقى طبقة جديدة في الـ image.
+- `rm -rf /var/lib/apt/lists/*`: بنمسح كاش apt عشان الـ image تصغر.
+
+**٣. ابني الـ image**
+
+<File name="terminal">
+
+```bash
+docker build -t my-ubuntu-ping .
+```
+
+</File>
+
+`-t` بتدّي الـ image اسم (tag). النقطة في الآخر هي الـ **build context**: الفولدر اللي Docker هيبعته للـ daemon ويدوّر فيه على الـ Dockerfile.
+
+**٤. شغّل container منها**
+
+<File name="terminal">
+
+```bash
+docker run -it --rm my-ubuntu-ping bash
+# جوه الـ container:
+ping -c 3 google.com
+exit
+```
+
+</File>
+
+<Box type="tip" title="اختصار: Dockerfile من غير ملف">
+
+ممكن تدمج خطوة ٢ و٣ وتبعت الـ Dockerfile من الـ stdin بـ heredoc:
+
+```bash
+docker build -t my-ubuntu-ping - <<EOF
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y iputils-ping
+EOF
+```
+
+الشَرطة `-` معناها "اقرا الـ Dockerfile من الـ input". مفيش context هنا، فمينفعش تستخدم `COPY`.
+
+</Box>
+
+## الـ container بيموت ومعاه ملفاته
+
+أي ملف تكتبه جوه الـ container بيتكتب في طبقة الكتابة بتاعته. <Hl c="p">امسح الـ container، الملفات تتمسح معاه</Hl>. ده مش مشكلة لـ ping، بس كارثة لو ده database. الحل في الفصل الجاي: الـ volumes.
+
+## Image جاهزة كأداة CLI
+
+مش لازم تسطّب كل أداة على جهازك. ممكن تشغّلها من image وتمسحها:
+
+<File name="terminal">
+
+```bash
+# ابعت request واعرض النتيجة، والـ container يتمسح بعدها
+docker run --rm curlimages/curl https://example.com
+
+# أو افتح shell جوه الـ image وجرّب براحتك
+docker run -it --rm curlimages/curl sh
+```
+
+</File>
+
+## أهم flags بتاعة docker run
+
+<File name="terminal">
+
+```bash
+docker run -d --name test-ubuntu ubuntu sh -c "sleep 3 && echo Done"
+docker logs test-ubuntu   # هتلاقي Done
+```
+
+</File>
+
+| الـ flag | معناه |
+| --- | --- |
+| `-it` | interactive + terminal: افتحلي shell أقدر أكتب فيه |
+| `-d` | detach: شغّل الـ container في الخلفية |
+| `--rm` | امسح الـ container أول ما يقف |
+| `--name test` | ادّيله اسم بدل الاسم العشوائي |
+| `-p 8080:80` | اربط بورت 8080 على جهازك ببورت 80 جوه الـ container |
+| `-e KEY=value` | متغيّر بيئة (environment variable) |
+| `-v src:/path` | اربط volume أو فولدر (الفصل الجاي) |
+| `sh -c "..."` | شغّل shell ونفّذ الأمر ده جوّاه |
+
+<Box type="warn" title="ترتيب البورت">
+
+في `-p 5432:5432` الرقم **الشمال لجهازك** واليمين للـ container. `-p 15432:5432` يعني تكلّم Postgres من جهازك على 15432.
+
+</Box>
+
+## أوامر هتحتاجها كل يوم
+
+<File name="terminal">
+
+```bash
+docker ps            # الـ containers الشغالة
+docker ps -a         # كلهم، حتى الواقفين
+docker images        # الـ images اللي عندك
+docker logs -f NAME  # تابع الـ logs
+docker exec -it NAME sh   # ادخل container شغال
+docker stop NAME && docker rm NAME
+docker system prune  # نضّف الحاجات اللي مش مستخدمة (اقرا التحذير قبل ما توافق)
+```
+
+</File>
+
+<Checklist id="docker-first-image" title="خلّصت الفصل لما" items={["تبني image من Dockerfile وتديها tag", "تعرف يعني إيه build context والنقطة في آخر الأمر", "تشغّل container بـ `-it --rm` وتدخل جوّاه", "تفرّق `-d` عن `-it` وتعرف ترتيب `-p`", "تعرف إن ملفات الـ container بتتمسح معاه"]} />
+
+<Quiz>
+<Q n={1} q="الفرق بين RUN في الـ Dockerfile و docker run؟">`RUN` بيتنفذ وقت **البناء** وبيعمل طبقة. `docker run` بيشغّل container من image جاهزة.</Q>
+<Q n={2} q="شغّلت container بـ -d ومش شايف أي output. تعمل إيه؟">`docker logs NAME`، أو `-f` عشان تتابع.</Q>
+<Q n={3} q="عايز تكلّم nginx من المتصفح على localhost:3000. الـ flag؟">`-p 3000:80`.</Q>
+</Quiz>

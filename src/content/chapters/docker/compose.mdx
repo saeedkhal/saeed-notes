@@ -1,0 +1,152 @@
+---
+title: docker compose — كل الـ stack بأمر واحد
+short: Compose
+order: 6
+label: فصل ٦
+badge: التطبيق · فصل ٦
+en: compose.yaml · services · networks · depends_on · healthcheck · watch
+keywords: services · depends_on · healthcheck · up -d
+goal: تشغّل React و Node و Postgres مع بعض بملف واحد، وتفهم الـ networking بين الـ services.
+part: التطبيق
+color: c1
+---
+
+## يعني إيه docker compose؟
+
+<En>docker compose</En> ملف `YAML` بتوصف فيه كل الـ containers اللي التطبيق محتاجها (اسمها **services**)، وبيناتهم volumes وشبكات ومتغيّرات بيئة. بدل ما تكتب تلات أوامر `docker run` طويلة وتفتكر ترتيبها، تكتب `docker compose up`.
+
+<Box type="story" icon="🍲" title="أوردر الكشري">
+
+بدل ما تقف عند الكاشير وتطلب كل حاجة لوحدها: عدس، وبعدين رز، وبعدين مكرونة، وبعدين الصلصة… بتقول **"كشري وسط بالدقة"**، والمحل عارف المكونات وترتيبها. الـ compose هو الأوردر المكتوب.
+
+</Box>
+
+## الملف
+
+<Tree>
+
+```text
+my-app/
+├── compose.yaml
+├── api/   (Dockerfile + كود Node)
+└── web/   (Dockerfile + كود React)
+```
+
+</Tree>
+
+<File name="compose.yaml">
+
+```yaml
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: appdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"   # اختياري: عشان تفتحها من DataGrip
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    environment:
+      # db هنا اسم الـ service، مش localhost
+      DATABASE_URL: postgres://app:secret@db:5432/appdb
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+```
+
+</File>
+
+## الـ networking: ليه `db` مش `localhost`؟
+
+Compose بيعمل **شبكة** خاصة للمشروع، وكل service بتبقى متاحة فيها <Hl c="b">باسمها كـ hostname</Hl>. جوه container الـ api، كلمة `localhost` معناها الـ api نفسه، مش جهازك ومش الـ db.
+
+<Grid2>
+<Card title="جوه الشبكة" c={2}>
+
+`api` يكلّم `db:5432`. البورت هنا هو بورت الـ container الأصلي.
+
+</Card>
+<Card title="من جهازك" c={4}>
+
+إنت تكلّم `localhost:3000` و `localhost:5432` عشان عملنا `ports`. من غيرها الـ service مش مكشوفة بره.
+
+</Card>
+</Grid2>
+
+## depends_on مش معناها "جاهز"
+
+`depends_on` العادي بيرتّب **بدء التشغيل** بس: يقوّم الـ db قبل الـ api. بس Postgres بياخد ثواني لحد ما يقبل connections. عشان كده استخدمنا `healthcheck` و `condition: service_healthy`، فالـ api ميقومش غير لما الـ db يقول "أنا جاهز".
+
+## الأوامر
+
+<File name="terminal">
+
+```bash
+docker compose up -d          # ابني لو محتاج، وشغّل الكل في الخلفية
+docker compose up -d --build  # أجبره يعيد البناء بعد تعديل الكود
+docker compose ps
+docker compose logs -f api
+docker compose exec db psql -U app -d appdb
+docker compose down           # وقّف وامسح الـ containers والشبكة
+docker compose down -v        # ⚠️ وكمان امسح الـ volumes (الداتا هتروح)
+```
+
+</File>
+
+## وإنت بتطوّر: الكود يتحدّث لوحده
+
+عشان متعملش `--build` مع كل سطر، في حلّين:
+
+<Grid2>
+<Card title="📂 bind mount" c={3}>
+
+اربط فولدر الكود جوه الـ container وشغّل الـ dev server بـ hot reload. خلي بالك تحمي `node_modules` بتاعة الـ container بـ volume منفصل.
+
+</Card>
+<Card title="👀 compose watch" c={5}>
+
+قسم `develop.watch` في الملف بيقول لـ compose يعمل sync للملفات أو rebuild لما تتغيّر، وبتشغّله بـ `docker compose watch`. راجع الـ docs للـ syntax.
+
+</Card>
+</Grid2>
+
+<Box type="tip" title="الأسرار">
+
+متحطّش الباسوردات الحقيقية في `compose.yaml` اللي على Git. حطها في ملف `.env` جنبه (و `.env` في `.gitignore`)، وcompose بيقراه لوحده وتستخدمها كده: `${POSTGRES_PASSWORD}`.
+
+</Box>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إيه الفرق بين docker compose و Kubernetes؟" — compose بيشغّل stack على **ماكينة واحدة** وممتاز للتطوير والمشاريع الصغيرة. Kubernetes orchestrator لـ cluster من ماكينات كتير: scaling، self-healing، rolling updates.
+
+</Box>
+
+<Checklist id="docker-compose" title="خلّصت الفصل لما" items={["تكتب compose.yaml فيه db و api و web", "تشرح ليه الـ api بيكلم `db` مش `localhost`", "تستخدم healthcheck مع `depends_on` عشان الـ api يستنى الـ db", "تفرّق `down` عن `down -v`", "تحط الأسرار في `.env` مش في الملف"]} />
+
+<Quiz>
+<Q n={1} q="الـ api بيدّي ECONNREFUSED 127.0.0.1:5432. الغلط فين؟">الـ connection string فيه `localhost`. لازم يبقى اسم الـ service: `db`.</Q>
+<Q n={2} q="عدّلت الكود وعملت docker compose up -d والتعديل مبانش. ليه؟">الـ image متبنتش تاني. استخدم `--build`، أو bind mount، أو `compose watch`.</Q>
+<Q n={3} q="عملت docker compose down وبعدين up. الداتا لسه موجودة؟">أيوه، `down` من غير `-v` مش بيمسح الـ named volumes.</Q>
+</Quiz>

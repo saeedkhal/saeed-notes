@@ -1,0 +1,97 @@
+---
+title: يعني إيه Docker وليه مهم؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: container · image · OCI · container runtime · VM
+keywords: container · OCI · runtime · VM
+goal: تفهم المشكلة اللي Docker بيحلها، وتفرّق الـ container عن الـ VM، وتعرف مين OCI ومين الـ runtime.
+part: البداية
+color: c1
+---
+
+## المشكلة اللي قبل Docker
+
+تخيّل تيم فرونت شغال على شاشة محتاجة الـ API. كل مرة يحتاج يجرّب حاجة جديدة، لازم الباك اند يرفع نسخة على سيرفر الـ test. ولو حد حاول يشغّل الباك اند على جهازه: نسخة Node مختلفة، Postgres مش متسطّب، متغيّر بيئة ناقص… والجملة المشهورة: <Hl c="o">"على جهازي شغالة!"</Hl>
+
+سنة ٢٠١٣ Docker طلع بفكرة بسيطة: بدل ما أشرح لكل واحد يسطّب إيه، أعمل <En>image</En> فيها كل اللي التطبيق محتاجه: الـ OS الخفيف، Node، الكود، والـ dependencies. أرفعها على <En>Docker Hub</En>، والفرونت ينزّلها ويشغّلها بأمر واحد.
+
+<Flow items={[{"t": "Dockerfile", "c": 1, "s": "الوصفة"}, "→", {"t": "Image", "c": 2, "s": "العلبة الجاهزة"}, "→", {"t": "Registry", "c": 3, "s": "Docker Hub مثلًا"}, "→", {"t": "Container", "c": 4, "s": "العلبة وهي شغالة"}]} />
+
+<Box type="story" icon="🍰" title="الوصفة والقالب والتورتة">
+
+الـ <En>Dockerfile</En> هو **الوصفة** المكتوبة في الكشكول. الـ <En>image</En> هي **القالب** اللي اتعمل من الوصفة ومبيتغيّرش. الـ <En>container</En> هو **التورتة** اللي طلعت من القالب، وممكن تطلّع منه عشر تورتات في نفس الوقت.
+
+</Box>
+
+## المنافسين و OCI
+
+Docker مش اللعيب الوحيد. في أدوات تانية بتعمل نفس الشغل، أشهرها:
+
+<Chips items={["Podman — من غير daemon", "containerd — الـ runtime اللي Docker نفسه بيستخدمه", "CRI-O — معمول لـ Kubernetes"]} />
+
+طب إزاي image اتبنت بـ Docker تشتغل على Podman؟ هنا ييجي دور <En>OCI</En> (Open Container Initiative). دي منظمة اتعملت بمشاركة Docker و Google و Microsoft وغيرهم، وحطّت **مواصفات** ثابتة لشكل الـ image وإزاي تتشغّل. أي أداة ماشية على المواصفات دي تقدر تشغّل أي image ماشية عليها.
+
+<Box type="tip" title="زي مقاس الفيشة">
+
+OCI عاملة زي توحيد شكل الفيشة: أي جهاز معمول على المقاس يدخل في أي بريزة، مهما كانت الشركة اللي صنعته.
+
+</Box>
+
+## الـ Container runtime
+
+الـ <En>container runtime</En> هو الحتة اللي **بتشغّل** الـ container فعلًا من الـ image. في طبقتين:
+
+<Grid2>
+<Card title="⬆️ high-level" c={2}>
+
+زي `containerd` و `CRI-O`: بيسحبوا الـ images، يديروا التخزين والشبكة، ويسلّموا الشغل للطبقة اللي تحت.
+
+</Card>
+<Card title="⬇️ low-level" c={4}>
+
+زي `runc`: هو اللي بيكلّم الـ kernel ويعمل العزل نفسه ويشغّل الـ process.
+
+</Card>
+</Grid2>
+
+## Container ولا Virtual Machine؟
+
+الـ <En>virtual machine</En> نظام كامل منفصل: OS خاص بيه، و RAM و CPU متقسومين له، وفوقهم التطبيق. أما الـ <En>container</En> فـ <Hl c="g">بيشارك الـ host في الـ kernel</Hl> وبياخد من الـ RAM والـ CPU على قد احتياجه.
+
+| | Virtual Machine | Container |
+| --- | --- | --- |
+| الـ OS | نظام كامل لكل VM | بيشارك kernel الـ host |
+| الحجم | جيجات | ميجات في الغالب |
+| وقت التشغيل | دقايق | ثواني أو أقل |
+| العزل | أقوى (hardware متقسّم) | كويس بس أخف (على مستوى الـ kernel) |
+| الاستخدام | تشغيل OS مختلف تمامًا | تشغيل تطبيقات كتير خفيفة |
+
+<Box type="story" icon="🏢" title="فيلا ولا شقة في عمارة؟">
+
+الـ VM **فيلا**: ليها سور وموتور مية وعدّاد كهربا لوحدها. غالية وبتاخد وقت تتبني.
+
+الـ container **شقة في عمارة**: ليها باب ومفتاح خاصين، بس العمارة كلها على نفس الأساس ونفس خط المية (الـ kernel). أرخص وبتسكن فيها في نفس اليوم.
+
+</Box>
+
+## الـ Orchestrators والـ Node
+
+لما يبقى عندك containers كتير على أكتر من سيرفر، محتاج حد **يدير** الحكاية: يشغّل، يعيد التشغيل لو حاجة وقعت، يوزّع الحمل. ده الـ <En>orchestrator</En>، زي <En>Kubernetes</En> و <En>Docker Swarm</En>.
+
+في عالمهم، كل ماكينة (حقيقية أو VM) بتشغّل containers اسمها <En>node</En>.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إيه الفرق بين الـ image والـ container؟" — الـ image قالب **read-only** متخزّن. الـ container نسخة شغالة منه، بطبقة كتابة رفيعة فوقه بتتمسح لما تمسح الـ container.
+
+</Box>
+
+<Checklist id="docker-intro" title="خلّصت الفصل لما" items={["تشرح المشكلة اللي Docker بيحلها في جملتين", "تفرّق الـ Dockerfile والـ image والـ container", "تعرف OCI عاملة إيه وليه Podman يشغّل images بتاعة Docker", "تقارن الـ container بالـ VM في الحجم والسرعة والعزل", "تعرف يعني إيه orchestrator و node"]} />
+
+<Quiz>
+<Q n={1} q="ليه الـ container أخف من الـ VM؟">عشان بيشارك kernel الـ host ومش بيحمّل OS كامل لوحده.</Q>
+<Q n={2} q="image اتبنت بـ Docker، ينفع تتشغّل بـ Podman؟">أيوه، طالما الاتنين ماشيين على مواصفات OCI.</Q>
+<Q n={3} q="مين اللي فعلًا بيعمل العزل ويشغّل الـ process؟">الـ low-level runtime زي `runc`.</Q>
+</Quiz>
