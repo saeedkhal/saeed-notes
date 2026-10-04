@@ -1,0 +1,259 @@
+---
+title: المفاهيم و pnpm workspaces
+short: المفاهيم و pnpm
+order: 1
+label: فصل ١
+badge: الأسبوع ١ · فصل ١
+en: Concepts · pnpm workspaces · workspace protocol · symlinks
+keywords: workspace:* · symlinks · store
+goal: تفهم إيه اللي بيحصل فعلًا في `node_modules` لما مشروعين في نفس الريبو يستخدموا بعض.
+part: البداية
+color: c1
+---
+
+## يعني إيه Monorepo بجد؟
+
+<Hl c="y">Monorepo = ريبو Git واحد فيه أكتر من project</Hl>، وكل project ليه `package.json` بتاعه. الفكرة مش "نحط كل الكود في فولدر واحد وخلاص" — الفكرة إن الـ projects دي **تعرف بعض** وتستخدم بعض كأنهم packages متنشرة، من غير ما تنشرهم فعلًا.
+
+<Grid2>
+<Card title="😩 Polyrepo (ريبو لكل حاجة)" c={2}>
+
+- غيّرت Button في الـ design system؟ ← publish ← bump في 3 ريبوهات ← 3 PRs.
+- الـ types بين الـ API والـ Front بتختلف من غير ما حد ياخد باله.
+- كل ريبو بـ ESLint و tsconfig مختلفين.
+
+</Card>
+<Card title="😎 Monorepo" c={3}>
+
+- تغيير واحد + commit واحد (<En>atomic commit</En>) يعدّل الـ API والـ UI مع بعض.
+- الـ types مصدرها واحد.
+- Config موحّد، والـ build بيتعمل للي اتغيّر بس (مع Turbo/Nx).
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="Monorepo ≠ Monolith">
+
+ناس كتير بتخلط. **Monolith** = تطبيق واحد كبير بيتعمله deploy مرة واحدة. **Monorepo** = <Hl c="u">طريقة تنظيم الكود</Hl> بس؛ ممكن يكون جوه 10 apps كل واحد بيتعمله deploy لوحده. ده سؤال إنترفيو كلاسيكي.
+
+</Box>
+
+## الـ Workspace: أول طوبة
+
+الـ <En>workspace</En> هو اللي بيقول لـ pnpm: "الفولدرات دي كلها packages تبعي، اربطهم ببعض". بيتعرّف في ملف واحد في الـ root:
+
+<File name="pnpm-workspace.yaml">
+
+```yaml
+packages:
+  - "apps/*"       # كل فولدر جوه apps هو package
+  - "packages/*"   # وكل فولدر جوه packages برضه
+```
+
+</File>
+
+<File name="package.json (root)">
+
+```json
+{
+  "name": "my-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build"
+  }
+}
+```
+
+</File>
+
+<Box type="tip" title='ليه "private": true في الـ root؟'>
+
+عشان الـ root نفسه مش package هتنشره؛ ده مجرد "البواب" اللي ماسك العمارة. و `packageManager` بيخلّي <En>corepack</En> يثبّت نفس نسخة pnpm عند كل الفريق وفي الـ CI.
+
+</Box>
+
+<Tree>
+
+```text
+my-monorepo/
+├── apps/
+│   └── web/              # package.json → "name": "web"
+├── packages/
+│   └── ui/               # package.json → "name": "@repo/ui"
+├── package.json
+├── pnpm-lock.yaml        # lockfile واحد للريبو كله!
+└── pnpm-workspace.yaml
+```
+
+</Tree>
+
+لاحظ: <Hl c="g">lockfile واحد بس</Hl> في الـ root. ده من أهم مميزات الـ monorepo — كل الـ apps بتشوف نفس الـ dependency graph.
+
+## `workspace:*` ضد الـ versions العادية
+
+لما `web` عاوز يستخدم `@repo/ui`، بتكتب في `apps/web/package.json`:
+
+<File name="apps/web/package.json">
+
+```json
+{
+  "name": "web",
+  "dependencies": {
+    "@repo/ui": "workspace:*",
+    "react": "^18.3.1"
+  }
+}
+```
+
+</File>
+
+الـ `workspace:` ده اسمه <En>workspace protocol</En>، ومعناه: <Hl c="p">"هات النسخة المحلية من الريبو، وإياك تروح للـ npm registry"</Hl>.
+
+| اللي بتكتبه | pnpm بيعمل إيه وقت install | بيتحوّل لإيه وقت publish |
+| --- | --- | --- |
+| `workspace:*` | يربط النسخة المحلية مهما كان رقمها | الرقم بالظبط: `1.4.2` |
+| `workspace:^` | يربط المحلية | `^1.4.2` |
+| `workspace:~` | يربط المحلية | `~1.4.2` |
+| `^1.4.0` (عادي) | حسب إعدادات pnpm؛ ممكن ينزّلها من الـ registry بدل المحلية | زي ما هي |
+
+<Box type="story" icon="🍽️" title="تشبيه الجرسون">
+
+`^1.4.0` كأنك بتقول للجرسون "هاتلي كشري من أي محل". ممكن يجيبلك من بره خالص.
+
+`workspace:*` كأنك بتقول "هاتلي من مطبخ البيت بالذات" — ولو المطبخ مافيهوش، **يرجعلك بـ error** بدل ما يجيب حاجة غلط من بره. وده بالظبط اللي انت عاوزه.
+
+</Box>
+
+<Box type="warn" title="الفخ الشهير">
+
+لو عندك package داخلي اسمه `ui` (من غير scope) وكتبت `"ui": "^1.0.0"`، ممكن pnpm ينزّل package تانية خالص اسمها `ui` من npm! في الإصدارات الحديثة من pnpm الربط التلقائي للـ ranges العادية مش default. <Hl c="y">الخلاصة: استخدم `workspace:*` دايمًا للداخلي، واستخدم scope زي `@repo/`</Hl>.
+
+</Box>
+
+وعشان تضيف dependency داخلية من الـ CLI:
+
+```bash
+pnpm add @repo/ui --filter web --workspace
+# --workspace بيجبر pnpm يدوّر جوه الريبو بس
+```
+
+## إزاي pnpm بيبني `node_modules`؟ (symlinks و hard links)
+
+ده أهم جزء في الأسبوع الأول. pnpm مختلف عن npm و yarn classic في إنه <Hl c="b">مش بيعمل `node_modules` مسطّحة (flat)</Hl>. بيمشي على 3 طبقات:
+
+<Flow items={[
+  { t: "Global Store", s: "~/.local/share/pnpm/store", c: 1 }, "⇉",
+  { t: "node_modules/.pnpm", s: "hard links (virtual store)", c: 2 }, "→",
+  { t: "node_modules/react", s: "symlink", c: 3 },
+]} />
+
+1. **الـ Store العام:** كل نسخة من كل package بتتخزن <Hl c="u">مرة واحدة بس على الجهاز كله</Hl> (content-addressable). عندك 20 مشروع فيهم react 18.3.1؟ نسخة واحدة على الديسك.
+2. **الـ Virtual Store** `node_modules/.pnpm`: فيه فولدر لكل `package@version`، والملفات جواه <En>hard links</En> للـ store (يعني مش بتاخد مساحة زيادة).
+3. **الـ Symlinks:** `node_modules/react` مجرد سهم بيشاور على `.pnpm/react@18.3.1/node_modules/react`.
+
+وبالنسبة للـ workspace packages، الموضوع أبسط: الـ symlink بيشاور على <Hl c="g">الفولدر الأصلي بتاع الـ package في الريبو</Hl>.
+
+```bash
+cd apps/web
+ls -la node_modules/@repo
+#   ui -> ../../../packages/ui        ← سهم مباشر للكود بتاعك!
+ls -la node_modules/react
+#   react -> ../../../node_modules/.pnpm/react@18.3.1/node_modules/react
+```
+
+<Box type="idea" title="النتيجة العملية">
+
+لأن `@repo/ui` مجرد symlink للفولدر الأصلي، أي تعديل في `packages/ui/src` بيظهر فورًا في `web` (مع Vite HMR كمان) — **من غير build ولا publish**. ده السحر كله.
+
+</Box>
+
+<Box type="story" icon="🔑" title="تشبيه البواب">
+
+الـ store = خزنة المفاتيح الأصلية عند البواب. كل شقة (app) معلّق فيها "نسخة" (hard link) أو ورقة مكتوب عليها "المفتاح عند البواب" (symlink). العمارة كلها فيها 50 شقة بس المفاتيح الأصلية متخزنة مرة واحدة.
+
+</Box>
+
+## الـ Strictness و Phantom Dependencies
+
+في npm التقليدي، لو `react-dom` بيعتمد على `scheduler`، الـ `scheduler` بيتحط في الـ root بتاع node_modules، فتقدر تعمل `import 'scheduler'` في كودك **رغم إنك ماكتبتهوش** في package.json. ده اسمه <Hl c="p">phantom dependency</Hl> — بيشتغل عندك وبيضرب فجأة لما حد يحدّث حاجة.
+
+pnpm بسبب الهيكل اللي فوق، **مش هيخليك تـ import حاجة مش معرّفة في package.json بتاعك**. في الأول هتتضايق، بعد كده هتحبه. في الـ monorepo ده بيمنع إن `web` يستخدم بالغلط dependency تبع `api`.
+
+## أوامر pnpm اللي هتعيش بيها
+
+| الأمر | بيعمل إيه |
+| --- | --- |
+| `pnpm install` | من الـ root: ينزّل لكل الـ workspace ويربطهم |
+| `pnpm add -Dw typescript` | `-w` = ضيف في الـ root (أدوات مشتركة) |
+| `pnpm add zod --filter @repo/types` | ضيف لـ package معينة |
+| `pnpm -r build` | شغّل build في كل الـ packages بترتيب الـ dependencies |
+| `pnpm --filter web dev` | شغّل script في package واحدة |
+| `pnpm --filter "web..." build` | web + كل اللي بيعتمد عليه |
+| `pnpm why react` | مين جايب react ده ومنين؟ |
+| `pnpm ls -r --depth -1` | اعرض كل الـ workspace packages |
+
+<Box type="interview" title='لو اتسألت في إنترفيو: "ليه pnpm مش npm في الـ monorepo؟"'>
+
+قول ٣ حاجات: (١) **مساحة وسرعة** بسبب الـ content-addressable store، (٢) **Strictness** تمنع phantom dependencies، (٣) **workspace protocol + `--filter`** مدعومين كويس جدًا. وعلى فكرة npm و yarn كمان فيهم workspaces — الفرق في الجودة مش في الوجود.
+
+</Box>
+
+## 🧪 Lab الأسبوع الأول (اعمله بإيدك)
+
+```bash
+mkdir mono-lab && cd mono-lab && git init
+corepack enable
+pnpm init
+mkdir -p apps/web packages/greet/src
+printf 'packages:\n  - "apps/*"\n  - "packages/*"\n' > pnpm-workspace.yaml
+```
+
+<File name="packages/greet/package.json">
+
+```json
+{
+  "name": "@repo/greet",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js"
+}
+```
+
+</File>
+
+<File name="packages/greet/src/index.js">
+
+```js
+export const greet = (name) => `أهلًا يا ${name} 👋`;
+```
+
+</File>
+
+```bash
+cd apps/web && pnpm init && cd ../..
+pnpm add @repo/greet --filter web --workspace
+echo 'import { greet } from "@repo/greet"; console.log(greet("سعيد"));' > apps/web/index.mjs
+node apps/web/index.mjs                 # أهلًا يا سعيد 👋
+ls -la apps/web/node_modules/@repo      # شوف الـ symlink بعينك
+```
+
+بعد كده: غيّر الرسالة في `greet` وشغّل تاني من غير أي install. ثم جرّب `import 'something-not-installed'` وشوف pnpm بيعترض إزاي.
+
+<Checklist id="monorepo-w1" title="Checklist الأسبوع الأول" items={[
+  "أقدر أشرح الفرق بين Monorepo و Monolith و Polyrepo.",
+  "عارف وظيفة `pnpm-workspace.yaml` وليه الـ root `private`.",
+  "فاهم `workspace:*` وبيتحوّل لإيه وقت publish.",
+  "أقدر أرسم الـ symlink → `.pnpm` → store من دماغي.",
+  "عارف يعني إيه phantom dependency وإزاي pnpm بيمنعها.",
+  "عملت الـ Lab وشفت الـ symlink بعيني.",
+]} />
+
+<Quiz>
+  <Q n={1} q="عندك 5 مشاريع على جهازك كلهم بيستخدموا lodash بنفس النسخة. pnpm هيخزنها كام مرة على الديسك؟">مرة واحدة في الـ store؛ والباقي hard links.</Q>
+  <Q n={2} q='نشرت `@repo/ui` وفي dependencies عندها `"@repo/tokens": "workspace:^"` والـ tokens نسختها 2.1.0. الـ package المنشورة هتشوف إيه؟'>`"@repo/tokens": "^2.1.0"`.</Q>
+  <Q n={3} q="ليه تعديل في `packages/ui` بيظهر فورًا في `apps/web`؟">لأن `node_modules/@repo/ui` symlink للفولدر الأصلي، مفيش نسخة.</Q>
+  <Q n={4} q="زميلك عمل `import dayjs` في web وشغال عنده بس بيضرب في الـ CI. إيه أول حاجة تشك فيها؟">phantom dependency: dayjs مش في package.json بتاع web، كان واصلها بالصدفة. ضيفها صراحةً.</Q>
+</Quiz>

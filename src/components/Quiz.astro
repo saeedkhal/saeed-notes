@@ -1,0 +1,8 @@
+---
+interface Props { title?: string }
+const { title = "🧠 اختبر نفسك" } = Astro.props;
+---
+<section class="quiz">
+  <div class="t">{title}</div>
+  <slot />
+</section>

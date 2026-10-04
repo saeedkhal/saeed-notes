@@ -1,0 +1,140 @@
+---
+/**
+ * List بشكل timeline (زي archive المدونات):
+ *   [عنوان المجموعة] ○ عدد
+ *   [meta]           • عنوان ................ #tag #tag
+ */
+export interface TimelineItem {
+  href: string;
+  meta: string;
+  title: string;
+  tags?: string[];
+  color?: string; // CSS color للنقطة
+}
+export interface TimelineGroup {
+  title: string;
+  count: string;
+  items: TimelineItem[];
+}
+interface Props { groups: TimelineGroup[] }
+const { groups } = Astro.props;
+---
+<div class="timeline">
+  {groups.map((g) => (
+    <section class="tl-group">
+      <div class="tl-row tl-head">
+        <span class="tl-meta tl-big">{g.title}</span>
+        <span class="tl-rail"><span class="tl-ring"></span></span>
+        <span class="tl-count">{g.count}</span>
+      </div>
+      {g.items.map((i) => (
+        <a class="tl-row tl-item" href={i.href} style={i.color ? `--dot: ${i.color}` : undefined}>
+          <span class="tl-meta">{i.meta}</span>
+          <span class="tl-rail"><span class="tl-dot"></span></span>
+          <span class="tl-title">{i.title}</span>
+          {i.tags && i.tags.length > 0 && (
+            <span class="tl-tags">{i.tags.map((t) => `#${t}`).join(" ")}</span>
+          )}
+        </a>
+      ))}
+    </section>
+  ))}
+</div>
+
+<style>
+  .timeline {
+    background: var(--bg-soft);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin: 1.4em 0;
+  }
+  .tl-row {
+    display: grid;
+    grid-template-columns: 96px 36px minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 44px;
+    color: var(--text);
+  }
+  .tl-meta {
+    text-align: end;
+    padding-inline-end: 6px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+  .tl-big {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tl-head { min-height: 52px; }
+  .tl-head .tl-count { color: var(--muted); font-size: 0.95rem; }
+
+  /* الخط المتقطع اللي ماشي في النص */
+  .tl-rail {
+    position: relative;
+    align-self: stretch;
+    display: grid;
+    place-items: center;
+  }
+  .tl-rail::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 50%;
+    border-inline-start: 1.5px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+  }
+  .tl-group:first-child .tl-head .tl-rail::before { top: 50%; }
+  .tl-group:last-child .tl-item:last-child .tl-rail::before { bottom: 50%; }
+  .tl-ring {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 3px solid var(--c5);
+    background: var(--bg-soft);
+  }
+  .tl-dot {
+    position: relative;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dot, var(--muted));
+    transition: transform 0.15s;
+  }
+
+  .tl-item { border-radius: 10px; }
+  .tl-item:hover { text-decoration: none; background: color-mix(in srgb, var(--c1) 7%, transparent); }
+  .tl-item:hover .tl-dot { transform: scale(1.8); }
+  .tl-title {
+    font-weight: 700;
+    color: var(--heading);
+    padding-inline-end: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tl-item:hover .tl-title { color: var(--c1); }
+  .tl-tags {
+    direction: ltr;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    opacity: 0.8;
+    font-size: 0.85rem;
+    padding-inline-end: 4px;
+  }
+
+  @media (max-width: 640px) {
+    .timeline { padding: 14px 10px; }
+    .tl-row { grid-template-columns: 74px 26px minmax(0, 1fr); }
+    .tl-tags { display: none; }
+    .tl-big { font-size: 1rem; overflow: visible; }
+    .tl-title { white-space: normal; line-height: 1.6; padding-block: 6px; }
+  }
+</style>

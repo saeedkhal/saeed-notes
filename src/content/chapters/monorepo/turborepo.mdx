@@ -1,0 +1,225 @@
+---
+title: Turborepo من جوه
+short: Turborepo
+order: 2
+label: فصل ٢
+badge: الأسبوع ٢ · فصل ٢
+en: create-turbo · task pipeline · local & remote caching · --filter
+keywords: pipeline · caching · --filter
+goal: تفهم ليه Turbo بيخلّي build بياخد 3 دقايق ياخد 200ms، وتتحكم في مين يتعمله build ومين لأ.
+part: البداية
+color: c2
+---
+
+## pnpm لوحده ناقصه إيه؟
+
+pnpm بيعرف **يربط** الـ packages ويشغّل scripts. بس لو عملت `pnpm -r build` كل مرة، هيبني <Hl c="p">كل حاجة من الأول حتى لو مافيش حاجة اتغيّرت</Hl>. في ريبو فيه 10 packages ده عذاب، خصوصًا في الـ CI.
+
+**Turborepo** هو <En>task runner</En> ذكي فوق الـ package manager. بيعمل ٣ حاجات:
+
+<Chips items={["يفهم ترتيب المهام (Task Graph)", "يشغّل بالتوازي على كل الـ cores", "يكيّش النتايج (Caching)", "يفلتر يشغّل إيه (--filter)", "Remote Cache للفريق والـ CI"]} />
+
+<Box type="story" icon="👨‍🍳" title="تشبيه المطبخ">
+
+Turbo زي شيف في مطعم كشري ذاكرته حديد: لو طلبت نفس الطبق بنفس المكونات بالظبط، **مش هيطبخه تاني** — هيطلّعه من التلاجة جاهز (cache hit). ولو تغيّر مكوّن واحد (ملف واحد)، هيطبخ بس الأجزاء اللي اتأثرت. وبيخلّي الصلصة والعدس والرز يتطبخوا في نفس الوقت (parallel) لأن مالهمش دعوة ببعض، بس مش هيعمل التقلية قبل ما البصل يتقطع (dependencies).
+
+</Box>
+
+## فكّ الـ Starter
+
+```bash
+npx create-turbo@latest my-turbo
+# اختار pnpm لما يسألك
+cd my-turbo && pnpm dev
+```
+
+هتلاقي الهيكل ده تقريبًا (ممكن يختلف شوية حسب النسخة):
+
+<Tree>
+
+```text
+my-turbo/
+├── apps/
+│   ├── web/                  # Next.js app
+│   └── docs/                 # Next.js app تاني
+├── packages/
+│   ├── ui/                   # React components مشتركة
+│   ├── eslint-config/        # ESLint config مشترك
+│   └── typescript-config/    # tsconfig bases
+├── turbo.json                # ← قلب الموضوع
+├── pnpm-workspace.yaml
+└── package.json
+```
+
+</Tree>
+
+<Box type="tip" title="طريقة التفكيك الصح">
+
+ماتقراش الـ starter من فوق لتحت. امشي كده: (١) `turbo.json` (٢) root `package.json` scripts (٣) `packages/ui/package.json` وشوف الـ `exports` (٤) `apps/web/package.json` وشوف بيعتمد على مين (٥) افتح `apps/web/tsconfig.json` وشوف بيعمل extends لمين. كده هتفهم الـ wiring كله في نص ساعة.
+
+</Box>
+
+## الـ Task Pipeline: `turbo.json`
+
+<File name="turbo.json">
+
+```json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+      "env": ["VITE_API_URL", "NEXT_PUBLIC_API_URL"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}
+```
+
+</File>
+
+### الـ `dependsOn` — أهم سطر
+
+| الشكل | المعنى | مثال |
+| --- | --- | --- |
+| `"^build"` | شغّل build في كل الـ dependencies بتاعتي الأول | `web` مش هيتبني قبل `ui` و `types` |
+| `"build"` | شغّل build في **نفس الـ package** الأول | `test` محتاج الـ dist بتاعي |
+| `"api#build"` | task معينة في package معينة | الـ e2e في web محتاج الـ api مبني |
+
+علامة `^` = <Hl c="y">"اللي تحتي في الشجرة"</Hl>. احفظها كده.
+
+<Flow items={[
+  { t: "@repo/types", s: "build", c: 3 }, "→",
+  { t: "@repo/ui", s: "build", c: 1 }, "→",
+  { t: "web", s: "build", c: 2 }, "+",
+  { t: "api", s: "build (بالتوازي مع ui)", c: 4 },
+]} />
+
+### الـ `outputs` و `persistent`
+
+- `outputs`: الملفات اللي Turbo هيخزنها في الكاش ويرجّعها لما يحصل hit. <Hl c="p">لو نسيتها، هتلاقي "cache hit" بس فولدر dist فاضي!</Hl>
+- `persistent: true`: للمهام اللي مابتخلصش (dev server). Turbo مش هيسمح لحد يعمل `dependsOn` عليها.
+- `cache: false`: الـ dev ملوش معنى يتكيّش.
+
+## الـ Caching: إزاي Turbo عارف إن مفيش حاجة اتغيّرت؟
+
+قبل أي task، Turbo بيحسب <En>hash</En> من كل حاجة ممكن تأثر على النتيجة:
+
+<Flow items={[
+  { t: "ملفات الـ package", s: "inputs", c: 1 }, "+",
+  { t: "hashes الـ deps", s: "^build", c: 2 }, "+",
+  { t: "env vars", s: "env", c: 3 }, "+",
+  { t: "lockfile + config", s: "turbo.json", c: 4 }, "⇉",
+  { t: "🔑 Hash", c: 5 },
+]} />
+
+لو الـ hash ده اتشاف قبل كده → **cache hit**: Turbo بيرجّع الـ `outputs` ويعيد طباعة الـ logs كأنه شغّل فعلًا. لو كل المهام hit هتشوف رسالة <Hl c="g">🔥 FULL TURBO</Hl>.
+
+```bash
+pnpm turbo build              # أول مرة: بيبني كل حاجة
+pnpm turbo build              # تاني مرة: FULL TURBO في أقل من ثانية
+pnpm turbo build --force      # تجاهل الكاش
+pnpm turbo build --dry=json   # وريني هيعمل إيه والـ hashes من غير ما يشغّل
+pnpm turbo build --summarize  # تقرير بعد التشغيل: ليه hit وليه miss
+```
+
+<Box type="warn" title="الـ Env Vars: أشهر سبب للـ bugs في Turbo">
+
+لو الـ build بتاعك بيستخدم `VITE_API_URL` ومش متعرّف في `env`، Turbo مش هيحطه في الـ hash. يعني ممكن تبني لـ staging وتاخد كاش معمول لـ production 😱! في Turbo 2 فيه <En>strict env mode</En> افتراضيًا بيخلّي الـ task مايشوفش env vars مش متعرّفة أصلًا — وده بيكشف المشكلة بدري. **قاعدة: أي env بيأثر على الـ output لازم يتكتب في `env`.**
+
+</Box>
+
+### Local Cache vs Remote Cache
+
+<Grid2>
+<Card title="💻 Local Cache" c={5}>
+
+- متخزن في `.turbo/cache` على جهازك.
+- بيفيدك انت بس.
+- ضيف `.turbo` للـ `.gitignore`.
+
+</Card>
+<Card title="☁️ Remote Cache" c={4}>
+
+- الكاش على سيرفر مشترك (Vercel أو self-hosted).
+- زميلك بنى؟ انت تاخد النتيجة جاهزة.
+- الـ CI بيبني مرة، وكل الـ PRs تستفيد.
+
+</Card>
+</Grid2>
+
+```bash
+npx turbo login     # مع Vercel
+npx turbo link      # اربط الريبو بالـ team
+# في الـ CI بتحط:
+#   TURBO_TOKEN=xxx  و  TURBO_TEAM=your-team
+```
+
+<Box type="idea" title="Remote cache = نتيجة حد تاني بتتنفذ عندك">
+
+اتعامل معاه كجزء من الـ supply chain: الـ token يبقى secret، ولو بتعمل self-host فكّر في الـ signature verification اللي Turbo بيدعمها.
+
+</Box>
+
+## الـ `--filter`: شغّل اللي يخصك بس
+
+| الـ filter | هيشغّل على مين |
+| --- | --- |
+| `--filter=web` | web بس |
+| `--filter=web...` | web + **كل اللي هو بيعتمد عليه** (النقط بعد = تحت) |
+| `--filter=...@repo/ui` | ui + **كل اللي بيعتمد عليها** (النقط قبل = فوق) |
+| `--filter=./apps/*` | كل الـ apps بالـ path |
+| `--filter=!docs` | كله ماعدا docs |
+| `--filter=[main]` | الـ packages اللي اتغيّرت من بعد main |
+| `--filter=...[main]` | اللي اتغيّر + **كل اللي بيعتمد عليه** ← ده اللي بيتعمل في CI |
+
+<Box type="story" icon="🧭" title="حيلة الحفظ">
+
+تخيّل الشجرة واقفة: الـ apps فوق والـ packages الأساسية تحت. النقط **بعد** الاسم = "انزل لتحت" (dependencies). النقط **قبل** الاسم = "اطلع لفوق" (dependents، اللي هيتأثروا لو غيّرت).
+
+</Box>
+
+```bash
+pnpm turbo dev --filter=web...          # شغّل web وكل الـ packages اللي محتاجها
+pnpm turbo test --filter=...@repo/ui    # غيّرت في ui؟ اختبر كل اللي بيستخدمها
+pnpm turbo build --graph                # اطلع صورة للـ task graph
+```
+
+## 🧪 Lab الأسبوع التاني
+
+1. اعمل `create-turbo` وشغّل `pnpm turbo build` مرتين، وقيس الوقت.
+2. غيّر ملف في `apps/docs` وابني تاني: لاحظ إن `web` و `ui` فضلوا hit.
+3. غيّر ملف في `packages/ui`: لاحظ إن الاتنين apps اتعملهم rebuild.
+4. امسح `.next` من `outputs` بتاعة الـ build وجرّب تبني: شوف المشكلة بعينك، ورجّعها.
+5. ضيف env var لـ `web` من غير ما تعرّفه في `turbo.json`، وشوف strict mode بيعمل إيه.
+6. جرّب `--dry=json` و `--summarize` واقرا الـ hash inputs.
+
+<Checklist id="monorepo-w2" title="Checklist الأسبوع التاني" items={[
+  "فاهم الفرق بين `^build` و `build` و `pkg#build`.",
+  "عارف إيه اللي بيدخل في الـ hash وليه الـ `env` مهم.",
+  "عارف إمتى أحط `outputs` وإمتى `cache: false` و `persistent`.",
+  "أقدر أشرح local vs remote cache وأعمل link.",
+  "حافظ `web...` و `...ui` و `...[main]`.",
+]} />
+
+<Quiz>
+  <Q n={1} q="الـ build عمل cache hit بس `dist` فاضي. السبب الأغلب؟">الـ `outputs` مش متعرّفة صح، فـ Turbo ماخزّنش الملفات.</Q>
+  <Q n={2} q="عاوز تشغّل الـ tests لكل حاجة ممكن تتأثر بتعديلك في `@repo/types`. الأمر؟">`turbo test --filter=...@repo/types`</Q>
+  <Q n={3} q="الـ staging build بيكلّم production API. إيه اللي غالبًا نسيته؟">ماحطّيتش الـ env var في `env` فالكاش اتشارك بين الاتنين.</Q>
+  <Q n={4} q="ليه الـ `dev` task مالهاش لازمة تتكيّش؟">لأنها persistent ومش بتطلّع output نهائي؛ وظيفتها تفضل شغالة.</Q>
+</Quiz>

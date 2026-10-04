@@ -1,0 +1,9 @@
+---
+interface Props { q: string; n?: number }
+const { q, n } = Astro.props;
+const html = q.replace(/`([^`]+)`/g, "<code>$1</code>");
+---
+<details>
+  <summary><span>{n ? `${n.toLocaleString("ar-EG")}) ` : ""}<Fragment set:html={html} /></span></summary>
+  <div class="ans"><slot /></div>
+</details>

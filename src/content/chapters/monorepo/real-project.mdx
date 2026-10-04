@@ -1,0 +1,460 @@
+---
+title: نبني مشروع حقيقي بإيدينا
+short: مشروع حقيقي
+order: 3
+label: فصل ٣
+badge: الأسبوع ٣ · فصل ٣
+en: "@repo/ui + Storybook · @repo/types (zod) · NestJS + React · shared tsconfig & eslint"
+keywords: ui · types (zod) · tsconfig · eslint
+goal: monorepo فيه Types + Design System + NestJS + React (Vite) مشتركة، كل حاجة متوصلة صح.
+part: التطبيق
+color: c3
+---
+
+## الهيكل النهائي
+
+<Tree>
+
+```text
+jobs-monorepo/
+├── apps/
+│   ├── web/                # React + Vite + TanStack Router/Query
+│   └── api/                # NestJS
+├── packages/
+│   ├── ui/                 # Design System + Storybook
+│   ├── types/              # zod schemas + inferred types
+│   ├── tsconfig/           # base.json, react.json, nest.json
+│   └── eslint-config/      # flat configs
+├── turbo.json
+├── pnpm-workspace.yaml
+└── package.json
+```
+
+</Tree>
+
+هنستخدم دومين قريب من الشغل: <Hl c="y">Job Postings</Hl> — الـ API بيستقبل وظيفة جديدة، والـ Front عنده فورم بيعمل validate بنفس القواعد بالظبط.
+
+<Flow items={[
+  { t: "tsconfig", s: "configs", c: 4 }, "→",
+  { t: "types", s: "zod", c: 3 }, "→",
+  { t: "ui", c: 1 }, "→",
+  { t: "web", c: 2 }, "↔",
+  { t: "api", s: "يستخدم types", c: 5 },
+]} />
+
+## `@repo/tsconfig`: tsconfig واحد يحكم الكل
+
+<File name="packages/tsconfig/package.json">
+
+```json
+{
+  "name": "@repo/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["*.json"]
+}
+```
+
+</File>
+
+<File name="packages/tsconfig/base.json">
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "noUncheckedIndexedAccess": true
+  }
+}
+```
+
+</File>
+
+<File name="packages/tsconfig/react.json">
+
+```json
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  }
+}
+```
+
+</File>
+
+<File name="packages/tsconfig/nest.json">
+
+```json
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "sourceMap": true
+  }
+}
+```
+
+</File>
+
+وفي أي app:
+
+<File name="apps/web/tsconfig.json">
+
+```json
+{
+  "extends": "@repo/tsconfig/react.json",
+  "include": ["src"]
+}
+```
+
+</File>
+
+متنساش تضيف `"@repo/tsconfig": "workspace:*"` في `devDependencies` بتاعة كل app.
+
+## `@repo/eslint-config` (Flat Config)
+
+<File name="packages/eslint-config/base.js">
+
+```js
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+
+export const base = [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  { ignores: ["dist/**", ".turbo/**"] },
+];
+```
+
+</File>
+
+<File name="packages/eslint-config/react.js">
+
+```js
+import reactHooks from "eslint-plugin-react-hooks";
+import { base } from "./base.js";
+
+export const react = [
+  ...base,
+  {
+    plugins: { "react-hooks": reactHooks },
+    rules: reactHooks.configs.recommended.rules,
+  },
+];
+```
+
+</File>
+
+<File name="apps/web/eslint.config.js">
+
+```js
+import { react } from "@repo/eslint-config/react";
+export default [...react];
+```
+
+</File>
+
+<Box type="tip" title="الـ exports في package.json">
+
+عشان `@repo/eslint-config/react` يشتغل، لازم تعرّفه: `"exports": { "./base": "./base.js", "./react": "./react.js" }` مع `"type": "module"`. والـ plugins (typescript-eslint, react-hooks…) تتحط **dependencies في الـ config package نفسها**، مش في كل app.
+
+</Box>
+
+## `@repo/types`: zod schemas مشتركة
+
+دي أحلى حاجة في الـ monorepo للـ fullstack: <Hl c="g">schema واحدة = validation في الـ API + validation في الفورم + TypeScript types</Hl>. لو حد غيّر قاعدة، الاتنين يتغيّروا مع بعض، والـ typecheck يمسك أي مكان اتكسر.
+
+<File name="packages/types/src/job.ts">
+
+```ts
+import { z } from "zod";
+
+export const jobTypeEnum = z.enum(["full_time", "part_time", "contract"]);
+
+export const createJobSchema = z.object({
+  title: z.string().min(3, "العنوان قصير"),
+  description: z.string().min(20),
+  type: jobTypeEnum,
+  salaryMin: z.number().int().positive().optional(),
+  salaryMax: z.number().int().positive().optional(),
+  remote: z.boolean().default(false),
+}).refine(
+  (j) => !j.salaryMin || !j.salaryMax || j.salaryMin <= j.salaryMax,
+  { message: "الحد الأدنى أكبر من الأقصى", path: ["salaryMax"] },
+);
+
+export type CreateJobInput = z.infer<typeof createJobSchema>;
+```
+
+</File>
+
+<File name="packages/types/src/index.ts">
+
+```ts
+export * from "./job";
+```
+
+</File>
+
+<Box type="warn" title="نقطة مهمة جدًا: NestJS مش Vite">
+
+Vite و Next (مع `transpilePackages`) يقدروا يقروا ملفات `.ts` من package داخلية ويعملولها transpile. لكن **NestJS بيتبني بـ tsc ويشتغل على Node**، و Node مش هيفهم `.ts` جوه node_modules. الحل الأنضف: <Hl c="o">ابني `@repo/types` لـ `dist` بصيغتين (CJS + ESM)</Hl> باستخدام <En>tsup</En>، وخلّي الـ `dependsOn: ["^build"]` يتكفل بالترتيب.
+
+</Box>
+
+<File name="packages/types/package.json">
+
+```json
+{
+  "name": "@repo/types",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
+  },
+  "dependencies": { "zod": "^3.23.8" },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0"
+  }
+}
+```
+
+</File>
+
+### في الـ API (NestJS)
+
+<File name="apps/api/src/common/zod-validation.pipe.ts">
+
+```ts
+import { BadRequestException, PipeTransform } from "@nestjs/common";
+import type { ZodSchema } from "zod";
+
+export class ZodValidationPipe implements PipeTransform {
+  constructor(private readonly schema: ZodSchema) {}
+
+  transform(value: unknown) {
+    const result = this.schema.safeParse(value);
+    if (!result.success) {
+      throw new BadRequestException(result.error.flatten());
+    }
+    return result.data;
+  }
+}
+```
+
+</File>
+
+<File name="apps/api/src/jobs/jobs.controller.ts">
+
+```ts
+import { Body, Controller, Post } from "@nestjs/common";
+import { createJobSchema, type CreateJobInput } from "@repo/types";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { JobsService } from "./jobs.service";
+
+@Controller("jobs")
+export class JobsController {
+  constructor(private readonly jobs: JobsService) {}
+
+  @Post()
+  create(@Body(new ZodValidationPipe(createJobSchema)) dto: CreateJobInput) {
+    return this.jobs.create(dto);
+  }
+}
+```
+
+</File>
+
+### في الـ Front (React + react-hook-form)
+
+<File name="apps/web/src/features/jobs/CreateJobForm.tsx">
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createJobSchema, type CreateJobInput } from "@repo/types";
+import { Button, TextField } from "@repo/ui";
+import { useCreateJob } from "./useCreateJob"; // TanStack Query mutation
+
+export function CreateJobForm() {
+  const form = useForm<CreateJobInput>({ resolver: zodResolver(createJobSchema) });
+  const createJob = useCreateJob();
+
+  return (
+    <form onSubmit={form.handleSubmit((data) => createJob.mutate(data))}>
+      <TextField label="Title" {...form.register("title")}
+        error={form.formState.errors.title?.message} />
+      <Button type="submit" loading={createJob.isPending}>Publish</Button>
+    </form>
+  );
+}
+```
+
+</File>
+
+<Box type="idea" title="جرّب الكسر المقصود">
+
+غيّر `title` لـ `jobTitle` في الـ schema وشغّل `pnpm turbo typecheck`. هتلاقي الـ API والـ Front الاتنين ضربوا في نفس اللحظة. **ده بالظبط اللي الـ monorepo بيشتريهولك** — في polyrepo كنت هتعرف من bug في production.
+
+</Box>
+
+## `@repo/ui` + Storybook
+
+<File name="packages/ui/package.json">
+
+```json
+{
+  "name": "@repo/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": { "react": "^18 || ^19", "react-dom": "^18 || ^19" },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@repo/eslint-config": "workspace:*"
+  }
+}
+```
+
+</File>
+
+هنا اخترنا الطريقة التانية: <Hl c="b">Just-in-Time package</Hl> — الـ `exports` بيشاور على `.ts` مباشرة من غير build. ده شغال تمام لأن المستهلك الوحيد هو `web` (Vite) وهو اللي بيعمل transpile.
+
+| | Just-in-Time (src مباشرة) | Compiled (dist) |
+| --- | --- | --- |
+| Setup | أبسط حاجة | محتاج tsup/vite lib |
+| HMR | فوري 🔥 | محتاج watch |
+| الكاش في Turbo | مفيش build يتكيّش | يتكيّش |
+| ينفع مع NestJS/Node؟ | ❌ | ✅ |
+| استخدامه هنا | `ui` | `types` |
+
+<Box type="tip" title="ليه React في peerDependencies؟">
+
+عشان مايتنزّلش نسختين React (واحدة للـ ui وواحدة للـ web) — وده بيعمل الـ error الشهير بتاع "Invalid hook call". الـ ui بتقول "أنا محتاجة React، بس استخدم النسخة اللي عند الـ app". وحطها كمان في `devDependencies` عشان Storybook يشتغل.
+
+</Box>
+
+```bash
+cd packages/ui
+pnpm dlx storybook@latest init   # اختار React + Vite
+pnpm storybook
+```
+
+<File name="packages/ui/src/Button/Button.stories.tsx">
+
+```tsx
+import type { Meta, StoryObj } from "@storybook/react";
+import { Button } from "./Button";
+
+const meta: Meta<typeof Button> = {
+  title: "Actions/Button",
+  component: Button,
+  args: { children: "Publish job" },
+};
+export default meta;
+
+export const Primary: StoryObj<typeof Button> = { args: { variant: "primary" } };
+export const Loading: StoryObj<typeof Button> = { args: { loading: true } };
+```
+
+</File>
+
+وضيف في `turbo.json`:
+
+<File name="turbo.json (جزء)">
+
+```json
+"build-storybook": {
+  "dependsOn": ["^build"],
+  "outputs": ["storybook-static/**"]
+}
+```
+
+</File>
+
+## الربط النهائي
+
+<File name="package.json (root)">
+
+```json
+{
+  "name": "jobs-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test"
+  },
+  "devDependencies": { "turbo": "^2.1.0", "typescript": "^5.6.0" }
+}
+```
+
+</File>
+
+```bash
+pnpm install
+pnpm dev --filter=web...      # web + ui + types (dev watch)
+pnpm dev --filter=api...      # api + types
+pnpm turbo typecheck lint     # كله مرة واحدة
+```
+
+<Box type="interview" title="سؤال تصميم: إمتى أعمل package جديدة؟">
+
+لما الكود (١) مستخدم في أكتر من app، أو (٢) ليه حدود واضحة وعاوز تمنع حد يدخل جواه (encapsulation)، أو (٣) عاوز تكيّش الـ build بتاعه لوحده. ماتعملش package لكل helper — كتر الـ packages تعب في الإدارة.
+
+</Box>
+
+<Checklist id="monorepo-w3" title="Checklist الأسبوع التالت" items={[
+  "عندي tsconfig و eslint مشتركين وكل app بيعمل extend.",
+  "schema واحدة في `@repo/types` شغالة في NestJS و React.",
+  "فاهم ليه `types` محتاجة build و `ui` لأ.",
+  "Storybook شغال جوه `packages/ui`.",
+  "React في `peerDependencies` بتاعة ui.",
+  "كسرت الـ schema بقصد وشفت الـ typecheck بيمسك الاتنين.",
+]} />
+
+<Quiz>
+  <Q n={1} q="NestJS بيضرب بـ `SyntaxError: Unexpected token 'export'` لما يستورد `@repo/types`. ليه؟">الـ package بتشاور على ESM أو `.ts` و Nest شغال CJS. ابنيها بـ tsup cjs+esm وظبّط `exports`.</Q>
+  <Q n={2} q='"Invalid hook call" ظهر بعد ما ضفت `@repo/ui`. أول حاجة تبص عليها؟'>React موجودة في `dependencies` بتاعة ui بدل `peerDependencies` → نسختين React.</Q>
+  <Q n={3} q="فين تحط `typescript-eslint` كـ dependency؟">في `@repo/eslint-config` نفسها، مش في كل app.</Q>
+</Quiz>

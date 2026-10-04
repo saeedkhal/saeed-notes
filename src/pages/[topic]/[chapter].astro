@@ -1,0 +1,50 @@
+---
+import { render } from "astro:content";
+import Docs from "../../layouts/Docs.astro";
+import { chapterHref, getChapters, getTopics, splitId } from "../../lib/content";
+import { mdxComponents } from "../../components";
+
+export async function getStaticPaths() {
+  const topics = await getTopics();
+  const paths = [];
+  for (const topic of topics) {
+    const chapters = await getChapters(topic.id);
+    chapters.forEach((chapter, i) => {
+      paths.push({
+        params: { topic: topic.id, chapter: splitId(chapter.id).slug },
+        props: { topic, chapters, chapter, prev: chapters[i - 1], next: chapters[i + 1] },
+      });
+    });
+  }
+  return paths;
+}
+
+const { topic, chapters, chapter, prev, next } = Astro.props;
+const { Content, headings } = await render(chapter);
+const d = chapter.data;
+---
+<Docs topic={topic} chapters={chapters} current={chapter} headings={headings} title={d.title} description={d.goal}>
+  <header class:list={["chap", d.color]}>
+    <span class="chap-no">{d.badge}</span>
+    <h1 class="chap-title">{d.title}</h1>
+    <div class="chap-en">{d.en}</div>
+    {d.goal && <div class="chap-goal">🎯 الهدف: <Fragment set:html={d.goal.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,.9);color:#b45309;padding:0 .4em;border-radius:5px;font-family:var(--mono);font-size:.85em">$1</code>')} /></div>}
+  </header>
+
+  <article class="prose">
+    <Content components={mdxComponents} />
+  </article>
+
+  <nav class="pager" aria-label="التنقل بين الفصول">
+    {prev && (
+      <a class="prev" href={chapterHref(prev)}>
+        <small>→ اللي قبله</small><b>{prev.data.title}</b>
+      </a>
+    )}
+    {next && (
+      <a class="next" href={chapterHref(next)}>
+        <small>اللي بعده ←</small><b>{next.data.title}</b>
+      </a>
+    )}
+  </nav>
+</Docs>

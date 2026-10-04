@@ -1,0 +1,14 @@
+---
+/** صندوق ملوّن: idea 💡 · warn 🚨 · tip ✅ · story 🍽️ · interview 🎯 */
+interface Props {
+  type?: "idea" | "warn" | "tip" | "story" | "interview";
+  title?: string;
+  icon?: string;
+}
+const icons = { idea: "💡", warn: "🚨", tip: "✅", story: "🍽️", interview: "🎯" };
+const { type = "idea", title, icon } = Astro.props;
+---
+<aside class:list={["box", type]}>
+  {title && <div class="t"><span class="ico">{icon ?? icons[type]}</span><span>{title}</span></div>}
+  <div class="c"><slot /></div>
+</aside>

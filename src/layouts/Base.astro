@@ -1,0 +1,97 @@
+---
+import "@fontsource/cairo/arabic-400.css";
+import "@fontsource/cairo/arabic-600.css";
+import "@fontsource/cairo/arabic-700.css";
+import "@fontsource/cairo/arabic-800.css";
+import "@fontsource/cairo/latin-400.css";
+import "@fontsource/cairo/latin-600.css";
+import "@fontsource/cairo/latin-700.css";
+import "@fontsource/cairo/latin-800.css";
+import "@fontsource/jetbrains-mono/latin-400.css";
+import "@fontsource/jetbrains-mono/latin-700.css";
+import "../styles/global.css";
+import "../styles/layout.css";
+import { url } from "../lib/content";
+
+interface Props {
+  title: string;
+  description?: string;
+  /** لو true بيظهر زرار القايمة للموبايل */
+  hasSidebar?: boolean;
+}
+const { title, description = "مذكرات تقنية ملوّنة بالمصري", hasSidebar = false } = Astro.props;
+const siteName = "مذكرات سعيد";
+---
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title === siteName ? title : `${title} · ${siteName}`}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href={url("favicon.svg")} type="image/svg+xml" />
+    <script is:inline>
+      try {
+        const t = localStorage.getItem("masry-notes:theme");
+        if (t) document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      {hasSidebar && (
+        <button class="menu-btn" aria-label="افتح القايمة" aria-expanded="false" data-menu-btn>
+          <span></span><span></span><span></span>
+        </button>
+      )}
+      <a class="brand" href={url("/")}>
+        <span class="brand-logo">📦</span>
+        <span>{siteName}</span>
+      </a>
+      <div class="header-actions">
+        <button class="theme-btn" data-theme-btn aria-label="غيّر الثيم">
+          <span class="sun">☀️</span><span class="moon">🌙</span>
+        </button>
+      </div>
+    </header>
+    <slot />
+    <script>
+      // ثيم
+      const root = document.documentElement;
+      document.querySelector("[data-theme-btn]")?.addEventListener("click", () => {
+        const dark =
+          root.dataset.theme === "dark" ||
+          (!root.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+        root.dataset.theme = dark ? "light" : "dark";
+        try { localStorage.setItem("masry-notes:theme", root.dataset.theme); } catch {}
+      });
+
+      // قايمة الموبايل
+      const btn = document.querySelector<HTMLButtonElement>("[data-menu-btn]");
+      const close = () => { document.body.classList.remove("nav-open"); btn?.setAttribute("aria-expanded", "false"); };
+      btn?.addEventListener("click", () => {
+        const open = document.body.classList.toggle("nav-open");
+        btn.setAttribute("aria-expanded", String(open));
+      });
+      document.querySelector("[data-scrim]")?.addEventListener("click", close);
+      addEventListener("keydown", (e) => e.key === "Escape" && close());
+
+      // زرار نسخ للأكواد
+      for (const pre of document.querySelectorAll<HTMLPreElement>(".prose pre")) {
+        const b = document.createElement("button");
+        b.className = "copy-btn";
+        b.type = "button";
+        b.textContent = "نسخ";
+        b.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(pre.querySelector("code")?.innerText ?? "");
+            b.textContent = "اتنسخ ✓";
+            b.classList.add("done");
+            setTimeout(() => { b.textContent = "نسخ"; b.classList.remove("done"); }, 1500);
+          } catch {}
+        });
+        pre.appendChild(b);
+      }
+    </script>
+  </body>
+</html>

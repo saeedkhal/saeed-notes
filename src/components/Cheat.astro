@@ -1,0 +1,14 @@
+---
+/** Cheat sheet: لو المشكلة... فكّر في... */
+interface Props { items: [problem: string, fix: string][] }
+const { items } = Astro.props;
+const fmt = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/`([^`]+)`/g, "<code>$1</code>");
+---
+<div class="cheat">
+  {items.map(([p, f], i) => (
+    <div class="cell" style={`--cc: var(--c${(i % 5) + 1})`}>
+      <b set:html={fmt(p)} />
+      <span set:html={fmt(f)} />
+    </div>
+  ))}
+</div>

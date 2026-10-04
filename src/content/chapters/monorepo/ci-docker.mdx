@@ -1,0 +1,200 @@
+---
+title: CI و Docker و Changesets
+short: CI و Docker
+order: 4
+label: فصل ٤
+badge: الأسبوع ٤ · فصل ٤
+en: GitHub Actions --affected · turbo prune --docker · Changesets
+keywords: --affected · turbo prune · publish
+goal: الـ CI يبني اللي اتغيّر بس، والـ Docker image بتاعة الـ api ماتشيلش الريبو كله، وتعرف تنشر packages بنظام.
+part: التطبيق
+color: c4
+---
+
+## المشكلة في الـ CI
+
+ريبو فيه web و api و ui و types. غيّرت سطر في الـ README بتاع api — هل محتاج تبني الـ web وتشغّل الـ Storybook build؟ <Hl c="p">لأ طبعًا</Hl>. الحل فكرتين مع بعض:
+
+<Grid2>
+<Card title="🎯 Affected" c={3}>
+
+شغّل المهام بس على الـ packages اللي اتغيّرت + **اللي بيعتمدوا عليها**.
+
+</Card>
+<Card title="☁️ Remote Cache" c={5}>
+
+حتى اللي "اتأثر" ممكن يكون اتبنى قبل كده في PR تاني أو على جهاز زميلك → hit.
+
+</Card>
+</Grid2>
+
+## GitHub Actions
+
+<File name=".github/workflows/ci.yml">
+
+```yaml
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}   # remote cache
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # محتاج الـ history عشان يقارن بـ main
+
+      - uses: pnpm/action-setup@v4   # بيقرا packageManager من package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint typecheck test build --affected
+```
+
+</File>
+
+<Box type="idea" title="--affected بيعمل إيه؟">
+
+في Turbo 2 الـ flag ده بيقارن الـ branch بتاعك بالـ default branch ويشغّل المهام على اللي اتغيّر واللي بيعتمد عليه — تقريبًا نفس `--filter=...[origin/main]` بس أذكى في اكتشاف الـ base في GitHub Actions. لو نسختك أقدم، استخدم الـ filter يدوي.
+
+</Box>
+
+<Box type="warn" title="fetch-depth: 0">
+
+الـ checkout الافتراضي بيجيب آخر commit بس. من غيره Turbo مش هيلاقي main يقارن بيه، وغالبًا هيقرر يبني كل حاجة (أو يضرب). **أول سطر تشك فيه لو affected مش شغال.**
+
+</Box>
+
+<Box type="tip" title="--frozen-lockfile">
+
+بيخلّي الـ CI يضرب لو الـ lockfile مش متطابق مع الـ package.json، بدل ما يعدّله بهدوء. ده يحميك من "شغال عندي" الشهيرة.
+
+</Box>
+
+## Docker لـ app واحد: `turbo prune`
+
+المشكلة: لو عملت `COPY . .` للـ api، الـ image هتشيل كود الـ web والـ Storybook وكل الـ dependencies بتاعتهم. وأسوأ: <Hl c="y">أي تعديل في web هيكسر الـ Docker layer cache بتاع الـ api</Hl>.
+
+`turbo prune api --docker` بيطلّعلك فولدر `out/` فيه **بس** اللي الـ api محتاجه:
+
+<Tree>
+
+```text
+out/
+├── json/             # package.json بتاع api و types و tsconfig بس
+├── full/             # الكود الكامل للـ packages دي بس
+└── pnpm-lock.yaml    # lockfile متقلّم للـ subset ده
+```
+
+</Tree>
+
+<Box type="story" icon="🧳" title="تشبيه الشنطة">
+
+رايح المصيف يومين. `COPY . .` = شايل الدولاب كله. `turbo prune` = شنطة فيها هدومك انت بس. وفصل `json` عن `full` = تحط الحاجات اللي مش بتتغير (الـ dependencies) في الأول عشان Docker يكيّشها، والكود اللي بيتغير كل يوم في الآخر.
+
+</Box>
+
+<File name="apps/api/Dockerfile">
+
+```dockerfile
+FROM node:20-alpine AS base
+RUN corepack enable
+WORKDIR /app
+
+# 1) قلّم الريبو لـ api بس
+FROM base AS pruner
+COPY . .
+RUN pnpm dlx turbo prune api --docker
+
+# 2) نزّل الـ deps (layer بيتكيّش طالما الـ package.json ماتغيرش)
+FROM base AS builder
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install --frozen-lockfile
+
+# 3) انسخ الكود وابني
+COPY --from=pruner /app/out/full/ .
+RUN pnpm turbo run build --filter=api...
+
+# 4) image التشغيل
+FROM base AS runner
+ENV NODE_ENV=production
+COPY --from=builder /app .
+USER node
+CMD ["node", "apps/api/dist/main.js"]
+```
+
+</File>
+
+```bash
+# من الـ root بتاع الريبو (مش من جوه apps/api)
+docker build -f apps/api/Dockerfile -t jobs-api .
+```
+
+<Box type="idea" title="خطوة كمان للتحسين">
+
+الـ runner هنا لسه شايل الـ devDependencies. لما تتمكّن، بص على `pnpm deploy` أو `pnpm prune --prod` عشان تطلّع image أصغر بكتير. ولو الـ API محتاج Prisma، افتكر `prisma generate` قبل الـ build.
+
+</Box>
+
+## Changesets: لو هتنشر packages
+
+لو الـ packages كلها `private` ومستخدمة جوه الريبو بس، **مش محتاج Changesets**. هتحتاجه لو هتنشر الـ design system على npm (حتى لو private registry) لفرق تانية بره الريبو.
+
+<Flow items={[
+  { t: "pnpm changeset", s: "تكتب إيه اتغير", c: 1 }, "→",
+  { t: ".changeset/*.md", s: "يتعمله commit مع الـ PR", c: 2 }, "→",
+  { t: "changeset version", s: "bump + CHANGELOG", c: 3 }, "→",
+  { t: "changeset publish", s: "npm", c: 4 },
+]} />
+
+```bash
+pnpm add -Dw @changesets/cli
+pnpm changeset init
+
+pnpm changeset            # اختار الـ packages ونوع التغيير (patch/minor/major)
+pnpm changeset version    # يرفع الأرقام ويكتب CHANGELOG ويحدّث workspace:^
+pnpm turbo build --filter=@repo/ui
+pnpm changeset publish
+```
+
+<File name=".changeset/brave-lions-dance.md">
+
+```md
+---
+"@repo/ui": minor
+---
+
+Add `loading` prop to Button
+```
+
+</File>
+
+<Box type="tip" title="الأوتوماتيك">
+
+فيه GitHub Action رسمي (<En>changesets/action</En>) بيفتح PR اسمه "Version Packages" لوحده، ولما تعمله merge بينشر. كده محدش بيعمل publish من جهازه.
+
+</Box>
+
+<Checklist id="monorepo-w4" title="Checklist الأسبوع الرابع" items={[
+  "CI بيشغّل lint/typecheck/test/build على الـ affected بس.",
+  "Remote cache متوصل في الـ CI بـ secrets.",
+  "فاهم ليه `fetch-depth: 0` و `--frozen-lockfile`.",
+  "Docker image للـ api مبنية بـ `turbo prune --docker` ومن الـ root.",
+  "عارف إمتى أحتاج Changesets وإمتى لأ.",
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه بنعمل `COPY out/json` و install قبل `COPY out/full`؟">عشان Docker يكيّش الـ install layer؛ تعديل الكود مايعيدش تنزيل الـ deps.</Q>
+  <Q n={2} q="`--affected` بيبني كل حاجة في كل PR. أول شك؟">الـ checkout بـ depth 1 فمفيش base يقارن بيه.</Q>
+  <Q n={3} q="كل الـ packages private. محتاج Changesets؟">غالبًا لأ؛ الـ workspace protocol كفاية.</Q>
+</Quiz>

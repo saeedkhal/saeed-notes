@@ -1,0 +1,25 @@
+---
+title: الـ Monorepo من الصفر للاحتراف
+highlight: Monorepo
+subtitle: pnpm workspaces · Turborepo · مشروع حقيقي · CI و Docker · Nx
+description: من pnpm workspaces لـ Turborepo ومشروع حقيقي بـ NestJS و React، لحد الـ CI والـ Docker و Nx — خطة ٤ أسابيع.
+emoji: 📦
+order: 1
+note: شرح وملخص بأسلوبي — مش ترجمة لأي مرجع. الأدوات دي بتتحدّث بسرعة، فراجع الـ docs الرسمية لأي flag أو option قبل ما تعتمد عليه في production.
+---
+
+المذكرة ماشية على خطة <Hl c="y">أربع أسابيع + مرحلة بعدها</Hl>. كل فصل فيه شرح، أكواد تجربها بإيدك، صناديق تحذير ونصايح، وفي الآخر **Checklist** و**اختبر نفسك**.
+
+<Box type="story" icon="🏢" title="تشبيه المذكرة كلها في سطرين">
+
+**Polyrepo** = كل أخ ساكن في شقة في حي مختلف؛ عشان تبعتله طبق محشي لازم مواصلات (`npm publish`) ويمكن يوصل بارد (version قديمة).
+
+**Monorepo** = عمارة العيلة؛ كل واحد في شقته (app) بس السلم واحد، والأم بتطبخ في مطبخ مشترك (shared packages) والطبق بيوصل سخن فورًا.
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+جهّز: `Node 20+` و `pnpm` (أسهل طريقة: `corepack enable`) و `Git` و VS Code. كل الأكواد هنا مكتوبة بأسماء `@repo/*` كـ convention — غيّرها لأي scope يعجبك.
+
+</Box>

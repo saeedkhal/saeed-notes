@@ -1,0 +1,20 @@
+---
+/**
+ * دياجرام سهم: items فيها nodes ({ t, s?, c? }) أو strings للأسهم ("→", "⇉", "+", "↔")
+ */
+type Node = { t: string; s?: string; c?: 1 | 2 | 3 | 4 | 5 };
+interface Props { items: (Node | string)[]; label?: string }
+const { items, label } = Astro.props;
+---
+<div class="flow" role="img" aria-label={label ?? items.map((i) => (typeof i === "string" ? i : i.t)).join(" ")}>
+  {items.map((i, idx) =>
+    typeof i === "string" ? (
+      <span class="arrow" aria-hidden="true">{i}</span>
+    ) : (
+      <div class:list={["node", `n${i.c ?? ((idx / 2) % 5) + 1}`]}>
+        <b>{i.t}</b>
+        {i.s && <small>{i.s}</small>}
+      </div>
+    ),
+  )}
+</div>

@@ -1,0 +1,30 @@
+---
+import Base from "../layouts/Base.astro";
+import { getChapters, getTopics, url } from "../lib/content";
+
+const topics = await getTopics();
+const counts = await Promise.all(topics.map(async (t) => (await getChapters(t.id)).length));
+---
+<Base title="مذكرات سعيد">
+  <div class="home">
+    <section class="hero">
+      <h1>مذكرات <mark class="hl y">سعيد</mark> 📚</h1>
+      <p>شرح وملخصات ملوّنة لمواضيع البرمجة — بأمثلة من الحياة، صناديق تحذير ونصايح، وفي آخر كل فصل checklist واختبر نفسك.</p>
+    </section>
+    <div class="topics">
+      {topics.map((t, i) => (
+        <a class="topic-card" href={url(`${t.id}/`)}>
+          <div class="em">{t.data.emoji}</div>
+          <h2>{t.data.title}</h2>
+          <p>{t.data.description}</p>
+          <span class="meta">{counts[i]} فصول</span>
+        </a>
+      ))}
+      <div class="topic-card soon">
+        <div class="em">➕</div>
+        <p>مواضيع جاية قريب…</p>
+      </div>
+    </div>
+  </div>
+  <footer class="site-footer">✍️ شرح وملخص بأسلوبي — مش ترجمة لأي مرجع. راجع الـ docs الرسمية قبل ما تعتمد على أي flag في production.</footer>
+</Base>

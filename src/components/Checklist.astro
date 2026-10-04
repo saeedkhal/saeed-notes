@@ -1,0 +1,43 @@
+---
+/** Checklist تفاعلية — بتتحفظ في المتصفح بتاعك (localStorage) */
+interface Props { id: string; items: string[]; title?: string }
+const { id, items, title = "Checklist" } = Astro.props;
+const fmt = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+---
+<h2 class="checklist-h" id={`checklist-${id}`}>{title}</h2>
+<ul class="checklist" data-checklist={id}>
+  {items.map((t, i) => (
+    <li>
+      <label>
+        <input type="checkbox" data-i={i} />
+        <span set:html={fmt(t)} />
+      </label>
+    </li>
+  ))}
+</ul>
+<p class="checklist-meta" data-checklist-meta={id}></p>
+
+<script>
+  const KEY = "masry-notes:checklist:";
+  for (const list of document.querySelectorAll<HTMLUListElement>("[data-checklist]")) {
+    const id = list.dataset.checklist!;
+    const boxes = [...list.querySelectorAll<HTMLInputElement>("input")];
+    const meta = document.querySelector<HTMLElement>(`[data-checklist-meta="${id}"]`);
+    let saved: number[] = [];
+    try { saved = JSON.parse(localStorage.getItem(KEY + id) ?? "[]"); } catch {}
+    const update = () => {
+      const done = boxes.filter((b) => b.checked).length;
+      if (meta) meta.textContent = done === boxes.length ? "🎉 خلّصت كله — عاش!" : `${done} من ${boxes.length}`;
+    };
+    boxes.forEach((b, i) => {
+      b.checked = saved.includes(i);
+      b.addEventListener("change", () => {
+        const now = boxes.flatMap((x, j) => (x.checked ? [j] : []));
+        try { localStorage.setItem(KEY + id, JSON.stringify(now)); } catch {}
+        update();
+      });
+    });
+    update();
+  }
+</script>

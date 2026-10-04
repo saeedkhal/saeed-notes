@@ -1,0 +1,89 @@
+---
+import type { MarkdownHeading } from "astro";
+import Base from "./Base.astro";
+import { chapterHref, getTopics, splitId, url, type Chapter, type Topic } from "../lib/content";
+
+interface Props {
+  topic: Topic;
+  chapters: Chapter[];
+  current?: Chapter;
+  headings?: MarkdownHeading[];
+  title: string;
+  description?: string;
+}
+const { topic, chapters, current, headings = [], title, description } = Astro.props;
+const others = (await getTopics()).filter((t) => t.id !== topic.id);
+const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
+const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
+---
+<Base title={title} description={description} hasSidebar>
+  <div class="shell">
+    <nav class="sidebar" aria-label="الفصول">
+      <a class="side-topic" href={url(`${topic.id}/`)}>
+        {topic.data.emoji} {topic.data.title}
+        <small>{topic.data.subtitle}</small>
+      </a>
+      <ul class="side-list">
+        {chapters.map((c) => (
+          <li>
+            <a
+              class="side-link"
+              href={chapterHref(c)}
+              style={`--cc: ${colorVar(c.data.color)}`}
+              aria-current={current?.id === c.id ? "page" : undefined}
+            >
+              <span class="pill">{c.data.label}</span>
+              <span>{c.data.short}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      {others.length > 0 && (
+        <div class="side-other">
+          <div class="side-section">مواضيع تانية</div>
+          {others.map((t) => <a href={url(`${t.id}/`)}>{t.data.emoji} {t.data.title}</a>)}
+        </div>
+      )}
+    </nav>
+    <div class="scrim" data-scrim></div>
+
+    <main class="main">
+      <div class="main-inner">
+        <slot />
+      </div>
+    </main>
+
+    <aside class="toc" aria-label="في الصفحة دي">
+      {toc.length > 0 && (
+        <>
+          <div class="toc-title">في الصفحة دي</div>
+          <ul>
+            {toc.map((h) => (
+              <li class={`d${h.depth}`}><a href={`#${h.slug}`}>{h.text}</a></li>
+            ))}
+          </ul>
+        </>
+      )}
+    </aside>
+  </div>
+</Base>
+
+<script>
+  // يعلّم العنوان اللي انت واقف عنده في الـ TOC
+  const links = [...document.querySelectorAll<HTMLAnchorElement>(".toc a")];
+  const targets = links
+    .map((a) => document.getElementById(decodeURIComponent(a.hash.slice(1))))
+    .filter((el): el is HTMLElement => !!el);
+  if (targets.length) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          links.forEach((a) => a.classList.toggle("active", decodeURIComponent(a.hash.slice(1)) === e.target.id));
+        }
+      },
+      { rootMargin: "-70px 0px -70% 0px" },
+    );
+    targets.forEach((t) => io.observe(t));
+  }
+</script>

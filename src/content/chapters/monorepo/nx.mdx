@@ -1,0 +1,143 @@
+---
+title: "Nx: الأخ الكبير"
+short: Nx
+order: 5
+label: فصل ٥
+badge: بعدها · فصل ٥
+en: Project Graph · Affected · Generators · Module Boundaries
+keywords: graph · generators · boundaries
+goal: تفهم Nx بيقدّم إيه زيادة عن Turbo، وإمتى يستاهل التعقيد الإضافي.
+part: بعدها
+color: c5
+---
+
+## الفرق في الفلسفة
+
+<Grid2>
+<Card title="⚡ Turborepo" c={2}>
+
+"أنا task runner سريع جدًا. اعمل الـ monorepo بتاعك بالطريقة اللي تعجبك، وأنا أشغّله وأكيّشه."
+
+**أداة صغيرة بتعمل حاجة واحدة كويس.**
+
+</Card>
+<Card title="🏗️ Nx" c={5}>
+
+"أنا build system + منصة. هفهم الكود بتاعك، أولّدلك projects، أحمي الحدود بينهم، وأوزّع المهام على machines."
+
+**أداة كبيرة بتمسك الريبو كله.**
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🏠" title="تشبيه">
+
+Turbo = سبّاك شاطر: تقوله افتح المية هنا، يفتحها بسرعة ومن غير لف. Nx = مقاول عمارة: بيرسم التصميم، بيحدد مين يدخل أي شقة، وبيجيبلك عمالة جاهزة لأي أوضة جديدة. الاتنين ممتازين — على حسب حجم العمارة.
+
+</Box>
+
+## Project Graph
+
+Nx بيحلل الـ imports في كودك نفسه (مش بس package.json) ويبني خريطة لمين بيعتمد على مين. وبيعرضهالك تفاعلي في المتصفح:
+
+```bash
+npx nx@latest init               # ضيف Nx لريبو موجود (حتى لو فيه Turbo/pnpm)
+npx nx graph                     # افتح الخريطة
+npx nx affected -t lint test build   # زي --affected في turbo
+npx nx show project web          # كل الـ targets المستنتجة للـ project
+```
+
+من ميزاته المهمة: <Hl c="b">Inferred tasks</Hl> — لو لقى `vite.config.ts` بيستنتج إن فيه build و serve و test لوحده من غير ما تكتبهم.
+
+## Generators
+
+بدل ما تنسخ فولدر وتعدّل 7 ملفات كل ما تعمل package جديدة، Nx عنده <En>generators</En> بتعمل الـ scaffold كامل ومتوصّل:
+
+```bash
+npx nx add @nx/react
+npx nx g @nx/react:library packages/jobs-feature --bundler=none
+npx nx g @nx/react:component packages/ui/src/Badge
+npx nx g @nx/nest:application apps/api
+```
+
+<Box type="idea" title="Custom Generators = قوة حقيقية للفرق">
+
+تقدر تكتب generator خاص بشركتك: "feature جديدة" تعمل لوحدها folder بالـ clean architecture بتاعتكم (`api/` `hooks/` `components/` `stories/`) + الـ tests + الـ tags. ده بيفرض الـ conventions من غير ما حد يفتكر.
+
+</Box>
+
+## Module Boundaries: أقوى ميزة
+
+في ريبو كبير، أكيد هييجي يوم حد يعمل `import` من `apps/api` جوه `packages/ui`، أو feature تـ import من جوه feature تانية. Nx بيمنع ده بـ <Hl c="g">tags + ESLint rule</Hl>:
+
+<File name="packages/ui/project.json">
+
+```json
+{
+  "name": "ui",
+  "tags": ["scope:shared", "type:ui"]
+}
+```
+
+</File>
+
+<File name="eslint.config.js (root)">
+
+```js
+import nx from "@nx/eslint-plugin";
+
+export default [
+  ...nx.configs["flat/base"],
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    rules: {
+      "@nx/enforce-module-boundaries": ["error", {
+        depConstraints: [
+          { sourceTag: "type:ui",      onlyDependOnLibsWithTags: ["type:ui", "type:util"] },
+          { sourceTag: "type:feature", onlyDependOnLibsWithTags: ["type:ui", "type:util", "type:data"] },
+          { sourceTag: "scope:web",    onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
+          { sourceTag: "scope:api",    onlyDependOnLibsWithTags: ["scope:api", "scope:shared"] },
+        ],
+      }],
+    },
+  },
+];
+```
+
+</File>
+
+دلوقتي لو `ui` حاول يـ import من feature، الـ lint هيضرب في الـ PR. ده بيترجم الـ <Hl c="u">clean architecture</Hl> من "اتفاق شفهي" لـ "قاعدة بتتنفّذ".
+
+## المقارنة الصريحة
+
+| الجانب | Turborepo | Nx |
+| --- | --- | --- |
+| منحنى التعلم | ساعات | أيام لأسابيع |
+| Config | `turbo.json` واحد | `nx.json` + `project.json` أو inferred |
+| Caching محلي/remote | ✅ / Vercel أو self-host | ✅ / Nx Cloud أو self-host |
+| Affected | ✅ `--affected` | ✅ `nx affected` (أنضج) |
+| Project graph | من package.json | من الـ imports + UI تفاعلي |
+| Generators | بسيطة (`turbo gen`) | قوية جدًا + plugins |
+| Module boundaries | محدود/لسه بيتطور | ✅ ناضج |
+| توزيع المهام على machines | ❌ | ✅ (Nx Agents) |
+| الأنسب لـ | فريق صغير/متوسط، 2–15 package | فرق كبيرة، عشرات الـ projects، قواعد معمارية صارمة |
+
+<Box type="interview" title='إجابة إنترفيو جاهزة: "Turbo ولا Nx؟"'>
+
+"بدأت بـ Turbo لأنه بيضيف caching و task orchestration بأقل تعقيد فوق pnpm workspaces. لو الريبو كبر وبقى محتاج نفرض حدود معمارية بين الـ features أو نوزّع الـ CI، Nx بيقدّم ده out of the box — والانتقال سهل نسبيًا بـ `nx init` لأنه بيشتغل فوق نفس الـ workspaces."
+
+</Box>
+
+## 🧪 Lab
+
+1. خد الريبو بتاع الأسبوع التالت واعمل branch جديد.
+2. `npx nx@latest init` وشغّل `nx graph` — قارنها باللي في دماغك.
+3. ضيف tags لكل project واعمل rule تمنع `ui` من `types`… ثم اكسرها بقصد.
+4. اعمل library جديدة بـ generator وشوف الملفات اللي اتعملت.
+5. اكتب لنفسك صفحة: هتختار إيه لمشروعك الجاي وليه.
+
+<Quiz>
+  <Q n={1} q="إيه الفرق الجوهري في إزاي الاتنين بيبنوا الـ graph؟">Turbo من الـ dependencies في package.json؛ Nx كمان بيحلل الـ imports في الكود.</Q>
+  <Q n={2} q="عاوز تمنع أي feature تـ import من feature تانية. الأداة؟">Nx tags + `@nx/enforce-module-boundaries`.</Q>
+  <Q n={3} q="فريق 4 أفراد، 3 apps و 4 packages. ترشّح إيه؟">Turbo غالبًا؛ التعقيد الإضافي لـ Nx مش هيرجع بفايدة لسه.</Q>
+</Quiz>

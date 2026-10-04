@@ -1,0 +1,55 @@
+---
+import { render } from "astro:content";
+import Docs from "../../layouts/Docs.astro";
+import { chapterHref, getChapters, getTopics } from "../../lib/content";
+import { mdxComponents } from "../../components";
+import Timeline, { type TimelineGroup } from "../../components/Timeline.astro";
+
+export async function getStaticPaths() {
+  const topics = await getTopics();
+  return topics.map((topic) => ({ params: { topic: topic.id }, props: { topic } }));
+}
+
+const { topic } = Astro.props;
+const chapters = await getChapters(topic.id);
+const { Content, headings } = await render(topic);
+const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
+const countLabel = (n: number) => (n === 1 ? "فصل واحد" : n === 2 ? "فصلين" : `${n.toLocaleString("ar-EG")} فصول`);
+const groups: TimelineGroup[] = [];
+for (const c of chapters) {
+  const name = c.data.part ?? topic.data.highlight;
+  let g = groups.find((x) => x.title === name);
+  if (!g) groups.push((g = { title: name, count: "", items: [] }));
+  g.items.push({
+    href: chapterHref(c),
+    meta: c.data.label,
+    title: c.data.title,
+    tags: c.data.keywords?.split(" · "),
+    color: colorVar(c.data.color),
+  });
+}
+groups.forEach((g) => (g.count = countLabel(g.items.length)));
+const [before, after] = topic.data.title.split(topic.data.highlight);
+---
+<Docs topic={topic} chapters={chapters} headings={headings} title={topic.data.title} description={topic.data.description}>
+  <section class="cover">
+    <span class="circle a"></span><span class="circle b"></span><span class="circle c"></span>
+    <span class="cover-tag">{topic.data.tag}</span>
+    <h1>{before}<span class="mk">{topic.data.highlight}</span>{after}</h1>
+    <div class="cover-sub">{topic.data.subtitle}</div>
+    <nav class="ladder" aria-label="الفصول">
+      {chapters.map((c) => (
+        <a href={chapterHref(c)} style={`--cc: ${colorVar(c.data.color)}`}>
+          {c.data.badge.split(" · ")[0]} — <span>{c.data.short}</span>
+        </a>
+      ))}
+    </nav>
+    {topic.data.note && <div class="cover-note">✍️ {topic.data.note}</div>}
+  </section>
+
+  <article class="prose">
+    <h2 class="no-num" id="map">🗺️ الخريطة</h2>
+    <Timeline groups={groups} />
+    <Content components={mdxComponents} />
+  </article>
+</Docs>

@@ -1,0 +1,43 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 6
+label: الآخر
+badge: الآخر
+en: One-page troubleshooting & recall
+keywords: cheatsheet · troubleshooting
+goal: صفحة واحدة ترجعلها لما حاجة تضرب — المشكلة على الشمال، والحل تحتها.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["package داخلية بتتنزّل من npm بدل المحلية", "استخدم `workspace:*` + scope `@repo/`"],
+  ["import شغال عندي وبيضرب في CI", "phantom dependency → ضيفها في package.json الصح"],
+  ["عاوز أضيف tool للريبو كله", "`pnpm add -Dw`"],
+  ["مين جايب الـ package دي؟", "`pnpm why`"],
+  ["web بيتبني قبل ui", "`\"dependsOn\": [\"^build\"]`"],
+  ["cache hit بس dist فاضي", "ظبّط `outputs`"],
+  ["staging build أخد production config", "ضيف الـ env في `env` بتاع الـ task"],
+  ["ليه ده miss؟", "`--summarize` أو `--dry=json`"],
+  ["أشغّل app واللي محتاجه", "`--filter=web...`"],
+  ["غيّرت package، مين يتأثر؟", "`--filter=...@repo/ui`"],
+  ["NestJS مش فاهم الـ package", "ابنيها cjs+esm بـ tsup + `exports`"],
+  ["Invalid hook call", "React في `peerDependencies` بتاعة ui"],
+  ["Next مش بيقرا .ts من package", "`transpilePackages` في next.config"],
+  ["CI بطيء", "`--affected` + remote cache"],
+  ["affected بيبني كل حاجة", "`fetch-depth: 0`"],
+  ["Docker image ضخمة وبتتبني كل شوية", "`turbo prune --docker` (json ثم full)"],
+  ["عاوز أنشر الـ design system", "Changesets + changesets/action"],
+  ["features بتعمل import من بعض", "Nx module boundaries + tags"],
+  ["كل package جديدة بتاخد ساعة setup", "Nx generators (أو `turbo gen`)"],
+  ["Turbo ولا Nx؟", "ابدأ Turbo؛ انقل لـ Nx لما تحتاج حدود معمارية أو CI موزّع"],
+]} />
+
+<Checklist id="monorepo-final" title="🏁 Checklist النهاية" items={[
+  "ريبو فيه web (Vite) + api (Nest) + ui (Storybook) + types (zod) شغال.",
+  "CI أخضر بيبني الـ affected بس مع remote cache.",
+  "Docker image للـ api مبنية بـ prune.",
+  "جرّبت Nx على branch وعندي رأي مبني على تجربة.",
+  "أقدر أشرح الموضوع كله في إنترفيو في 5 دقايق. 💪",
+]} />

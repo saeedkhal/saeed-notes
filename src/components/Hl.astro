@@ -1,0 +1,6 @@
+---
+/** ماركر هايلايتر: y أصفر · p بينك · g أخضر · b أزرق · o برتقالي · u خط بنفسجي */
+interface Props { c?: "y" | "p" | "g" | "b" | "o" | "u" }
+const { c = "y" } = Astro.props;
+---
+<mark class:list={["hl", c]}><slot /></mark>

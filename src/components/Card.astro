@@ -1,0 +1,8 @@
+---
+interface Props { title: string; c?: 1 | 2 | 3 | 4 | 5 }
+const { title, c = 1 } = Astro.props;
+---
+<div class="card" style={`--cc: var(--c${c})`}>
+  <div class="t">{title}</div>
+  <div class="c"><slot /></div>
+</div>
