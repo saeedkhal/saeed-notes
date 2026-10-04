@@ -1,0 +1,83 @@
+---
+title: الحفظ بعد إعادة التحميل
+short: الحفظ
+order: 7
+label: فصل ٧
+badge: الوسائط · فصل ٧
+en: persist · partialize · migrate · rehydrate
+keywords: localStorage · version · skipHydration
+goal: تحفظ جزء من الحالة، وتنقل الشكل القديم، وتتحكم في لحظة الترطيب.
+part: الوسائط
+color: c2
+---
+
+<En>persist</En> يكتب الحالة في تخزين ويرجعها لما الصفحة تفتح. الافتراضي <En>createJSONStorage</En> على <En>localStorage</En>. جالب التخزين بيتنده أول ما يتحتاج، مش وقت تقييم الموديول، عشان السيرفر اللي مش فيه <En>localStorage</En> ما يقعش.
+
+<File name="persist.js">
+
+```jsx
+import { persist, createJSONStorage } from "zustand/middleware";
+
+const useCart = create()(
+  persist(
+    (set) => ({
+      items: [],
+      draft: "",
+      add: (item) => set((state) => ({ items: [...state.items, item] })),
+      setDraft: (draft) => set({ draft }),
+    }),
+    {
+      name: "cart",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ items: state.items }),
+      version: 1,
+      migrate: (saved, from) => (from < 1 ? { items: saved.list ?? [] } : saved),
+      skipHydration: false,
+    },
+  ),
+);
+```
+
+</File>
+
+<En>name</En> مفتاح فريد في التخزين. <En>partialize</En> يختار اللي يتحفظ. المسودة بتاعة الكتابة متتحفظش. الدوال مش بتتسلسل في JSON أصلًا.
+
+<En>version</En> رقم. لو الرقم في التخزين غير رقم المتجر، النسخة القديمة ما تتطبقش إلا لو <En>migrate</En> رجّعتها بالشكل الجديد.
+
+<En>merge</En> يدمج المحفوظ مع الحالة الحالية. الافتراضي دمج سطحي. لو الشكل متداخل، اكتب الدمج بإيدك.
+
+<En>createJSONStorage</En> بيعمل <En>JSON.parse</En> من غير ما يتحقق من الشكل. بيانات بايظة أو قديمة تعدّي. في الإنتاج، تخزين مخصص يتحقق، بـ Zod مثلًا، قبل ما يرجّع الحالة.
+
+## قبل وبعد الترطيب
+
+<En>onRehydrateStorage</En> دالة تتنادى قبل القراءة، وتقدر ترجع دالة تانية بعد ما الحالة ترجع أو الخطأ يحصل.
+
+<En>skipHydration</En> يوقّف الرجوع التلقائي. مفيد لو HTML السيرفر لازم يطابق حالة فاضية، والعميل يملا بعدين.
+
+<File name="manual.js">
+
+```jsx
+useEffect(() => {
+  useCart.persist.rehydrate();
+}, []);
+```
+
+</File>
+
+على المتجر، بعد الوسيط، فيه <En>persist.hasHydrated</En> و <En>onHydrate</En> و <En>onFinishHydration</En> و <En>clearStorage</En> و <En>setOptions</En>. امسح التخزين لما تعمل خروج، وبعدين رجّع الحالة الأولى في الذاكرة.
+
+التخزين المخصص كائن فيه <En>getItem</En> و <En>setItem</En> و <En>removeItem</En>. نفس الشكل يحفظ الحالة في هاش العنوان عشان اللينك يتشاف، بدل <En>localStorage</En>. راجع الدوكس لشكل القيمة المخزنة، لأنها ملفوفة مع رقم النسخة.
+
+<Box type="warn" title="الرجوع للأول والتخزين">
+
+<En>set</En> بالحالة الأولى يفضّي الذاكرة. لو الوسيط شغّال، اكتب الفضي في التخزين أو نادِ <En>clearStorage</En>، وإلا إعادة التحميل ترجّع القديم.
+
+</Box>
+
+<Checklist id="zustand-persist" title="خلّصت الفصل لما" items={["name و storage و partialize", "version مع migrate لما الشكل يتغير", "skipHydration وبعدين rehydrate", "clearStorage مع رجوع الحالة الأولى"]} />
+
+<Quiz>
+<Q n={1} q="partialize بتمنع إيه؟">حفظ الحقول اللي مش عايزها تعدّي إعادة التحميل، زي مسودة فورم.</Q>
+<Q n={2} q="النسخة في التخزين أقدم. مين يظبط الشكل؟">migrate، لو راجعة الحالة بالشكل الجديد. من غيرها النسخة المختلفة ما تتطبقش.</Q>
+<Q n={3} q="ليه جالب localStorage مش بيتنده وقت الاستيراد؟">عشان السيرفر اللي مش فيه التخزين ما يقعش قبل ما المتجر يتستخدم في المتصفح.</Q>
+</Quiz>

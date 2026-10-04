@@ -1,0 +1,76 @@
+---
+title: الشرائح و combine
+short: الشرائح
+order: 5
+label: فصل ٥
+badge: المتجر · فصل ٥
+en: slices · combine · many stores
+keywords: slices · combine · StateCreator
+goal: تقسّم متجر كبير لشرائح، أو تسيب الاستنتاج لـ combine.
+part: المتجر
+color: c5
+---
+
+المتجر الواحد يتقسم دوال. كل دالة ترجع حقولها وأكشناتها، وتاخد نفس <En>set</En> و <En>get</En>.
+
+<File name="slices.js">
+
+```jsx
+const createItems = (set) => ({
+  items: [],
+  add: (item) => set((state) => ({ items: [...state.items, item] })),
+});
+
+const createDiscount = (set, get) => ({
+  rate: 0,
+  apply: (rate) => set({ rate }),
+  total: () => get().items.reduce((sum, item) => sum + item.price, 0),
+});
+
+const useShop = create((...args) => ({
+  ...createItems(...args),
+  ...createDiscount(...args),
+}));
+```
+
+</File>
+
+<En>get</En> في الشريحة يشوف الشرائح التانية، لأن الحالة اتلمّت قبل ما الأكشن يتنادى. عشان كده <En>total</En> يقرا <En>items</En>.
+
+الوسيط يلف المتجر المجموع بس. لو حطيته جوه شريحة لوحدها، التخزين أو الأدوات تتطبق نص نص وتتلخبط.
+
+في TypeScript، نوع الشريحة يتكتب كـ <En>StateCreator</En> على الحالة الكاملة. لو في وسيط، حط اسمه في خانة الـ mutators. راجع دليل الأنواع في الدوكس، لأن توقيع الدالة طويل.
+
+## combine
+
+<En>combine</En> ياخد الحالة الأولى، ودالة تضيف الأكشنات. النوع يتستنتج، فمش محتاج واجهة، ومش محتاج نداء <En>create</En> المقسوم لقوسين.
+
+<File name="combine.js">
+
+```jsx
+import { create } from "zustand";
+import { combine } from "zustand/middleware";
+
+const useShop = create(
+  combine({ items: [], rate: 0 }, (set) => ({
+    add: (item) => set((state) => ({ items: [...state.items, item] })),
+    apply: (rate) => set({ rate }),
+  })),
+);
+```
+
+</File>
+
+<En>redux</En> كمان بيعمل الحالة، فنفس الفكرة: من غير القوسين الزايدين. الوسيط اللي مش بيعمل الحالة، زي <En>devtools</En> و <En>persist</En>، في TypeScript محتاج <En>create()()</En> عشان الاستنتاج يكمّل.
+
+## أكتر من متجر
+
+مش لازم كل حاجة في متجر واحد. سلة، وواجهة درج، يفضلوا متجرين صغيرين لو عمرهم مختلف. التنسيق يبقى إن أكشن في واحد ينادي <En>getState</En> من التاني. متتعملش دايرة: كل واحد مستني التاني وقت الإنشاء.
+
+<Checklist id="zustand-slices" title="خلّصت الفصل لما" items={["الشريحة دالة بتاخد set و get", "الوسيط على المتجر المجموع بس", "combine يستنتج النوع من الحالة الأولى", "متجرين لما دورة الحياة مختلفة"]} />
+
+<Quiz>
+<Q n={1} q="ليه الوسيط مش جوه كل شريحة؟">عشان التخزين والأدوات تتطبق مرة على الحالة الكاملة، مش جزء يتخزن وجزء لأ.</Q>
+<Q n={2} q="combine بيوفّر إيه في TypeScript؟">استنتاج الحالة والأكشنات من غير واجهة، ومن غير نداء create بقوسين فاضيين.</Q>
+<Q n={3} q="إزاي شريحة تقرا حقل شريحة تانية؟">عن طريق get بعد ما المتجر يتلم.</Q>
+</Quiz>

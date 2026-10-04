@@ -1,0 +1,41 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 9
+label: الآخر
+badge: الآخر
+en: One-page recall for Zustand
+keywords: cheatsheet · set · persist · selector
+goal: تفتكر الدمج، والسليكتور، والوسيط، والحفظ.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["عايز حالة واجهة من غير Provider", "create واستورد الهوك"],
+  ["نفس شكل Redux", "وسيط redux و dispatch. أو أكشن عادي من غير type"],
+  ["الشاشة متحدثتش", "متعدّلش في المكان. ابعت كائن أو مصفوفة أو Map جديدة"],
+  ["حقل متداخل ضاع", "الدمج سطحي. انسخ الكائن الداخلي"],
+  ["الحالة رقم أو مصفوفة لوحدها", "setState مع replace true"],
+  ["محتاج القيمة وأنت بره React", "getState و setState و subscribe"],
+  ["رجوع بعد تسجيل خروج", "getInitialState. ومع persist نادِ clearStorage"],
+  ["لوب Maximum update depth", "سليكتور لكل حقل، أو useShallow"],
+  ["مقارنة كائن بإيدك", "shallow أو createWithEqualityFn"],
+  ["سليكتور لكل مفتاح من غير ما تكتبه", "وصفة createSelectors، مش تصدير جاهز"],
+  ["المتجر كبر", "شرائح، والوسيط على المجموع بس. أو combine"],
+  ["عايز الخط الزمني", "devtools، واسم الأكشن تالت معامل لـ set"],
+  ["تعديل متداخل كتير", "وسيط immer على المسودة"],
+  ["سماع حقل من بره الرسم", "subscribeWithSelector"],
+  ["الحالة تموت مع إعادة التحميل", "persist. partialize للحقول المطلوبة"],
+  ["شكل التخزين قديم", "version و migrate"],
+  ["السيرفر مش زي العميل", "skipHydration وبعدين rehydrate"],
+  ["سلة لكل مستخدم", "createStore جوه سياق React. مش الموديول العالمي"],
+  ["اختبار شاف حالة اختبار تاني", "setState بالحالة الأولى و replace true"],
+]} />
+
+<Checklist id="zustand-cheat" title="خلّصت المذكرة لما" items={["تعمل متجر وتقرا بسليكتور من غير لوب", "تحفظ جزء من الحالة وتعرف ترجعها", "تفرق المتجر العالمي عن متجر السياق"]} />
+
+<Quiz>
+<Q n={1} q="الفرق المختصر عن Redux؟">نفس الثبات والسليكتور. من غير Provider، ومن غير أكشن إجباري.</Q>
+<Q n={2} q="وسيط الحفظ بيكتب الدوال؟">لأ. JSON للحقول اللي partialize سيباها. الدوال تفضل في الكود.</Q>
+</Quiz>

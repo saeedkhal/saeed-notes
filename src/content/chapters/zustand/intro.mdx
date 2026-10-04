@@ -1,0 +1,74 @@
+---
+title: ليه Zustand ومش Redux؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: client state · create · no provider
+keywords: Redux · selector · create
+goal: تفرّق حالة الواجهة عن حالة السيرفر، وتعمل أول متجر من غير Provider.
+part: البداية
+color: c1
+---
+
+<En>Zustand</En> لمتجر حالة الواجهة: السلة، الخطوة الحالية في فورم، درج مفتوح. دي مش الداتا الجاية من الـ API. دي شغل <En>TanStack Query</En>. هنا اللي عايش في الجلسة وبين المكوّنات.
+
+من غيرها بترفع الحالة للأب وتمرّرها لتحت، أو تحط <En>Context</En> لكل حاجة. الاتنين بيتقلوا لما الشجرة تكبر.
+
+## أول متجر
+
+راجع أمر التثبيت في الدوكس. المسارات تحت دي شائعة في الإصدار الخامس.
+
+<File name="terminal">
+
+```bash
+npm install zustand
+```
+
+</File>
+
+<File name="cart.js">
+
+```jsx
+import { create } from "zustand";
+
+const useCart = create((set) => ({
+  items: [],
+  add: (item) => set((state) => ({ items: [...state.items, item] })),
+}));
+
+function CartCount() {
+  const count = useCart((state) => state.items.length);
+  const add = useCart((state) => state.add);
+  return <button onClick={() => add({ id: 1, name: "كشكول" })}>السلة: {count}</button>;
+}
+```
+
+</File>
+
+<En>create</En> يرجّع هوك. السليكتور يختار حتة من الحالة، فالمكوّن يعيد الرسم لما الحتة دي تتغير بس. مفيش <En>Provider</En> حوالين التطبيق. المتجر كائن واحد في الموديول، وأي مكوّن يستورده.
+
+<Hl c="y">متندهش set أو get وأنت لسه بتعرّف المتجر</Hl>. الاتنين آمنين جوه الأكشن، بعد ما المتجر يخلص إنشاء.
+
+## الفرق عن Redux
+
+الاتنين موديل ثابت: متعدّلش الكائن القديم، اعمل نسخة جديدة. والرسم في الاتنين بيتظبط بسليكتور، مش لوحده.
+
+| | Zustand | Redux |
+| --- | --- | --- |
+| الغلاف | المتجر متستورد مباشرة | التطبيق جوه Provider |
+| شكل التغيير | دالة على المتجر، أو set | أكشن فيه type، و reducer نضيف |
+| الأدوات | وسيط devtools اختياري | DevTools أصل في العيلة |
+| الكتابة المتداخلة | نسخة بإيدك، أو وسيط immer | Toolkit بيستخدم Immer من جوه |
+
+لو عايز نفس شكل Redux جوه Zustand، في وسيط اسمه <En>redux</En> بيركّب <En>dispatch</En>. مش مطلوب عشان تبدأ.
+
+<En>Valtio</En> يعدّل الكائن نفسه عن طريق <En>proxy</En>، والرسم يتبع الخاصية اللي اتقرأت. <En>Jotai</En> و <En>Recoil</En> ذرات صغيرة تتركب، مش متجر واحد. Recoil كمان محتاج غلاف، والمفتاح عنده نص.
+
+<Checklist id="zustand-intro" title="خلّصت الفصل لما" items={["تفرق حالة الواجهة عن كاش الـ API", "تعمل create وتقرا بسليكتور", "تعرف إن مفيش Provider افتراضي", "تسمّي فرق الغلاف والأكشن عن Redux"]} />
+
+<Quiz>
+<Q n={1} q="السلة حالة سيرفر ولا واجهة؟">واجهة. الطلب للسيرفر يفضل في TanStack Query. المتجر يمسك اللي ظاهر ومتشارك.</Q>
+<Q n={2} q="ليه السليكتور مش قراءة المتجر كله؟">عشان المكوّن ما يعيدش الرسم لما حتة تانية تتغير.</Q>
+<Q n={3} q="Redux Toolkit بيكتب جوه الحالة إزاي من غير ما يبوّظ الثبات؟">Immer بيعمله نسخة. في Zustand ده وسيط اختياري، مش الافتراضي.</Q>
+</Quiz>

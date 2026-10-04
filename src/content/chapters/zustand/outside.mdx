@@ -1,0 +1,75 @@
+---
+title: المتجر من بره المكوّن
+short: من بره
+order: 3
+label: فصل ٣
+badge: المتجر · فصل ٣
+en: getState · setState · subscribe · reset
+keywords: getInitialState · async · reset
+goal: تقرا وتكتب وتسمع من غير هوك، وترجّع الحالة الأولى.
+part: المتجر
+color: c3
+---
+
+الهوك اللي راجعه <En>create</En> عليه أدوات: <En>getState</En> و <En>setState</En> و <En>getInitialState</En> و <En>subscribe</En>. دول يشتغلوا في حدث، أو في اختبار، أو في موديول مش React.
+
+<File name="outside.js">
+
+```jsx
+const snapshot = useCart.getState();
+useCart.setState({ note: "توصيل" });
+
+const stop = useCart.subscribe((state, prev) => {
+  console.log(prev.items.length, state.items.length);
+});
+```
+
+</File>
+
+<En>subscribe</En> يرجّع دالة توقف السماع. ندهها في تنظيف <En>useEffect</En> لو التسجيل من مكوّن.
+
+الأكشن مش لازم جوه المتجر. دالة في الموديول تنادي <En>setState</En> تتتقسم في ملف لوحدها، وتتنادي من غير هوك. النمط المعتاد لسه إن الأكشن يعيش جنب الحالة. الخارجي أنسب للتقسيم.
+
+## طلب غير متزامن
+
+الأكشن تبقى <En>async</En>. بعد الرد، <En>set</En> يكتب. الحالة الوسطى زي التحميل حقول عادية في المتجر.
+
+<File name="async.js">
+
+```jsx
+load: async () => {
+  set({ status: "loading" });
+  const res = await fetch("/api/cart");
+  set({ items: await res.json(), status: "ready" });
+},
+```
+
+</File>
+
+## الرجوع للأول
+
+<En>getInitialState</En> هي الحالة ساعة الإنشاء، وفيها الدوال. <En>set</En> بيها يرجّع المتجر.
+
+<File name="reset.js">
+
+```jsx
+reset: () => set(useCart.getInitialState()),
+```
+
+</File>
+
+لو المتجر معمول بـ <En>persist</En>، الرجوع في الذاكرة مش كفاية لوحده. امسح التخزين كمان، وده في فصل الحفظ.
+
+لو عندك كذا متجر وعايز صفرهم مع بعض، اجمع دوال الرجوع في <En>Set</En> ساعة <En>create</En>، وناديهم كلهم. كل واحدة تعمل <En>setState</En> بالحالة الأولى مع استبدال <En>true</En> عشان مفيش مفتاح قديم يفضل.
+
+## عادة Flux
+
+مش واجهة في المكتبة. عادة: المكوّن ينادي أكشن باسم، ومش ينثر <En>setState</En> في كل زرار. كده تتبع التغيير يبقى من الدوال، قريب من فكرة الأكشن في Redux من غير ما تلزم بيها.
+
+<Checklist id="zustand-outside" title="خلّصت الفصل لما" items={["getState و setState من غير مكوّن", "subscribe يتوقف بتنظيف", "أكشن async يكتب بعد الرد", "reset يرجّع getInitialState"]} />
+
+<Quiz>
+<Q n={1} q="عايز عدد السلة في حدث مش جوه React. تنادي إيه؟">useCart.getState و تقرا items.</Q>
+<Q n={2} q="subscribe من غير ما توقف السماع. إيه اللي يحصل؟">الدالة تفضل تتنده بعد ما المكوّن يمشي.</Q>
+<Q n={3} q="الرجوع للأول بياخد الحالة منين؟">getInitialState، وبعدين set. مع الاستبدال لو عايز تمسح مفاتيح زيادة.</Q>
+</Quiz>

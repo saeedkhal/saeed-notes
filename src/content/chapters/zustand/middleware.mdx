@@ -1,0 +1,119 @@
+---
+title: الوسائط الأربعة
+short: الوسائط
+order: 6
+label: فصل ٦
+badge: الوسائط · فصل ٦
+en: devtools · redux · immer · subscribeWithSelector
+keywords: devtools · immer · dispatch · subscribe
+goal: توصّل الأدوات، وتكتب بمسودة، وتسمع حقل واحد من بره React.
+part: الوسائط
+color: c1
+---
+
+الوسيط دالة حوالين منشئ الحالة. تتركب. في TypeScript، <En>devtools</En> و <En>persist</En> و <En>immer</En> محتاجين نداء <En>create</En> بقوسين فاضيين قبل الدالة.
+
+## devtools
+
+يربط المتجر بإضافة Redux DevTools من غير Redux. الحزمة المطلوبة <En>@redux-devtools/extension</En>. الافتراضي إن الوسيط شغّال في التطوير وواقف في الإنتاج.
+
+<File name="devtools.js">
+
+```jsx
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+
+const useCart = create()(
+  devtools(
+    (set) => ({
+      items: [],
+      add: (item) =>
+        set((state) => ({ items: [...state.items, item] }), false, "cart/add"),
+    }),
+    { name: "Cart", actionsDenylist: ["secret"] },
+  ),
+);
+```
+
+</File>
+
+المعامل التالت لـ <En>set</En> اسم الأكشن في الخط الزمني. من غيره يظهر اسم عام. <En>enabled</En> يطفّي الربط. <En>anonymousActionType</En> نص الأكشن المجهول. <En>store</En> اسم تاني لو الأدوات بتعرض متجر واحد وعايز تبدّل. <En>actionsDenylist</En> أنماط تتخبى من العرض، والحدث لسه بيتبعت.
+
+الإضافة تعرض متجر واحد في المرة. بدّل الاسم من قايمة الأدوات عشان تشوف التاني.
+
+## redux
+
+لو الفريق عايز <En>reducer</En> نضيف و <En>dispatch</En>، الوسيط يركّبهم. الحالة الأولى أي قيمة غير دالة. <En>dispatch</En> يتضاف على المتجر.
+
+<File name="redux-mw.js">
+
+```jsx
+import { redux } from "zustand/middleware";
+
+const useCart = create(
+  redux(
+    (state, action) => {
+      if (action.type === "cart/add") return { items: [...state.items, action.item] };
+      return state;
+    },
+    { items: [] },
+  ),
+);
+
+useCart.getState().dispatch({ type: "cart/add", item: { id: 1 } });
+```
+
+</File>
+
+ده شكل Redux جوه المتجر. مش خطوة لازمة. الأكشن العادي أوضح في أغلب الشاشات.
+
+## immer
+
+ثبّت حزمة <En>immer</En>، واستورد الوسيط من <En>zustand/middleware/immer</En>. جوه <En>set</En> تعدّل المسودة، والمكتبة تطلّع نسخة ثابتة.
+
+<File name="immer.js">
+
+```jsx
+import { immer } from "zustand/middleware/immer";
+
+const useCart = create()(
+  immer((set) => ({
+    person: { name: "", city: "" },
+    rename: (name) => set((state) => { state.person.name = name; }),
+  })),
+);
+```
+
+</File>
+
+من غير الوسيط، السطر ده تعديل في المكان والشاشة متحدثش. بالوسيط، المسودة مسموح تتعدل.
+
+## subscribeWithSelector
+
+<En>subscribe</En> العادي يسمع كل تغيير. الوسيط يخلّيك تختار حقل. النداء ياخد سليكتور، وسامع، واختياري دالة مساواة و <En>fireImmediately</En> عشان أول نداء يوصل فورًا.
+
+<File name="listen.js">
+
+```jsx
+import { subscribeWithSelector } from "zustand/middleware";
+
+const useCart = create()(subscribeWithSelector((set) => ({ items: [], add: (item) => set({ items: [item] }) })));
+
+const stop = useCart.subscribe(
+  (state) => state.items.length,
+  (len, prev) => console.log(prev, len),
+  { fireImmediately: true },
+);
+```
+
+</File>
+
+التحديث العابر: السماع يكتب على عنصر في الصفحة أو <En>ref</En>، من غير <En>setState</En> في React. المؤشر أو الرقم السريع ما يعملش رسم للشجرة كلها.
+
+<Checklist id="zustand-mw" title="خلّصت الفصل لما" items={["devtools باسم أكشن في set", "redux middleware يدي dispatch", "immer يعدّل مسودة والكائن الأصلي ثابت", "subscribeWithSelector يسمع حقل واحد"]} />
+
+<Quiz>
+<Q n={1} q="اسم الأكشن في DevTools يتحط فين؟">المعامل التالت لـ set، بعد false بتاعة الدمج.</Q>
+<Q n={2} q="وسيط redux بيضيف إيه على الحالة؟">دالة dispatch. الـ reducer يرجّع الحالة الجديدة.</Q>
+<Q n={3} q="ليه نسمع الطول ونكتب على ref؟">عشان التحديث السريع ما يعيدش رسم React كل مرة.</Q>
+</Quiz>

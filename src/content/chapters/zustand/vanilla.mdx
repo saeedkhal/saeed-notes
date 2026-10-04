@@ -1,0 +1,105 @@
+---
+title: من غير React ومع السيرفر
+short: Vanilla
+order: 8
+label: فصل ٨
+badge: التشغيل · فصل ٨
+en: createStore · useStore · context · SSR
+keywords: vanilla · context · hydration · test
+goal: تعمل متجر مستقل، وتديه لكل شجرة، وتختبره من غير رسم.
+part: التشغيل
+color: c3
+---
+
+<En>createStore</En> من <En>zustand/vanilla</En> متجر من غير هوك. عليه نفس <En>getState</En> و <En>setState</En> و <En>subscribe</En>. <En>useStore</En> يوصّل المكوّن بالمتجر ده مع سليكتور.
+
+<File name="vanilla.jsx">
+
+```jsx
+import { createStore } from "zustand/vanilla";
+import { useStore } from "zustand";
+
+const cartStore = createStore((set) => ({
+  items: [],
+  add: (item) => set((state) => ({ items: [...state.items, item] })),
+}));
+
+function Count() {
+  const count = useStore(cartStore, (state) => state.items.length);
+  return <p>{count}</p>;
+}
+```
+
+</File>
+
+في الإصدار الخامس <En>useStore</En> يتصدر من <En>zustand</En>. مسار الاستيراد القديم اتغير، فراجع الدوكس.
+
+## متجر لكل شجرة
+
+<En>createContext</En> بتاع <En>zustand/context</En> اتوقف في الإصدار الرابع واتشال في الخامس. البديل سياق React عادي، والمتجر vanilla جواه.
+
+اعمل المتجر مرة في <En>ref</En>، مش كل رسم. البذرة تيجي من props: رقم مستخدم، أو عناصر جاية من السيرفر.
+
+<File name="scoped.jsx">
+
+```jsx
+import { createContext, useContext, useRef } from "react";
+import { createStore } from "zustand/vanilla";
+import { useStore } from "zustand";
+
+const CartContext = createContext(null);
+
+function createCartStore(userId) {
+  return createStore(() => ({ userId, items: [] }));
+}
+
+function CartProvider({ userId, children }) {
+  const ref = useRef(null);
+  if (!ref.current) ref.current = createCartStore(userId);
+  return <CartContext.Provider value={ref.current}>{children}</CartContext.Provider>;
+}
+
+function useCart(selector) {
+  const store = useContext(CartContext);
+  return useStore(store, selector);
+}
+```
+
+</File>
+
+كده كل شجرة ليها سلة. المتجر العالمي في الموديول مش ينفع لو الطلب على السيرفر يخص مستخدم تاني، لأن الموديول واحد بين الطلبات.
+
+## الترطيب
+
+HTML السيرفر لازم يطابق أول رسم على العميل. متقراش <En>localStorage</En> أو <En>window</En> وأنت بترسم. <En>persist</En> مع <En>skipHydration</En> يخلّي أول رسم فاضي، و <En>rehydrate</En> في <En>useEffect</En> يملا بعد ما الصفحة تمسك.
+
+في Next، حالة الواجهة العامة ممكن متجر موديول. حالة خاصة بالطلب تتعمل جوه المزود زي المثال اللي فات.
+
+## الاختبار
+
+من غير رسم: نادِ الأكشن على <En>getState</En> واقرا الناتج. بين الاختبارات رجّع <En>getInitialState</En> مع استبدال، عشان الاختبار اللي فات ما يسيّبش عناصر.
+
+<File name="test.js">
+
+```jsx
+beforeEach(() => {
+  useCart.setState(useCart.getInitialState(), true);
+});
+
+test("adds", () => {
+  useCart.getState().add({ id: 1, name: "قلم" });
+  expect(useCart.getState().items).toHaveLength(1);
+});
+```
+
+</File>
+
+اختبار المكوّن يرسمه بمكتبة React، والسليكتور يقرا نفس المتجر. لو المتجر متشارك، الرجوع للأول قبل كل اختبار يمنع التسريب.
+
+<Checklist id="zustand-vanilla" title="خلّصت الفصل لما" items={["createStore من غير هوك و useStore في المكوّن", "سياق React بدل createContext القديم", "المتجر يتخلق مرة من props", "الاختبار يرجع الحالة الأولى قبل ما يكتب"]} />
+
+<Quiz>
+<Q n={1} q="createContext بتاع المكتبة لسه موجود؟">لا في الإصدار الخامس. السياق من React، والمتجر vanilla جواه.</Q>
+<Q n={2} q="ليه المتجر مش جوه دالة المكوّن كل رسم؟">عشان الحالة تتمسح. ref يمسكه مرة، والرسم يعيد استخدامه.</Q>
+<Q n={3} q="اختبارين على نفس المتجر. التاني شاف عناصر الأول. تظبطها إزاي؟">setState بالحالة الأولى واستبدال true قبل كل اختبار.</Q>
+</Quiz>

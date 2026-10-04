@@ -1,0 +1,76 @@
+---
+title: السليكتور وإعادة الرسم
+short: السليكتور
+order: 4
+label: فصل ٤
+badge: المتجر · فصل ٤
+en: useShallow · shallow · equality
+keywords: useShallow · Object.is · selectors
+goal: تقرا أكتر من حقل من غير لوب، وتعرف امتى المقارنة السطحية.
+part: المتجر
+color: c4
+---
+
+السليكتور اللي يرجّع قيمة ثابتة المقارنة بـ <En>Object.is</En>: رقم، نص، أو نفس الدالة. المكوّن يعيد الرسم لما القيمة دي تتغير.
+
+من الإصدار الخامس، كائن جديد في كل نداء يعتبر قيمة مختلفة حتى لو الحقول زي بعض. السطر ده يعمل لوب تحديث:
+
+<File name="loop.jsx">
+
+```jsx
+const { items, add } = useCart((state) => ({
+  items: state.items,
+  add: state.add,
+}));
+```
+
+</File>
+
+الحل الأنضف: سليكتور لكل حقل. مفيش غلاف جديد.
+
+<File name="split.jsx">
+
+```jsx
+const items = useCart((state) => state.items);
+const add = useCart((state) => state.add);
+```
+
+</File>
+
+## useShallow
+
+لو محتاج كذا حقل في نداء واحد، لف السليكتور بـ <En>useShallow</En>. المقارنة تبقى على الحقول، مش على الغلاف.
+
+<File name="shallow-pick.jsx">
+
+```jsx
+import { useShallow } from "zustand/react/shallow";
+
+const { items, note } = useCart(
+  useShallow((state) => ({ items: state.items, note: state.note })),
+);
+```
+
+</File>
+
+نفس الفكرة لمصفوفة مفاتيح بتتبني كل مرة: طالما العناصر بالمقارنة السطحية زي القديم، مفيش رسم زيادة.
+
+<En>shallow</En> دالة المقارنة نفسها، لو حابب تمرّرها بإيدك. <En>useShallow</En> بيركّبها على السليكتور.
+
+## مساواة على الهوك كله
+
+<En>createWithEqualityFn</En> زي <En>create</En>، بس كل سليكتور يتقارن بالدالة اللي تديها. <En>useStoreWithEqualityFn</En> نفس الفكرة على متجر vanilla. الاتنين من مدخل <En>zustand/traditional</En>. راجع المسار في الدوكس.
+
+ده أنسب لو أغلب القراءات بترجع كائنات. لالتقاط حقول قليلة، <En>useShallow</En> أحدّ.
+
+## سليكتورات تتولد
+
+المكتبة مش بتصدّر مولّد. الوصفة تمشي على مفاتيح <En>getState</En> وتعمل لكل مفتاح دالة <En>use.field</En> بتنادي السليكتور. في حزم خارجية بتعمل كده، زي <En>auto-zustand-selectors-hook</En>. الوصفة دي مش بتستبدل <En>useShallow</En> لو بترجع كائن مركّب.
+
+<Checklist id="zustand-select" title="خلّصت الفصل لما" items={["سليكتور لكل قيمة لما القيمة ثابتة", "useShallow لما الرجوع كائن أو مصفوفة جديدة", "تعرف إن الكائن الجديد في v5 يعمل لوب", "createWithEqualityFn يغيّر مقارنة الهوك"]} />
+
+<Quiz>
+<Q n={1} q="ليه الكائن جوه السليكتور عمل Maximum update depth؟">الغلاف جديد كل مرة، و Object.is يفشل، فالاشتراك يتجدد في لوب.</Q>
+<Q n={2} q="useShallow بيقارن إيه؟">حقول الناتج مستوى واحد، مش مرجع الغلاف.</Q>
+<Q n={3} q="مولّد السليكتورات دالة من المكتبة؟">لأ. وصفة أو حزمة خارجية. كل مفتاح ياخد هوك صغير.</Q>
+</Quiz>

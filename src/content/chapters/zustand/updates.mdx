@@ -1,0 +1,119 @@
+---
+title: التحديث من غير ما تبوّظ الحالة
+short: التحديث
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: set · replace · immutable · Map · Set
+keywords: shallow merge · replace · nested
+goal: تفرّق الدمج السطحي عن الاستبدال، وتحدّث كائن ومصفوفة و Map من غير تعديل في المكان.
+part: البداية
+color: c2
+---
+
+<En>set</En> افتراضيًا بيعمل دمج سطحي. المفاتيح اللي في الكائن الجديد تتبدل، والباقي يفضل.
+
+<File name="merge.js">
+
+```jsx
+const useCart = create((set, get) => ({
+  items: [],
+  note: "",
+  add: (item) => set({ items: [...get().items, item] }),
+  setNote: (note) => set({ note }),
+}));
+```
+
+</File>
+
+<En>get</En> يقرا الحالة الحالية جوه الأكشن. شكل الدالة اللي بتاخد الحالة القديمة أأمن لو التحديث مبني عليها، لأن القراءة تبقى لحظة الكتابة. من React 18، كذا تحديث في نفس الحدث بيتجمع في رسم واحد. لو المشروع لسه على React 17، التجميع جوه الوعود كان مختلف، فراجع الدوكس.
+
+## الاستبدال الكامل
+
+المعامل التاني <En>true</En> يعني استبدال، مش دمج. الحالة كلها تبقى القيمة الجديدة. لو الحالة رقم أو مصفوفة من بره، الدمج السطحي مش منطقي، فالاستبدال هو الطريق.
+
+<File name="replace.js">
+
+```jsx
+const useScore = create(() => 0);
+
+function bump(next) {
+  useScore.setState(next, true);
+}
+```
+
+</File>
+
+على كائن فيه أكشنات، الاستبدال بكائن ناقص يمسح الباقي. سيبه للحالة اللي شكلها قيمة واحدة، أو لما بترجّع الحالة الابتدائية كاملة.
+
+## الكائن والمصفوفة
+
+التعديل في المكان مش بيتعمل له إشعار. السطر اللي يغيّر الاسم على الكائن القديم يخلّي الشاشة واقفة. السطر الأخضر اتضاف، والأحمر اتشال.
+
+<File name="rename.js">
+
+```js
+function rename(person, name) {
+  // @diff -
+  person.name = name;
+  // @diff +
+  set({ person: { ...person, name } });
+}
+```
+
+</File>
+
+اعمل كائن جديد. والدمج السطحي يغني عن نسخ كل مفتاح في الجذر، بس الكائن المتداخل محتاج نسخة هو كمان.
+
+<File name="nested.js">
+
+```jsx
+set((state) => ({
+  person: { ...state.person, name: "منى" },
+}));
+
+set((state) => ({
+  items: state.items.filter((item) => item.id !== id),
+}));
+```
+
+</File>
+
+المصفوفة تتبنى بـ <En>map</En> و <En>filter</En> و <En>slice</En> و <En>concat</En> والنسخ الحديثة زي <En>toSorted</En>. <En>push</En> و <En>splice</En> و <En>sort</En> بيعدّلوا المصفوفة القديمة.
+
+## Map و Set
+
+الاتنين كمان بيتعدلوا في المكان. انسخهم الأول، وبعدين غيّر النسخة.
+
+<File name="map-set.js">
+
+```jsx
+addGrade: (id, grade) =>
+  set((state) => {
+    const grades = new Map(state.grades);
+    grades.set(id, grade);
+    return { grades };
+  }),
+toggle: (id) =>
+  set((state) => {
+    const picked = new Set(state.picked);
+    picked.has(id) ? picked.delete(id) : picked.add(id);
+    return { picked };
+  }),
+```
+
+</File>
+
+<Box type="warn" title="الدمج مش عميق">
+
+<En>set</En> يدمج مفاتيح الجذر بس. لو بعت كائن متداخل ناقص، الحقول اللي ما نسختهاش من القديم تضيع.
+
+</Box>
+
+<Checklist id="zustand-updates" title="خلّصت الفصل لما" items={["الدمج السطحي يسيب المفاتيح اللي متبعتش", "replace true يستبدل الحالة كلها", "الكائن والمصفوفة نسخ جديدة", "Map و Set يتنسخوا قبل التعديل"]} />
+
+<Quiz>
+<Q n={1} q="set مع note بس. items تروح؟">لأ. الدمج يغيّر note ويفضل items.</Q>
+<Q n={2} q="غيّرت person.name على نفس الكائن. الشاشة اتحدثت؟">لأ. لازم كائن person جديد يتبعت لـ set.</Q>
+<Q n={3} q="ليه Map جديد مش grades.set على القديم؟">التعديل في المكان مش إشعار. النسخة الجديدة هي اللي المتجر يشوفها.</Q>
+</Quiz>
