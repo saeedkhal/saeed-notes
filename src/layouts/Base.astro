@@ -416,7 +416,11 @@ const progressHref = chaptersByTopic[topicId] ? url(`${topicId}/`) : undefined;
 
       const bindCopy = () => {
         for (const pre of document.querySelectorAll<HTMLPreElement>(".prose pre")) {
-          if (pre.querySelector(".copy-btn")) continue;
+          const fileName = pre.parentElement?.classList.contains("file")
+            ? pre.parentElement.querySelector<HTMLElement>(":scope > .name")
+            : null;
+          const host = fileName ?? pre;
+          if (host.querySelector(".copy-btn")) continue;
           const b = document.createElement("button");
           b.className = "copy-btn";
           b.type = "button";
@@ -429,7 +433,7 @@ const progressHref = chaptersByTopic[topicId] ? url(`${topicId}/`) : undefined;
               setTimeout(() => { b.textContent = "نسخ"; b.classList.remove("done"); }, 1500);
             } catch {}
           });
-          pre.appendChild(b);
+          host.appendChild(b);
         }
       };
 
