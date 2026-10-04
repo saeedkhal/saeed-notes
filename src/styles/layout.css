@@ -273,6 +273,19 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
   font-weight: 800; font-size: .85rem;
 }
 .topic-card[hidden] { display: none; }
+.card-read {
+  display: grid; gap: 6px; color: var(--muted);
+  font-size: .82rem; font-weight: 800; line-height: 1.4;
+}
+.card-read-track {
+  height: 6px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--cc) 16%, var(--bg-soft));
+}
+.card-read-track span {
+  display: block; height: 100%; width: 0; border-radius: inherit; background: var(--cc);
+}
+.topic-card.is-read-done .card-read { color: var(--c3); }
+.topic-card.is-read-done .card-read-track span { background: var(--c3); }
 .topic-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
 .topic-tags span {
   direction: ltr; font-size: .75rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;

@@ -4,7 +4,9 @@ import { getChapters, getTopics, url } from "../lib/content";
 import { topicTagIds, topicTagLabel } from "../lib/tags";
 
 const topics = await getTopics();
-const counts = await Promise.all(topics.map(async (t) => (await getChapters(t.id)).length));
+const chapterIds = await Promise.all(
+  topics.map(async (t) => (await getChapters(t.id)).map((c) => c.id)),
+);
 const accents = ["c1", "c2", "c3", "c4", "c5"];
 const pageSize = 6;
 const pageCount = Math.max(1, Math.ceil(topics.length / pageSize));
@@ -36,13 +38,17 @@ const mix = (s: string) =>
       {topics.map((t, i) => {
         const [before, after] = t.data.title.split(t.data.highlight);
         return (
-          <a class="topic-card" href={url(`${t.id}/`)} data-tags={t.data.tags.join(" ")} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
+          <a class="topic-card" href={url(`${t.id}/`)} data-tags={t.data.tags.join(" ")} data-chapters={JSON.stringify(chapterIds[i] ?? [])} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
             <div class="topic-top">
               <span class="em">{t.data.emoji}</span>
-              <span class="meta">{countLabel(counts[i] ?? 0)}</span>
+              <span class="meta">{countLabel(chapterIds[i]?.length ?? 0)}</span>
             </div>
             <h2>{before}<mark class="hl y">{t.data.highlight}</mark>{after}</h2>
             <p set:html={mix(t.data.description)} />
+            <span class="card-read" data-card-read>
+              <span data-card-read-label>اتقرأ ٠ من { (chapterIds[i]?.length ?? 0).toLocaleString("ar-EG") } (٠٪)</span>
+              <span class="card-read-track" aria-hidden="true"><span data-card-read-fill></span></span>
+            </span>
             {t.data.tags.length > 0 && (
               <span class="topic-tags">
                 {t.data.tags.map((id) => <span>{topicTagLabel[id]}</span>)}
@@ -71,6 +77,24 @@ const mix = (s: string) =>
           return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
         };
         const readTag = () => new URLSearchParams(location.search).get("tag") || "";
+        const ar = (n) => n.toLocaleString("ar-EG");
+
+        const paintCardRead = () => {
+          let map = {};
+          try { map = JSON.parse(localStorage.getItem("masry-notes:read") || "{}"); } catch {}
+          document.querySelectorAll("[data-topic-grid] .topic-card").forEach((card) => {
+            let ids = [];
+            try { ids = JSON.parse(card.dataset.chapters || "[]"); } catch {}
+            const total = ids.length;
+            const done = ids.filter((id) => map[id]).length;
+            const pct = total ? Math.round((done / total) * 100) : 0;
+            const label = card.querySelector("[data-card-read-label]");
+            const fill = card.querySelector("[data-card-read-fill]");
+            if (label) label.textContent = `اتقرأ ${ar(done)} من ${ar(total)} (${ar(pct)}٪)`;
+            if (fill) fill.style.width = `${pct}%`;
+            card.classList.toggle("is-read-done", total > 0 && done === total);
+          });
+        };
 
         const bootHomeTopics = (scroll) => {
           const grid = document.querySelector("[data-topic-grid]");
@@ -114,6 +138,7 @@ const mix = (s: string) =>
             setStep(nav.querySelector("[data-page-step='next']"), page + 1, page >= pages);
           }
           if (scroll) grid.scrollIntoView({ block: "start" });
+          paintCardRead();
         };
 
         const onClick = (e) => {
@@ -140,6 +165,10 @@ const mix = (s: string) =>
           window.__homeTopicsBound = true;
           document.addEventListener("astro:page-load", () => bootHomeTopics(false));
           window.addEventListener("popstate", () => bootHomeTopics(false));
+          document.addEventListener("masry-read", paintCardRead);
+          window.addEventListener("storage", (e) => {
+            if (e.key === "masry-notes:read") paintCardRead();
+          });
         }
         const nav = document.querySelector("[data-topic-pages]");
         if (nav && !nav.dataset.bound) {
