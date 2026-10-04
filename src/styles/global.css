@@ -184,6 +184,21 @@ img { max-width: 100%; }
   box-shadow: var(--shadow);
 }
 .prose pre code { font-family: inherit; }
+.prose pre.shaku .line { display: block; }
+.prose pre.shaku .line.diff::before {
+  font-weight: 800;
+  margin-right: 0.7ch;
+}
+.prose pre.shaku .line.diff-insert {
+  background: rgba(46, 160, 67, 0.22);
+  box-shadow: -18px 0 0 rgba(46, 160, 67, 0.22), 18px 0 0 rgba(46, 160, 67, 0.22);
+}
+.prose pre.shaku .line.diff-insert::before { content: "+"; color: #7ee787; }
+.prose pre.shaku .line.diff-delete {
+  background: rgba(248, 81, 73, 0.2);
+  box-shadow: -18px 0 0 rgba(248, 81, 73, 0.2), 18px 0 0 rgba(248, 81, 73, 0.2);
+}
+.prose pre.shaku .line.diff-delete::before { content: "−"; color: #ff7b72; }
 .prose pre[data-language]::before {
   content: attr(data-language);
   position: absolute; top: 8px; right: 10px;

@@ -2,6 +2,7 @@
 import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import { unified } from "@astrojs/markdown-remark";
+import shakuCodeAnnotate from "shaku-code-annotate-shiki-transformer";
 import rehypeWrapTables from "./src/lib/rehype-wrap-tables.mjs";
 
 export default defineConfig({
@@ -15,6 +16,10 @@ export default defineConfig({
   integrations: [mdx()],
   markdown: {
     processor: unified({ rehypePlugins: [rehypeWrapTables] }),
-    shikiConfig: { theme: "one-dark-pro", wrap: false },
+    shikiConfig: {
+      theme: "one-dark-pro",
+      wrap: false,
+      transformers: [shakuCodeAnnotate()],
+    },
   },
 });

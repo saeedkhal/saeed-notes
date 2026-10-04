@@ -38,6 +38,7 @@ src/lib/rehype-wrap-tables.mjs # wraps <table> in .table-wrap for mobile scroll
 - Write study notes **in your own words**. Never translate or reproduce copyrighted passages, examples or tables from a source book. Use everyday Egyptian analogies (كشري، جرسون، بواب، عمارة…) in `<Box type="story">`.
 - Alternate marker colors so a page never looks monotone. Use `<Hl>` sparingly, for the key sentence of a section.
 - Code comments may be in Arabic. Keep code itself correct and runnable. Tools change fast, so say "راجع الـ docs" for flags.
+- To show a line added or removed, put a Shaku comment on the line before it: `// @diff +` or `// @diff -` (use `#` in bash and `/* */` in CSS). The comment is hidden in the rendered block. A range is `// @diff + start` through `// @diff + end`.
 
 ## MDX components (auto-injected, no imports)
 
