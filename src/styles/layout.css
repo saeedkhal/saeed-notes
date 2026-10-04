@@ -234,7 +234,7 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
 .hero { text-align: center; padding: 30px 0 40px; }
 .hero h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 800; margin: 0; line-height: 1.35; color: var(--heading); }
 .hero p { color: var(--muted); font-size: 1.15rem; max-width: 640px; margin: 12px auto 0; }
-.topics { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+.topics { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; scroll-margin-top: calc(var(--header-h) + 12px); }
 .topic-card {
   --cc: var(--c1);
   display: flex; flex-direction: column; gap: 12px;
@@ -260,13 +260,23 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
   color: var(--heading); padding: 4px 12px; border-radius: 999px;
   font-weight: 800; font-size: .85rem;
 }
-.topic-card.soon {
-  --cc: var(--muted);
-  justify-content: center; align-items: center; text-align: center;
-  min-height: 180px;
-  background: var(--bg-soft); border-style: dashed; border-block-start-style: dashed;
-  box-shadow: none;
+.topic-card[hidden] { display: none; }
+.home-pages[hidden] { display: none; }
+.home-pages {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 8px; margin-top: 28px;
 }
-.topic-card.soon:hover { transform: none; border-color: var(--line); }
+.home-pages a {
+  min-width: 42px; height: 42px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px; border: 1.5px solid var(--line);
+  background: var(--bg-elev); color: var(--heading); font-weight: 800;
+}
+.home-pages a:hover { text-decoration: none; border-color: var(--c1); }
+.home-pages a[aria-current="page"] {
+  background: var(--c1); border-color: var(--c1); color: #fff;
+}
+.home-pages a[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+.home-pages .page-step { padding-inline: 14px; }
 
 .site-footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 24px 16px 40px; }

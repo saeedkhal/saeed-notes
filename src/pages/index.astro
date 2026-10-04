@@ -5,6 +5,9 @@ import { getChapters, getTopics, url } from "../lib/content";
 const topics = await getTopics();
 const counts = await Promise.all(topics.map(async (t) => (await getChapters(t.id)).length));
 const accents = ["c1", "c2", "c3", "c4", "c5"];
+const pageSize = 6;
+const pageCount = Math.max(1, Math.ceil(topics.length / pageSize));
+const pageHref = (n: number) => (n <= 1 ? url("") : `${url("")}?page=${n}`);
 const countLabel = (n: number) =>
   n === 1 ? "فصل واحد" : n === 2 ? "فصلين" : `${n.toLocaleString("ar-EG")} فصول`;
 const mix = (s: string) =>
@@ -22,7 +25,7 @@ const mix = (s: string) =>
       <h1>مذكرات <mark class="hl y">سعيد</mark> 📚</h1>
       <p>شرح وملخصات ملوّنة لمواضيع البرمجة — بأمثلة من الحياة، صناديق تحذير ونصايح، وفي آخر كل فصل checklist واختبر نفسك.</p>
     </section>
-    <div class="topics">
+    <div class="topics" data-topic-grid data-page-size={pageSize}>
       {topics.map((t, i) => {
         const [before, after] = t.data.title.split(t.data.highlight);
         return (
@@ -36,11 +39,95 @@ const mix = (s: string) =>
           </a>
         );
       })}
-      <div class="topic-card soon">
-        <span class="em">➕</span>
-        <p>مواضيع جاية قريب…</p>
-      </div>
     </div>
+    {pageCount > 1 && (
+      <nav class="home-pages" aria-label="صفحات المواضيع" data-topic-pages>
+        <a class="page-step" data-page-step="prev" data-page="1" href={pageHref(1)} aria-disabled="true">السابق</a>
+        {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+          <a class="page-num" data-page={n} href={pageHref(n)} aria-current={n === 1 ? "page" : undefined}>
+            {n.toLocaleString("ar-EG")}
+          </a>
+        ))}
+        <a class="page-step" data-page-step="next" data-page="2" href={pageHref(2)}>التالي</a>
+      </nav>
+    )}
+    <script is:inline>
+      (function () {
+        const readPage = () => {
+          const n = Number(new URLSearchParams(location.search).get("page") || "1");
+          return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+        };
+
+        const bootHomeTopics = (scroll) => {
+          const grid = document.querySelector("[data-topic-grid]");
+          if (!grid) return;
+          const size = Number(grid.dataset.pageSize || "6");
+          const cards = [...grid.children].filter((el) => el.classList.contains("topic-card"));
+          const pages = Math.max(1, Math.ceil(cards.length / size));
+          const page = Math.min(readPage(), pages);
+          const start = (page - 1) * size;
+          const shown = new Set(cards.slice(start, start + size));
+          cards.forEach((card) => {
+            card.hidden = !shown.has(card);
+          });
+          const nav = document.querySelector("[data-topic-pages]");
+          if (nav) {
+            nav.hidden = pages < 2;
+            nav.querySelectorAll("[data-page]").forEach((el) => {
+              const n = Number(el.dataset.page);
+              if (el.dataset.pageStep) return;
+              if (n === page) el.setAttribute("aria-current", "page");
+              else el.removeAttribute("aria-current");
+            });
+            const setStep = (el, target, off) => {
+              if (!el) return;
+              el.dataset.page = String(Math.max(1, target));
+              const next = new URL(location.href);
+              if (target <= 1) next.searchParams.delete("page");
+              else next.searchParams.set("page", String(target));
+              el.setAttribute("href", next.pathname + next.search);
+              el.setAttribute("aria-disabled", off ? "true" : "false");
+              el.tabIndex = off ? -1 : 0;
+            };
+            setStep(nav.querySelector("[data-page-step='prev']"), page - 1, page <= 1);
+            setStep(nav.querySelector("[data-page-step='next']"), page + 1, page >= pages);
+          }
+          if (scroll) grid.scrollIntoView({ block: "start" });
+        };
+
+        const onClick = (e) => {
+          const nav = e.currentTarget;
+          const a = e.target.closest("a");
+          if (!a || !nav.contains(a)) return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          if (a.getAttribute("aria-disabled") === "true") {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          const n = Number(a.dataset.page);
+          const next = new URL(location.href);
+          if (n <= 1) next.searchParams.delete("page");
+          else next.searchParams.set("page", String(n));
+          history.pushState(null, "", next);
+          bootHomeTopics(true);
+        };
+
+        if (!window.__homeTopicsBound) {
+          window.__homeTopicsBound = true;
+          document.addEventListener("astro:page-load", () => bootHomeTopics(false));
+          window.addEventListener("popstate", () => bootHomeTopics(false));
+        }
+        const nav = document.querySelector("[data-topic-pages]");
+        if (nav && !nav.dataset.bound) {
+          nav.dataset.bound = "1";
+          nav.addEventListener("click", onClick, true);
+        }
+        bootHomeTopics(false);
+      })();
+    </script>
   </div>
   <footer class="site-footer">✍️ شرح وملخص بأسلوبي — مش ترجمة لأي مرجع. راجع الـ docs الرسمية قبل ما تعتمد على أي flag في production.</footer>
 </Base>
