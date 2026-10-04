@@ -5,9 +5,8 @@ import { unified } from "@astrojs/markdown-remark";
 import rehypeWrapTables from "./src/lib/rehype-wrap-tables.mjs";
 
 export default defineConfig({
-  // لو هترفعه على GitHub Pages: حط site و base هنا
-  // site: "https://username.github.io",
-  // base: "/masry-notes",
+  site: "https://saeedkhal.github.io",
+  base: "/saeed-notes",
   // الصفحة بتتحمّل لما المستخدم يقرب منها، مش كل الفصول مع بعض.
   prefetch: {
     prefetchAll: false,
