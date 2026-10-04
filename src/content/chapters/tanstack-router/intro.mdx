@@ -1,0 +1,63 @@
+---
+title: إيه TanStack Router؟
+short: المكتبة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: Type-safe routes · file-based · loaders · search params
+keywords: type-safe · file routes · loaders
+goal: تعرف المكتبة بتفرق عن react-router في إيه، وتظبط Vite عشان يولّد الشجرة.
+part: البداية
+color: c1
+---
+
+<En>TanStack Router</En> مكتبة راوتنج لـ <En>React</En>، وفيها دعم لـ <En>Solid</En> كمان. اللي يميزها عن <En>react-router</En>:
+
+- الأنواع كاملة. الـ <En>params</En> و <En>search params</En> بيتكتبوا لوحدهم من غير ما تكتب الأنواع بإيدك.
+- راوتنج بالملفات زي <En>Next.js</En>، أو بالكوم تكتب الراوتس بنفسك.
+- تحميل داتا جوه الراوت، قريب من <En>React Router</En> الحديث أو <En>Remix</En>.
+- الـ <En>search params</En> حالة حقيقية، مش نص في آخر العنوان بس.
+
+## التنصيب
+
+المسار الشائع في الأول: <En>Vite</En> مع راوتنج بالملفات. الأوامر وأسماء الحزم بتتغير، فراجع الدوكس قبل ما تنسخها.
+
+<File name="terminal">
+
+```bash
+npm create vite@latest my-app -- --template react-ts
+cd my-app
+npm install @tanstack/react-router
+npm install -D @tanstack/router-plugin
+```
+
+</File>
+
+الـ <En>plugin</En> هو اللي يولّد شجرة الراوتس. في <En>vite.config.ts</En> لازم يكون **قبل** <En>react()</En>.
+
+<File name="vite.config.ts">
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+
+export default defineConfig({
+  plugins: [
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    react(),
+  ],
+});
+```
+
+</File>
+
+<Hl c="y">autoCodeSplitting يخلّي كل راوت يتحمّل لوحده</Hl> لما المستخدم يفتحه، بدل ما كل الصفحات تنزل في أول ملف. لو الترتيب معكوس والـ <En>plugin</En> بعد <En>react()</En>، التوليد ممكن يبوظ.
+
+<Checklist id="router-intro" title="خلّصت الفصل لما" items={["تفرّق النوع التلقائي عن الأنواع اللي تكتبها بإيدك", "تحط plugin الراوتر قبل react", "تعرف إن autoCodeSplitting تقسيم تحميل الراوتس"]} />
+
+<Quiz>
+<Q n={1} q="إيه أقوى فرق عن التعامل مع search كـ string؟">بتبقى حالة بأنواع. لو بعت نص مكان رقم، TypeScript يرفض وأنت بتكتب.</Q>
+<Q n={2} q="ليه plugin الراوتر قبل react؟">عشان يولّد الشجرة ويتقسم الملفات قبل ما React يشتغل على الكود. الترتيب المعكوس سبب مشاكل شائع.</Q>
+<Q n={3} q="autoCodeSplitting بيعمل إيه؟">يقسّم كود كل راوت عشان يتحمّل لما الصفحة تتفتح، مش كله في أول تحميل.</Q>
+</Quiz>

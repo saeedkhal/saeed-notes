@@ -1,0 +1,68 @@
+---
+title: "Search params بأنواع"
+short: Search params
+order: 5
+label: فصل ٥
+badge: الداتا · فصل ٥
+en: Zod · validateSearch · Link search
+keywords: Zod · validateSearch · page
+goal: تخلي رقم الصفحة والفلتر أنواع، واللينك يرفض النص مكان الرقم.
+part: الداتا
+color: c5
+---
+
+بدل ما تقرأ الـ <En>query string</En> كنص، تعرّف شكلها. <En>Zod</En> شائع هنا. ثبّته وراجع أمر التثبيت في الدوكس.
+
+<File name="src/routes/posts/index.tsx">
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
+
+const postsSearchSchema = z.object({
+  page: z.number().catch(1),
+  filter: z.string().catch(""),
+});
+
+export const Route = createFileRoute("/posts/")({
+  validateSearch: postsSearchSchema,
+  component: PostsIndex,
+});
+
+function PostsIndex() {
+  const { page, filter } = Route.useSearch();
+
+  return (
+    <div>
+      <p>الصفحة: {page}</p>
+      <p>الفلتر: {filter || "مفيش"}</p>
+    </div>
+  );
+}
+```
+
+</File>
+
+<En>catch</En> لو القيمة ناقصة أو نوعها غلط: الصفحة تبقى ١، والفلتر نص فاضي. <En>Route.useSearch</En> يرجّع رقم ونص، مش حاجة مجهولة.
+
+اللينك كمان متراجع:
+
+<File name="link.tsx">
+
+```tsx
+<Link to="/posts" search={{ page: 2, filter: "react" }}>
+  الصفحة 2
+</Link>
+```
+
+</File>
+
+لو حطيت نص في <En>page</En>، TypeScript يرفض قبل التشغيل. ده الفرق العملي عن راوتر بيسيب الـ <En>search</En> نص حر.
+
+<Checklist id="router-search" title="خلّصت الفصل لما" items={["تعرّف schema للـ search", "تستخدم catch للقيمة الاحتياطية", "تقرأ بـ Route.useSearch", "تمرر search للينك ككائن مش نص"]} />
+
+<Quiz>
+<Q n={1} q="العنوان من غير page. القيمة تبقى كام؟">١، لأن catch على الرقم رجع ١.</Q>
+<Q n={2} q="ليه search على اللينك مش query string بإيدك؟">عشان النوع يتراجع. النص مكان الرقم يرفض وقت الكتابة.</Q>
+<Q n={3} q="الفنكشن اللي بتقرأ الحالة؟">Route.useSearch على نفس ملف الراوت.</Q>
+</Quiz>

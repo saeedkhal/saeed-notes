@@ -1,0 +1,30 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: One-page recall for TanStack Router setup
+keywords: cheatsheet · routeTree · loader
+goal: تفتكر ترتيب الـ plugin، وشرطة الـ index، والـ loader.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["routeTree.gen مش موجود", "حط __root و index، والـ plugin قبل react، وبعدين أعد تشغيل السيرفر أو ولّد الشجرة"],
+  ["تحذير Fast Refresh", "متوقع. الملف بيصدّر Route مش كومبوننت بس"],
+  ["كل الصفحات في أول تحميل", "autoCodeSplitting على الـ plugin"],
+  ["عنوان فيه رقم", "ملف يبدأ بعلامة دولار، و Route.useParams"],
+  ["غلاف وصفحة فاضية اتلخبطوا", "الغلاف من غير شرطة أخيرة، والـ index بشرطة"],
+  ["نص مكان رقم في اللينك", "validateSearch بـ Zod، والـ search على Link كائن"],
+  ["وميض تحميل", "loader قبل الرسم، و pendingComponent"],
+  ["الطلب وقع", "ارمي خطأ من الـ loader، و errorComponent يعرضه"],
+]} />
+
+<Checklist id="router-cheat" title="خلّصت المذكرة لما" items={["تشغّل تطبيق بصفحتين من ملفات", "تفرق الغلاف عن الـ index", "تقرا search و loader data من Route"]} />
+
+<Quiz>
+<Q n={1} q="plugin الراوتر يترتب فين؟">قبل react في مصفوفة plugins.</Q>
+<Q n={2} q="مين بيكتب routeTree.gen؟">الـ plugin أو أمر التوليد، مش إنت.</Q>
+</Quiz>

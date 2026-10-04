@@ -1,0 +1,123 @@
+---
+title: الملفات وصفحة الجذر
+short: الملفات
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: __root · index · Outlet · createFileRoute
+keywords: __root · Outlet · Link
+goal: تربط مجلد routes بصفحتين، والجذر يعرض الصفحة الحالية.
+part: البداية
+color: c2
+---
+
+اعمل مجلد <En>src/routes/</En>. كل ملف راوت. المكتبة بتراقب المجلد وتولّد <En>routeTree.gen.ts</En>. الملف ده مولّد، متكتبهوش بإيدك.
+
+<Tree>
+
+```text
+src/
+  routes/
+    __root.tsx
+    index.tsx
+    about.tsx
+  main.tsx
+```
+
+</Tree>
+
+<En>__root.tsx</En> الـ <En>layout</En> العام. <En>index.tsx</En> هو <En>/</En>. <En>about.tsx</En> هو <En>/about</En>.
+
+## الجذر
+
+<File name="src/routes/__root.tsx">
+
+```tsx
+import { createRootRoute, Outlet, Link } from "@tanstack/react-router";
+
+export const Route = createRootRoute({
+  component: () => (
+    <>
+      <nav>
+        <Link to="/">Home</Link>
+        <Link to="/about">About</Link>
+      </nav>
+      <hr />
+      <Outlet />
+    </>
+  ),
+});
+```
+
+</File>
+
+<En>Outlet</En> مكان محتوى الصفحة الحالية. اللينكات من <En>Link</En>، مش وسم عادي، عشان النوع يتراجع.
+
+## الصفحات
+
+<File name="src/routes/index.tsx">
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/")({
+  component: HomePage,
+});
+
+function HomePage() {
+  return <h1>الصفحة الرئيسية</h1>;
+}
+```
+
+</File>
+
+<File name="src/routes/about.tsx">
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/about")({
+  component: () => <h1>عن الموقع</h1>,
+});
+```
+
+</File>
+
+مرّر اسم الدالة للكومبوننت، مش دالة سهم بترجع العنصر كل مرة. كده الكومبوننت مش بيتعمله جديد في كل رسم، وده نمط أمثلة المكتبة.
+
+## ربط التطبيق
+
+<File name="src/main.tsx">
+
+```tsx
+import { StrictMode } from "react";
+import ReactDOM from "react-dom/client";
+import { RouterProvider, createRouter } from "@tanstack/react-router";
+import { routeTree } from "./routeTree.gen";
+
+const router = createRouter({ routeTree });
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
+);
+```
+
+</File>
+
+<En>Register</En> بيخلّي TypeScript يعرف نوع الراوتر في كل مكان. شغّل السيرفر بعد ما الملفات موجودة. المفروض الصفحتين يتنقلوا.
+
+<Checklist id="router-files" title="خلّصت الفصل لما" items={["عندك __root و index على الأقل", "Outlet في الجذر", "createRouter بياخد routeTree", "سجلت نوع الراوتر في Register"]} />
+
+<Quiz>
+<Q n={1} q="ملف index.tsx يمثل أنهي عنوان؟">الشرطة المائلة، الصفحة الرئيسية.</Q>
+<Q n={2} q="Outlet بيعمل إيه؟">يرسم محتوى الراوت الحالي جوه الـ layout.</Q>
+<Q n={3} q="ليه نمرر HomePage مش دالة سهم؟">عشان ما نعملش كومبوننت جديد كل رسم، وده نمط المكتبة.</Q>
+</Quiz>

@@ -1,0 +1,104 @@
+---
+title: راوت ديناميكي وصفحة جوه صفحة
+short: الديناميكي
+order: 4
+label: فصل ٤
+badge: الراوتس · فصل ٤
+en: $postId · layout route · Outlet
+keywords: $param · layout · index
+goal: تعمل عنوان فيه رقم، وصفحات البوستات تشترك في عمود جانبي.
+part: الراوتس
+color: c4
+---
+
+عنوان زي <En>/posts/1</En> و <En>/posts/2</En> ملف واحد. علامة الدولار قبل اسم المعامل في اسم الملف.
+
+<Tree>
+
+```text
+src/routes/
+  posts.tsx
+  posts/
+    index.tsx
+    $postId.tsx
+```
+
+</Tree>
+
+<File name="src/routes/posts/$postId.tsx">
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/posts/$postId")({
+  component: PostPage,
+});
+
+function PostPage() {
+  const { postId } = Route.useParams();
+  return <h1>عرض البوست رقم: {postId}</h1>;
+}
+```
+
+</File>
+
+افتح <En>/posts/5</En>. الرقم يطلع في الصفحة، ونوعه معروف من غير ما تكتب نوع بإيدك.
+
+## الـ layout
+
+ملف <En>posts.tsx</En> جنب المجلد، مش جواه، هو الغلاف لكل حاجة تحت <En>/posts</En>. <En>posts/index.tsx</En> هو <En>/posts</En> نفسه لما مفيش رقم.
+
+<File name="src/routes/posts.tsx">
+
+```tsx
+import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/posts")({
+  component: PostsLayout,
+});
+
+function PostsLayout() {
+  return (
+    <div style={{ display: "flex", gap: "2rem" }}>
+      <aside>
+        <Link to="/posts/1">Post 1</Link>
+        <br />
+        <Link to="/posts/2">Post 2</Link>
+      </aside>
+      <main>
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+```
+
+</File>
+
+<File name="src/routes/posts/index.tsx">
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/posts/")({
+  component: () => <p>اختار بوست من القايمة</p>,
+});
+```
+
+</File>
+
+<Box type="warn" title="الشرطة في الآخر مهمة">
+
+مسار الغلاف من غير شرطة أخيرة. مسار الـ <En>index</En> بشرطة في الآخر. كده المكتبة تفرّق الغلاف عن صفحة المجلد وهو فاضي.
+
+</Box>
+
+<En>Outlet</En> هنا يرسم يا صفحة الاختيار يا صفحة الرقم، والعمود الجانبي ثابت.
+
+<Checklist id="router-dynamic" title="خلّصت الفصل لما" items={["ملف المعامل يبدأ بعلامة دولار", "Route.useParams يقرأ الرقم", "posts.tsx غلاف و posts/index.tsx الصفحة الفاضية", "الشرطة الأخيرة تفرّق الاتنين"]} />
+
+<Quiz>
+<Q n={1} q="اسم الملف اللي يمثل بوست برقمه؟">$postId.tsx جوه مجلد posts.</Q>
+<Q n={2} q="إيه الفرق بين /posts و /posts/ في createFileRoute؟">الأول الغلاف. التاني بشرطة أخيرة هو صفحة الـ index.</Q>
+<Q n={3} q="العمود الجانبي يتحط فين؟">في كومبوننت الغلاف، والصفحة المتغيرة جوه Outlet.</Q>
+</Quiz>

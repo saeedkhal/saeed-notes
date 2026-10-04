@@ -1,0 +1,70 @@
+---
+title: "الـ loader قبل ما الصفحة تبان"
+short: Loaders
+order: 6
+label: فصل ٦
+badge: الداتا · فصل ٦
+en: loader · useLoaderData · pending · error
+keywords: loader · pending · error
+goal: تجيب البوست قبل الرسم، وتعرض انتظار وخطأ من غير useEffect.
+part: الداتا
+color: c1
+---
+
+الـ <En>loader</En> بيشتغل قبل ما الكومبوننت يترسم. الداتا تبقى جاهزة، من غير حالة تحميل تكتبها بإيدك جوه <En>useEffect</En>.
+
+<File name="src/routes/posts/$postId.tsx">
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/posts/$postId")({
+  loader: async ({ params }) => {
+    const res = await fetch(
+      `https://jsonplaceholder.typicode.com/posts/${params.postId}`,
+    );
+    if (!res.ok) throw new Error("Post not found");
+    return res.json();
+  },
+  pendingComponent: () => <p>جاري التحميل...</p>,
+  errorComponent: ({ error }) => <p>حصل خطأ: {error.message}</p>,
+  component: PostPage,
+});
+
+function PostPage() {
+  const post = Route.useLoaderData();
+  return (
+    <div>
+      <h1>{post.title}</h1>
+      <p>{post.body}</p>
+    </div>
+  );
+}
+```
+
+</File>
+
+<En>useEffect</En> بيحصل بعد الرسم، فتشوف «جاري التحميل» كوميض، وبتكتب حالة الخطأ بإيدك، ومفيش كاش جاهز. الـ <En>loader</En> بيحصل قبل الظهور، وفيه كومبوننت انتظار وكومبوننت خطأ، وكاش قريب من فكرة <En>React Query</En>.
+
+<Grid2>
+<Card title="useEffect" c={2}>
+
+بعد الرسم. وميض تحميل. الحالة إنت اللي تكتبها.
+
+</Card>
+<Card title="loader" c={4}>
+
+قبل الظهور. انتظار وخطأ جاهزين على الراوت. فيه كاش.
+
+</Card>
+</Grid2>
+
+اللي بعد كده في المكتبة، لما تحب تكمّل من الدوكس: حماية الراوت قبل التحميل، والفرق بين قراءة المعاملات من الراوت ومن هوك عام، وصفحة مش موجودة.
+
+<Checklist id="router-loader" title="خلّصت الفصل لما" items={["الـ loader يرجع الداتا أو يرمي خطأ", "الكومبوننت يقرأ بـ useLoaderData", "pendingComponent و errorComponent موجودين", "متجيبش نفس الداتا بـ useEffect أول ما الصفحة تفتح"]} />
+
+<Quiz>
+<Q n={1} q="ليه الـ loader أقل وميض من useEffect؟">لأنه بيخلّص قبل ما الصفحة تتفتح، مش بعد أول رسم.</Q>
+<Q n={2} q="الطلب فشل. مين يعرض الرسالة؟">errorComponent على الراوت، مش حالة تكتبها جوه الصفحة.</Q>
+<Q n={3} q="الداتا جاهزة تتقرأ بإيه؟">Route.useLoaderData.</Q>
+</Quiz>
