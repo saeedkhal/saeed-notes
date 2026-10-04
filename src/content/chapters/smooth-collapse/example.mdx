@@ -1,0 +1,94 @@
+---
+title: مثال بـ CSS Modules
+short: المثال
+order: 3
+label: فصل ٣
+badge: التطبيق · فصل ٣
+en: CSS Modules · open class · chevron
+keywords: CSS Modules · open · chevron
+goal: تقفل وتفتح قائمة فرعية بتبديل كلاس، من غير قياس ارتفاع.
+part: التطبيق
+color: c3
+---
+
+مفيش حساب <En>height</En> في الجافاسكربت. زرار بيقلب حالة، والكلاس <En>open</En> بيحوّل الصف من <En>0fr</En> لـ <En>1fr</En>.
+
+<File name="Sidebar.module.css">
+
+```css
+.submenuWrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.submenuWrapper.open {
+  grid-template-rows: 1fr;
+}
+
+.submenuContent {
+  overflow: hidden;
+}
+
+.item {
+  padding: 8px 16px;
+}
+
+.chevron {
+  transition: transform 0.3s ease;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+```
+
+</File>
+
+<File name="Sidebar.jsx">
+
+```jsx
+import { useState } from "react";
+import styles from "./Sidebar.module.css";
+
+export default function Sidebar() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} className={styles.item}>
+        Settings
+        <span className={`${styles.chevron} ${open ? styles.open : ""}`}>▾</span>
+      </button>
+
+      <div className={`${styles.submenuWrapper} ${open ? styles.open : ""}`}>
+        <div className={styles.submenuContent}>
+          <div className={styles.item}>Profile</div>
+          <div className={styles.item}>Billing</div>
+          <div className={styles.item}>Security</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+</File>
+
+الزرار بيقلب <En>open</En>. الغلاف ياخد الكلاس فيكبر صفه. المحتوى مقصوص فيبان تدريجيًا مهما كان عدد العناصر.
+
+<Box type="warn" title="أسماء الكلاسات مش نص عادي">
+
+<En>CSS Modules</En> بتغيّر اسم الكلاس وقت البناء. عشان كده بتجمع <En>styles.chevron</En> مع <En>styles.open</En>. متكتبش النص <En>chevron open</En> كأن الأسماء عالمية، إلا لو الملف مش <En>module</En>.
+
+</Box>
+
+لو المتصفح طالب حركة أقل، حط الحركة جوه <En>prefers-reduced-motion: no-preference</En>، أو قصّر المدة لصفر. راجع دعم الانتقال على <En>grid-template-rows</En> في الدوكس لو بتستهدف متصفح قديم.
+
+<Checklist id="collapse-demo" title="خلّصت الفصل لما" items={["الغلاف grid والصف 0fr ثم 1fr", "القص على submenuContent", "السهم يلف مع نفس الحالة", "الكلاس الشرطي من styles مش نص ثابت"]} />
+
+<Quiz>
+<Q n={1} q="إيه الكلاس اللي بيفتح القائمة؟">open على الغلاف. بيحوّل grid-template-rows من 0fr لـ 1fr.</Q>
+<Q n={2} q="ليه منجمعش الكلاسات كنص chevron open؟">لأن CSS Modules بتبدّل الأسماء. لازم تستخدم styles.chevron و styles.open.</Q>
+<Q n={3} q="لو زودت عنصر رابع، محتاج أغيّر رقم ارتفاع؟">لأ. 1fr بياخد ارتفاع المحتوى لوحده.</Q>
+</Quiz>

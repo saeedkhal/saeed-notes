@@ -1,0 +1,30 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 4
+label: الآخر
+badge: الآخر
+en: One-page recall for smooth collapse
+keywords: cheatsheet · overflow · grid
+goal: تفتكر فين تحط القص، وإمتى الطريقة التانية أنسب.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["القائمة تقفز من غير حركة", "انتقل بـ grid-template-rows من 0fr لـ 1fr"],
+  ["المحتوى ظاهر والصف صفر", "overflow hidden على الابن"],
+  ["القص على الأب والقائمة مقفلتش", "الحد الأدنى التلقائي لعنصر الـ grid. انقل القص للابن"],
+  ["حركة max-height متأخرة", "التخمين أكبر من المحتوى. استخدم grid"],
+  ["عدد العناصر بيتغير", "0fr و 1fr مش محتاجين ارتفاع محسوب"],
+  ["السهم ثابت", "transition على transform مع نفس كلاس الفتح"],
+  ["الكلاس open مش شغال في CSS Modules", "اجمع styles.open مش النص open"],
+  ["المستخدم طالب حركة أقل", "prefers-reduced-motion"],
+]} />
+
+<Checklist id="collapse-cheat" title="خلّصت المذكرة لما" items={["تفتح وتقفل قائمة من غير scrollHeight", "تحط القص على عنصر الصف", "تلف السهم بنفس الحالة"]} />
+
+<Quiz>
+<Q n={1} q="فين overflow hidden؟">على المحتوى، عنصر الـ grid، مش على صندوق الـ grid.</Q>
+<Q n={2} q="إيه بديل قياس الارتفاع بالجافاسكربت؟">صف grid من 0fr لـ 1fr.</Q>
+</Quiz>
