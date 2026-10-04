@@ -102,6 +102,7 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
   background: linear-gradient(135deg, var(--c1), var(--c2)); color: #fff; font-weight: 800; line-height: 1.5;
 }
 .side-topic small { display: block; font-weight: 600; opacity: .85; font-size: .78em; }
+.side-topic .side-tags { direction: ltr; margin-top: 4px; }
 .side-topic:hover { text-decoration: none; filter: brightness(1.05); }
 .side-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .side-list li { display: flex; align-items: center; gap: 4px; }
@@ -234,6 +235,17 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
 .hero { text-align: center; padding: 30px 0 40px; }
 .hero h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 800; margin: 0; line-height: 1.35; color: var(--heading); }
 .hero p { color: var(--muted); font-size: 1.15rem; max-width: 640px; margin: 12px auto 0; }
+.topic-filters {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 22px;
+}
+.topic-filters button {
+  border: 1.5px solid var(--line); background: var(--bg-elev); color: var(--heading);
+  font: inherit; font-weight: 800; font-size: .92rem; border-radius: 999px;
+  padding: 6px 14px; cursor: pointer;
+}
+.topic-filters button[aria-pressed="true"] {
+  background: var(--c1); border-color: var(--c1); color: #fff;
+}
 .topics { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; scroll-margin-top: calc(var(--header-h) + 12px); }
 .topic-card {
   --cc: var(--c1);
@@ -261,6 +273,12 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
   font-weight: 800; font-size: .85rem;
 }
 .topic-card[hidden] { display: none; }
+.topic-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.topic-tags span {
+  direction: ltr; font-size: .75rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--cc) 14%, transparent); color: var(--heading);
+}
+.topics-empty { text-align: center; color: var(--muted); margin: 8px 0 0; }
 .home-pages[hidden] { display: none; }
 .home-pages {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;

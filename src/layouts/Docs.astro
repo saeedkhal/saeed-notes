@@ -2,6 +2,7 @@
 import type { MarkdownHeading } from "astro";
 import Base from "./Base.astro";
 import { chapterHref, getTopics, splitId, url, type Chapter, type Topic } from "../lib/content";
+import { topicTagLabel } from "../lib/tags";
 
 interface Props {
   topic: Topic;
@@ -22,6 +23,7 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
       <a class="side-topic" href={url(`${topic.id}/`)} data-astro-prefetch="hover">
         {topic.data.emoji} {topic.data.title}
         <small>{topic.data.subtitle}</small>
+        {topic.data.tags.length > 0 && <small class="side-tags">{topic.data.tags.map((id) => topicTagLabel[id]).join(" · ")}</small>}
       </a>
       <ul class="side-list">
         {chapters.map((c) => (

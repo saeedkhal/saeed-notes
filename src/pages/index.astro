@@ -1,6 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
 import { getChapters, getTopics, url } from "../lib/content";
+import { topicTagIds, topicTagLabel } from "../lib/tags";
 
 const topics = await getTopics();
 const counts = await Promise.all(topics.map(async (t) => (await getChapters(t.id)).length));
@@ -25,21 +26,33 @@ const mix = (s: string) =>
       <h1>مذكرات <mark class="hl y">سعيد</mark> 📚</h1>
       <p>شرح وملخصات ملوّنة لمواضيع البرمجة — بأمثلة من الحياة، صناديق تحذير ونصايح، وفي آخر كل فصل checklist واختبر نفسك.</p>
     </section>
+    <div class="topic-filters" role="toolbar" aria-label="فلترة المواضيع" data-topic-filters>
+      <button type="button" data-tag="" aria-pressed="true">الكل</button>
+      {topicTagIds.map((id) => (
+        <button type="button" data-tag={id} aria-pressed="false">{topicTagLabel[id]}</button>
+      ))}
+    </div>
     <div class="topics" data-topic-grid data-page-size={pageSize}>
       {topics.map((t, i) => {
         const [before, after] = t.data.title.split(t.data.highlight);
         return (
-          <a class="topic-card" href={url(`${t.id}/`)} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
+          <a class="topic-card" href={url(`${t.id}/`)} data-tags={t.data.tags.join(" ")} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
             <div class="topic-top">
               <span class="em">{t.data.emoji}</span>
               <span class="meta">{countLabel(counts[i] ?? 0)}</span>
             </div>
             <h2>{before}<mark class="hl y">{t.data.highlight}</mark>{after}</h2>
             <p set:html={mix(t.data.description)} />
+            {t.data.tags.length > 0 && (
+              <span class="topic-tags">
+                {t.data.tags.map((id) => <span>{topicTagLabel[id]}</span>)}
+              </span>
+            )}
           </a>
         );
       })}
     </div>
+    <p class="topics-empty" data-topics-empty hidden>مفيش مذكرات بالتاج ده.</p>
     {pageCount > 1 && (
       <nav class="home-pages" aria-label="صفحات المواضيع" data-topic-pages>
         <a class="page-step" data-page-step="prev" data-page="1" href={pageHref(1)} aria-disabled="true">السابق</a>
@@ -57,19 +70,27 @@ const mix = (s: string) =>
           const n = Number(new URLSearchParams(location.search).get("page") || "1");
           return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
         };
+        const readTag = () => new URLSearchParams(location.search).get("tag") || "";
 
         const bootHomeTopics = (scroll) => {
           const grid = document.querySelector("[data-topic-grid]");
           if (!grid) return;
+          const tag = readTag();
           const size = Number(grid.dataset.pageSize || "6");
           const cards = [...grid.children].filter((el) => el.classList.contains("topic-card"));
-          const pages = Math.max(1, Math.ceil(cards.length / size));
-          const page = Math.min(readPage(), pages);
+          const matched = cards.filter((card) => !tag || (card.dataset.tags || "").split(/\s+/).includes(tag));
+          const pages = Math.max(1, Math.ceil(matched.length / size));
+          const page = matched.length === 0 ? 1 : Math.min(readPage(), pages);
           const start = (page - 1) * size;
-          const shown = new Set(cards.slice(start, start + size));
+          const shown = new Set(matched.slice(start, start + size));
           cards.forEach((card) => {
             card.hidden = !shown.has(card);
           });
+          document.querySelectorAll("[data-topic-filters] [data-tag]").forEach((btn) => {
+            btn.setAttribute("aria-pressed", (btn.dataset.tag || "") === tag ? "true" : "false");
+          });
+          const empty = document.querySelector("[data-topics-empty]");
+          if (empty) empty.hidden = matched.length > 0;
           const nav = document.querySelector("[data-topic-pages]");
           if (nav) {
             nav.hidden = pages < 2;
@@ -124,6 +145,21 @@ const mix = (s: string) =>
         if (nav && !nav.dataset.bound) {
           nav.dataset.bound = "1";
           nav.addEventListener("click", onClick, true);
+        }
+        const filters = document.querySelector("[data-topic-filters]");
+        if (filters && !filters.dataset.bound) {
+          filters.dataset.bound = "1";
+          filters.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-tag]");
+            if (!btn || !filters.contains(btn)) return;
+            const tag = btn.dataset.tag || "";
+            const next = new URL(location.href);
+            if (tag) next.searchParams.set("tag", tag);
+            else next.searchParams.delete("tag");
+            next.searchParams.delete("page");
+            history.pushState(null, "", next);
+            bootHomeTopics(false);
+          });
         }
         bootHomeTopics(false);
       })();

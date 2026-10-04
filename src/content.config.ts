@@ -1,6 +1,7 @@
 import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
 import { z } from "astro/zod";
+import { topicTagIds } from "./lib/tags";
 
 const color = z.enum(["c1", "c2", "c3", "c4", "c5", "dark"]);
 
@@ -16,6 +17,7 @@ const topics = defineCollection({
     emoji: z.string().default("📘"),
     order: z.number().default(0),
     note: z.string().optional(),
+    tags: z.array(z.enum(topicTagIds)).default([]),
   }),
 });
 
