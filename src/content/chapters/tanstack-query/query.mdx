@@ -1,0 +1,77 @@
+---
+title: أول Query والمفتاح
+short: المفتاح
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: useQuery · queryKey · queryFn
+keywords: queryKey · students · studentId
+goal: تجيب قائمة بمفتاح ثابت، وطالب واحد بمفتاح فيه الرقم.
+part: البداية
+color: c2
+---
+
+<En>useQuery</En> للقراءة. بتديله مفتاح، ودالة بترجع الطلب.
+
+<File name="StudentsList.jsx">
+
+```jsx
+import { useQuery } from "@tanstack/react-query";
+
+function getStudents() {
+  return fetch("/api/students").then((res) => res.json());
+}
+
+function StudentsList() {
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ["students"],
+    queryFn: getStudents,
+  });
+
+  if (isPending) return <p>جاري التحميل...</p>;
+  if (isError) return <p>خطأ: {error.message}</p>;
+
+  return (
+    <ul>
+      {data.map((s) => (
+        <li key={s.id}>{s.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+</File>
+
+## المفتاح هو عنوان الرف
+
+<Hl c="p">queryKey معرّف الداتا دي في الكاش</Hl>. لو مكوّنين نادوا نفس المفتاح، المكتبة تشاركهم الداتا ونفس الجلب. مش طلب مرتين.
+
+المفتاح مصفوفة. حط جواها اللي بيغيّر النتيجة.
+
+<File name="one-student.jsx">
+
+```jsx
+useQuery({
+  queryKey: ["student", studentId],
+  queryFn: () => getStudent(studentId),
+});
+```
+
+</File>
+
+كل ما <En>studentId</En> يتغير، دي استعلام تاني، وجلب جديد. الداتا القديمة تفضل تحت مفتاحها.
+
+<Box type="warn" title="اللي بيتغير لازم يدخل المفتاح">
+
+لو بعت معامل لدالة الجلب ومتحطّوش في <En>queryKey</En>، الكاش يفضل شايف نفس الرف. المعامل يتبدل والنتيجة المعروضة لأ. أي حاجة بتفرّق الطلب، حطها في المصفوفة.
+
+</Box>
+
+<Checklist id="query-key" title="خلّصت الفصل لما" items={["useQuery بمفتاح ودالة جلب", "نفس المفتاح يعني نفس الداتا", "المعامل المتغير جوه المفتاح مش بس جوه الدالة"]} />
+
+<Quiz>
+<Q n={1} q="مكونين استخدموا المفتاح students. كام طلب؟">طلب واحد متشارك، مش طلب لكل مكوّن.</Q>
+<Q n={2} q="studentId بقى ٧ بدل ٣. المكتبة تعمل إيه؟">تعتبره مفتاح تاني وتجلب الطالب الجديد.</Q>
+<Q n={3} q="حطيت الفلتر في الدالة بس ونسيته في المفتاح. إيه العطل؟">الكاش مش هيعرف إن الطلب اتغير، فالداتا المعروضة متتحدثش مع الفلتر.</Q>
+</Quiz>

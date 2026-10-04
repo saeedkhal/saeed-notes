@@ -1,0 +1,240 @@
+---
+title: الصفحات اللي بتتلم
+short: Infinite
+order: 7
+label: فصل ٧
+badge: الصفحات · فصل ٧
+en: useInfiniteQuery · cursor · IntersectionObserver
+keywords: nextPage · pages · cursor · scroll
+goal: تزود صفحة من غير ما تمسح اللي فات، وتختار cursor لما القائمة بتتغير.
+part: الصفحات
+color: c2
+---
+
+في التصفّح العادي بتجيب صفحة وترمي اللي قبلها. <En>useInfiniteQuery</En> يجمع الصفحات في مصفوفة مستمرة. «اعرض المزيد» يضيف، ومش بينسى.
+
+ده اللي بيحصل وأنت بتنزل في خط زمني: القديم فضل، والجديد تلزق تحته.
+
+## السيرفر يقول فيه تالي ولا لأ
+
+<File name="server-page.js">
+
+```js
+app.get("/api/students", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = 20;
+
+  const students = await prisma.student.findMany({
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+
+  const total = await prisma.student.count();
+  const hasMore = page * limit < total;
+
+  res.json({
+    students,
+    nextPage: hasMore ? page + 1 : null,
+  });
+});
+```
+
+</File>
+
+مهم إن الرد فيه إشارة للجاي. <En>null</En> هنا معناها مفيش صفحة بعد كده. راجع أسماء دوال <En>Prisma</En> في الدوكس، لأنها بتتغير.
+
+## الواجهة
+
+<File name="StudentsInfinite.jsx">
+
+```jsx
+import { useInfiniteQuery } from "@tanstack/react-query";
+
+function getStudents({ pageParam }) {
+  return fetch(`/api/students?page=${pageParam}`).then((res) => res.json());
+}
+
+function StudentsList() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isPending,
+  } = useInfiniteQuery({
+    queryKey: ["students"],
+    queryFn: getStudents,
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.nextPage ?? undefined,
+  });
+
+  if (isPending) return <p>جاري التحميل...</p>;
+
+  return (
+    <div>
+      {data.pages.map((page, i) => (
+        <div key={i}>
+          {page.students.map((s) => (
+            <div key={s.id}>{s.name}</div>
+          ))}
+        </div>
+      ))}
+
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? "بيحمّل..."
+          : hasNextPage
+            ? "عرض المزيد"
+            : "مفيش أكتر"}
+      </button>
+    </div>
+  );
+}
+```
+
+</File>
+
+<En>getNextPageParam</En> بتتنفذ بعد كل صفحة. آخر صفحة هي اللي السيرفر رجّعها دلوقتي. المعامل التاني، لو احتجته، كل الصفحات لحد دلوقتي. لو رجّعت <En>undefined</En>، المكتبة تقفل <En>hasNextPage</En>.
+
+<Box type="warn" title="null مش نهاية الصفحات">
+
+الطلب الأول من غير مؤشر ممكن يبدأ بـ <En>null</En>. دي قيمة صفحة صالحة. علامة الخلوص في الدالة هي <En>undefined</En>. لو السيرفر رجّع <En>null</En> كـ «مفيش جاي»، حوّلها قبل الإرجاع، زي <En>lastPage.nextPage ?? undefined</En>. راجع الدوكس لو الإصدار غيّر القاعدة دي.
+
+</Box>
+
+<En>fetchNextPage</En> تاخد القيمة دي وتبعتها لوحدها.
+
+<En>data</En> مش مصفوفة طلاب. فيها <En>pages</En> للردود، و <En>pageParams</En> للأرقام اللي اتبعتت. عشان كده فيه لف على الصفحات، وبعدين لف على طلاب كل صفحة.
+
+<En>isFetchingNextPage</En> وقت الصفحة الزيادة بس. <En>isPending</En> لأول تحميل، قبل أي صفحة.
+
+## السكرول ينادي لوحده
+
+حط عنصر في آخر القائمة. لما يظهر في الشاشة، نادِ الصفحة الجاية.
+
+<File name="infinite-scroll.jsx">
+
+```jsx
+import { useEffect, useRef } from "react";
+
+function StudentsList() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isPending,
+  } = useInfiniteQuery({
+    queryKey: ["students"],
+    queryFn: getStudents,
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.nextPage ?? undefined,
+  });
+
+  const observerRef = useRef(null);
+
+  useEffect(() => {
+    if (!observerRef.current || !hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 1 },
+    );
+
+    observer.observe(observerRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  if (isPending) return <p>جاري التحميل...</p>;
+
+  return (
+    <div>
+      {data.pages.map((page, i) => (
+        <div key={i}>
+          {page.students.map((s) => (
+            <div key={s.id}>{s.name}</div>
+          ))}
+        </div>
+      ))}
+      <div ref={observerRef} style={{ height: 1 }} />
+      {isFetchingNextPage && <p>بيحمّل المزيد...</p>}
+    </div>
+  );
+}
+```
+
+</File>
+
+## لورا كمان
+
+الشات اللي بيطلّع رسائل أقدم محتاج اتجاهين. <En>getPreviousPageParam</En> على أول صفحة، وبعدين <En>fetchPreviousPage</En> و <En>hasPreviousPage</En>.
+
+<File name="both-directions.jsx">
+
+```jsx
+useInfiniteQuery({
+  queryKey: ["messages"],
+  queryFn: getMessages,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor ?? undefined,
+});
+```
+
+</File>
+
+## رقم الصفحة يتلخبط
+
+لو حد ضاف طالب وأنت في نص السكرول، تخطي الصفحات بالأرقام يزوّد أو يكرّر صفوف. المؤشر أثبت: كمّل بعد آخر <En>id</En> شفته.
+
+<File name="server-cursor.js">
+
+```js
+app.get("/api/students", async (req, res) => {
+  const cursor = req.query.cursor;
+  const students = await prisma.student.findMany({
+    take: 20,
+    skip: cursor ? 1 : 0,
+    cursor: cursor ? { id: cursor } : undefined,
+    orderBy: { id: "asc" },
+  });
+
+  res.json({
+    students,
+    nextCursor: students.length === 20 ? students.at(-1).id : null,
+  });
+});
+```
+
+</File>
+
+<File name="client-cursor.jsx">
+
+```jsx
+useInfiniteQuery({
+  queryKey: ["students"],
+  queryFn: ({ pageParam }) =>
+    fetch(`/api/students?cursor=${pageParam ?? ""}`).then((r) => r.json()),
+  initialPageParam: null,
+  getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+});
+```
+
+</File>
+
+لقوائم الطلاب والدرجات الكبيرة، المؤشر أهدى من رقم الصفحة. <En>skip: 1</En> عشان المؤشر نفسه ما يترجعش تاني مع الصفحة الجاية. راجع شكل المؤشر في دوكس <En>Prisma</En> قبل ما تثبّته.
+
+<Checklist id="query-infinite" title="خلّصت الفصل لما" items={["السيرفر يرجّع إشارة الصفحة الجاية", "ترسم data.pages مش مصفوفة واحدة", "تفرق isFetchingNextPage عن isPending", "تستخدم cursor لما الصفوف بتتضاف والقائمة مفتوحة"]} />
+
+<Quiz>
+<Q n={1} q="getNextPageParam رجّعت undefined. الزرار يعمل إيه؟">hasNextPage يبقى false، ومفيش صفحة تانية.</Q>
+<Q n={2} q="شكل data في الاستعلام اللانهائي؟">كائن فيه pages للردود و pageParams للقيمة اللي اتبعتت كل مرة.</Q>
+<Q n={3} q="ليه المؤشر أثبت من رقم الصفحة والناس بتضيف طلاب؟">لأنك بتكمل بعد آخر id، مش بتحسب إزاحة ممكن تتزحلق لما الصف يتغير.</Q>
+</Quiz>

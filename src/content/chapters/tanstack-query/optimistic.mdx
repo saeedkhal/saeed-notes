@@ -1,0 +1,61 @@
+---
+title: التحديث قبل رد السيرفر
+short: الفوري
+order: 6
+label: فصل ٦
+badge: الكتابة · فصل ٦
+en: onMutate · rollback · onSettled
+keywords: optimistic · setQueryData · rollback
+goal: تغيّر الكاش فورًا، وترجّع القديم لو الطلب فشل.
+part: الكتابة
+color: c1
+---
+
+اللايك لو مستني السيرفر، الزرار يبان متأخر. التحديث المتفائل يغيّر الشاشة الأول، والطلب يمشي وراها.
+
+<File name="optimistic-student.jsx">
+
+```jsx
+const mutation = useMutation({
+  mutationFn: updateStudent,
+  onMutate: async (newStudent) => {
+    await queryClient.cancelQueries({ queryKey: ["student", newStudent.id] });
+    const previous = queryClient.getQueryData(["student", newStudent.id]);
+
+    queryClient.setQueryData(["student", newStudent.id], newStudent);
+
+    return { previous };
+  },
+  onError: (err, newStudent, context) => {
+    queryClient.setQueryData(["student", newStudent.id], context.previous);
+  },
+  onSettled: (newStudent) => {
+    queryClient.invalidateQueries({ queryKey: ["student", newStudent.id] });
+  },
+});
+```
+
+</File>
+
+الترتيب:
+
+1. <En>onMutate</En> يوقف الطلبات اللي لسه بتجيب نفس الطالب، عشان رد قديم ما يمسحش الكتابة الجديدة.
+2. تاخد نسخة القديم من <En>getQueryData</En>.
+3. <En>setQueryData</En> يحط الشكل الجديد في الكاش فورًا.
+4. ترجع القديم في السياق، عشان لو حصل تراجع.
+5. <En>onError</En> يرجّع النسخة دي.
+6. <En>onSettled</En> يبطل المفتاح بعد النجاح أو الفشل، والسيرفر يبقى مصدر الحقيقة.
+
+<Box type="idea" title="امتى تستاهل">
+
+لما الإحساس بالزرار أهم من إنك تستنى الشبكة: لايك، تعليم كمقروء، تبديل حالة صغيرة. لو الكتابة معقّدة وسهل تتعارض، الإبطال بعد النجاح أهدى من التخمين.
+
+</Box>
+
+<Checklist id="query-optimistic" title="خلّصت الفصل لما" items={["تلغي الجلب الشغال قبل ما تكتب على الكاش", "تحفظ السابق عشان التراجع", "onSettled يرجّع الحقيقة من السيرفر"]} />
+
+<Quiz>
+<Q n={1} q="ليه بنلغي الاستعلامات قبل setQueryData؟">عشان رد جلب قديم ما يستبدلش القيمة اللي المستخدم شافها فورًا.</Q>
+<Q n={2} q="الطلب فشل. الشاشة ترجع إزاي؟">onError يحط context.previous مكان القيمة المتفائلة.</Q>
+<Q n={3} q="onSettled ليه موجود حتى بعد النجاح؟">عشان الكاش يتظبط على رد السيرفر، مش على التخمين بس.</Q>
+</Quiz>

@@ -1,0 +1,81 @@
+---
+title: ليه مش useEffect؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: server state · QueryClient · cache
+keywords: useEffect · cache · QueryClient
+goal: تعرف المكتبة بتمسك حالة السيرفر، وتلف التطبيق بـ QueryClient.
+part: البداية
+color: c1
+---
+
+من غيرها، جلب قائمة طلاب بيتكتب كده غالبًا: تلات حالات، و <En>useEffect</En> بيعمل <En>fetch</En> مرة واحدة.
+
+<File name="students-before.jsx">
+
+```jsx
+const [data, setData] = useState(null);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState(null);
+
+useEffect(() => {
+  fetch("/api/students")
+    .then((res) => res.json())
+    .then(setData)
+    .catch(setError)
+    .finally(() => setLoading(false));
+}, []);
+```
+
+</File>
+
+الطلب نجح، بس أنت اللي ماسك كل حاجة بإيدك. مفيش كاش. مفيش إعادة جلب لوحدها. لو طلبين سبقوا بعض، الآخر ممكن يوصل الأول والنتيجة تتلخبط. ولو صفحتين محتاجين نفس القائمة، الطلب يتكرر.
+
+<Hl c="y">TanStack Query بتمسك حالة السيرفر: الكاش، والإعادة، ومشاركة نفس الطلب</Hl>. الاسم التاني الشائع <En>React Query</En>. دي مش راوتر.
+
+## الإعداد
+
+الأوامر بتتغير مع الإصدار. راجع الدوكس قبل النسخ.
+
+<File name="terminal">
+
+```bash
+npm install @tanstack/react-query
+npm install -D @tanstack/react-query-devtools
+```
+
+</File>
+
+<En>QueryClient</En> هو صاحب الكاش في التطبيق كله. اعمله مرة بره الكومبوننت، عشان الرسم الجديد ما يمسحش المخزن.
+
+<File name="main.tsx">
+
+```tsx
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
+const queryClient = new QueryClient();
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  );
+}
+```
+
+</File>
+
+أي <En>useQuery</En> تحت الـ <En>Provider</En> بيشوف نفس المخزن. أدوات التطوير تقعد مقفولة لحد ما تفتحها، وبتوريك المفاتيح والداتا وهي بتتحدث.
+
+<Checklist id="query-intro" title="خلّصت الفصل لما" items={["تفرق المكتبة دي عن TanStack Router", "تعرف إن useEffect لوحده من غير كاش ولا مشاركة طلب", "QueryClient بره الشجرة و Provider لافف التطبيق"]} />
+
+<Quiz>
+<Q n={1} q="المكتبة دي بتحل أنهي نوع حالة؟">حالة السيرفر: الداتا الجاية من الـ API، مش عنوان الصفحة.</Q>
+<Q n={2} q="ليه QueryClient مش جوه App؟">عشان الكاش ما يتخلقش من جديد كل رسم ويمسح اللي اتخزّن.</Q>
+<Q n={3} q="صفحتين طلبوا نفس الطلاب من غير المكتبة. إيه اللي بيحصل؟">طلبين منفصلين. المكتبة بتخلّيهم يشتركوا في نفس المفتاح ونفس الجلب.</Q>
+</Quiz>

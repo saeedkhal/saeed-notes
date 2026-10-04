@@ -1,0 +1,101 @@
+---
+title: الكتابة وخيار exact
+short: الكتابة
+order: 4
+label: فصل ٤
+badge: الكتابة · فصل ٤
+en: useMutation · invalidateQueries · exact
+keywords: mutation · invalidate · exact
+goal: بعد الإضافة تبطل الكاش القديم، وتعرف الامتداد بيلمس مين.
+part: الكتابة
+color: c4
+---
+
+<En>useQuery</En> للقراءة. <En>useMutation</En> للكتابة: إضافة، تعديل، مسح.
+
+<File name="AddStudentForm.jsx">
+
+```jsx
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+function addStudent(newStudent) {
+  return fetch("/api/students", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(newStudent),
+  }).then((res) => res.json());
+}
+
+function AddStudentForm() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: addStudent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+    },
+  });
+
+  return (
+    <button
+      onClick={() => mutation.mutate({ name: "أحمد", grade: "A" })}
+      disabled={mutation.isPending}
+    >
+      {mutation.isPending ? "بيتضاف..." : "ضيف طالب"}
+    </button>
+  );
+}
+```
+
+</File>
+
+<Hl c="o">بعد الكتابة الناجحة، قول للمكتبة إن الرف ده بقى قديم</Hl>. <En>invalidateQueries</En> يعمل كده، والقراءات المرتبطة تتجاب تاني. من غير الخطوة دي الشاشة تفضل على القائمة اللي قبل الإضافة.
+
+## exact
+
+الفلتر مش دايمًا استعلام واحد. ساعات المفتاح بادئة، وعايز تلمس كل اللي تحتها.
+
+تخيل الكاش فيه:
+
+- مفتاح القائمة كلها
+- مفتاح القائمة مع صف أ
+- مفتاح القائمة مع صف ب
+- مفتاح طالب برقمه
+
+<En>exact</En> مش متحدد، يعني <En>false</En>. نداء الإبطال على بادئة الطلاب يلمس الأربعة، لأن كلهم بيبدأوا بنفس أول جزء.
+
+<File name="exact-true.jsx">
+
+```jsx
+queryClient.invalidateQueries({
+  queryKey: ["students"],
+  exact: true,
+});
+```
+
+</File>
+
+كده القائمة العريانة بس. المفتاح اللي فيه الصف، أو رقم الطالب، مش هيتمس.
+
+الافتراضي <En>false</En> لأن إضافة طالب عادةً لازم تحدّث كل العروض: القائمة، والمفلترة، وأي نسخة تانية من نفس البداية. من غير ما تكرر الإبطال لكل مفتاح.
+
+استخدم <En>exact: true</En> لما التحديث لازم يكون على مطابقة حرفية. مفتاح درجات طالب، وفيه كمان مفتاح لنفس الطالب زائد خانة الدرجات: المطابقة الحرفية متلمسش الزيادة. من غيرها، أي مفتاح بيبدأ بنفس البادئة يتبطّل.
+
+<File name="one-grade-cache.jsx">
+
+```jsx
+queryClient.invalidateQueries({
+  queryKey: ["grades", studentId],
+  exact: true,
+});
+```
+
+</File>
+
+<Checklist id="query-write" title="خلّصت الفصل لما" items={["الكتابة بـ useMutation والقراءة بـ useQuery", "invalidateQueries بعد النجاح", "exact false يلمس البادئة و true يلمس المفتاح الحرفي"]} />
+
+<Quiz>
+<Q n={1} q="ضفت طالب ونسيت الإبطال. المستخدم يشوف إيه؟">القائمة القديمة، من غير الطالب الجديد، لحد ما حاجة تانية تجيب الداتا.</Q>
+<Q n={2} q="exact مش مكتوب. الإبطال على students يلمس مين؟">كل مفتاح بيبدأ بالبادئة دي، مش المفتاح المطابق بس.</Q>
+<Q n={3} q="عايز أحدّث درجات طالب واحد من غير فلاتر تانية. أظبط إيه؟">exact true على مفتاح الدرجات مع رقم الطالب.</Q>
+</Quiz>
