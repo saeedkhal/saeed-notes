@@ -117,7 +117,8 @@ img { max-width: 100%; }
 
 /* ---------------- prose ---------------- */
 .prose h2 {
-  display: flex; align-items: center; gap: 12px;
+  /* مش flex: النص والـ code يلفّوا مع بعض كسطر عادي، والرقم ثابت على الجنب */
+  position: relative; padding-inline-start: 46px;
   font-size: 1.6rem; font-weight: 800; color: var(--heading);
   margin: 2.6em 0 0.7em; line-height: 1.4;
 }
@@ -125,7 +126,7 @@ img { max-width: 100%; }
 .prose h2::before {
   counter-increment: h2;
   content: counter(h2);
-  flex: none;
+  position: absolute; inset-inline-start: 0; top: calc(0.7em - 17px);
   display: inline-grid; place-items: center;
   min-width: 34px; height: 34px; padding: 0 8px;
   border-radius: 10px; color: #fff; font-size: 1rem; font-weight: 800;
@@ -133,6 +134,7 @@ img { max-width: 100%; }
   box-shadow: 0 4px 12px -4px var(--n, var(--c1));
 }
 .prose h2.no-num { margin-top: 0; }
+.prose h2.no-num { padding-inline-start: 0; }
 .prose h2.no-num::before { display: none; }
 .prose h2:nth-of-type(5n + 1) { --n: var(--c1); }
 .prose h2:nth-of-type(5n + 2) { --n: var(--c2); }
