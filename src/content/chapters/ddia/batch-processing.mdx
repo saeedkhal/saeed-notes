@@ -1,0 +1,166 @@
+---
+title: "الـ Batch Processing: شغل كبير على دفعات"
+short: "Batch Processing"
+order: 10
+label: "فصل ١٠"
+badge: "الداتا المشتقة · فصل ١٠"
+en: "Batch Processing"
+keywords: "unix · MapReduce · joins · Spark"
+goal: "تفهم فلسفة Unix وإزاي اتطورت لـ MapReduce و Spark، وأنواع الـ joins في الـ batch."
+part: "الداتا المشتقة"
+color: "c5"
+---
+
+## مقدمة الجزء التالت: Systems of Record vs Derived Data
+
+<Grid2>
+<Card title="📕 System of Record (Source of truth)" c={1}>
+
+المكان اللي الداتا بتتكتب فيه أول مرة. لو فيه تعارض، هو الصح. غالبًا normalized.
+
+</Card>
+<Card title="📗 Derived Data" c={4}>
+
+نتيجة تحويل داتا تانية: cache، index، materialized view، توصيات. لو ضاعت تقدر تعيد بناءها. غالبًا denormalized (مكرر) — عشان سرعة القراءة.
+
+</Card>
+</Grid2>
+
+الفرق ده مش في الأداة نفسها، في <Hl c="y">طريقة استخدامها</Hl> في الأبلكيشن. والجزء ده كله عن إزاي تبني derived data من سيستم لسيستم.
+
+| النوع | بياخد | المقياس |
+|---|---|---|
+| <strong>Services (online)</strong> | ريكوست → رد بسرعة | Response time + availability |
+| <strong>Batch (offline)</strong> | داتا كبيرة ثابتة → output، بيشتغل دوريًا | Throughput |
+| <strong>Stream (near-real-time)</strong> | events أول بأول | Latency أقل من الـ batch |
+
+## Batch بأدوات Unix
+
+مثال: عايز أكتر 5 صفحات اتزارت من web server log؟ سطر واحد:
+
+```bash
+cat access.log | awk '{print $7}' | sort | uniq -c | sort -r -n | head -n 5
+```
+
+بيعالج GBs في ثواني. ولو كتبته بكود (hash table في الرام) هيشتغل كويس لو الـ URLs المميزة تدخل الرام. بس `sort` بيعمل <Hl c="g">spill للديسك</Hl> و merge (زي SSTables!) وبيستخدم كل الـ cores — فبيتعامل مع داتا أكبر من الرام بسهولة.
+
+### فلسفة Unix (1978) — اللي بقت أساس كل حاجة
+
+<Chips items={["كل برنامج يعمل حاجة واحدة كويس", "الـ output بتاعك هيبقى input لبرنامج لسه ماتعرفوش", "جرّب بدري وارمي اللي وحش", "استخدم أدوات بدل الشغل اليدوي"]} />
+
+- <strong>Uniform interface:</strong> كل حاجة file descriptor (sequence of bytes)، ومعظم الأدوات بتتعامل مع سطور نص. فأي أداة تتوصل بأي أداة.
+- <strong>فصل المنطق عن التوصيل:</strong> stdin/stdout — البرنامج مش عارف جاي منين ورايح فين (loose coupling — شبه dependency injection / inversion of control).
+- <strong>Transparency:</strong> المدخلات immutable، تقدر توقف الـ pipeline في أي حتة وتعمل `less` وتشوف، وتعيد التشغيل براحتك.
+- ❌ العيب الكبير: ماكينة واحدة بس. وهنا ييجي Hadoop.
+
+## MapReduce و الـ Distributed Filesystems
+
+MapReduce = زي Unix tool بس موزع على آلاف الماكينات. بياخد input ويطلع output من غير side effects. وبدل stdin/stdout، بيقرا ويكتب في <strong>HDFS</strong> (Hadoop Distributed File System — نسخة open source من GFS بتاعة Google).
+
+<Box type="idea" title="HDFS">
+
+<En>shared-nothing</En>: daemon على كل ماكينة بيعرض الديسك بتاعها، و<strong>NameNode</strong> مركزي بيعرف كل block فين. الـ blocks بتتعمل replicated (أو erasure coding زي Reed-Solomon). وصل لعشرات آلاف الماكينات وبيتابايتات — وأرخص بكتير من storage مخصص.
+
+</Box>
+
+### إزاي الـ Job بيشتغل
+
+<Flow items={[{"t": "Input files", "c": 1, "s": "مقسومة records"}, "→", {"t": "Mapper", "c": 2, "s": "لكل record يطلع (key, value)"}, "→", {"t": "Shuffle + Sort", "c": 3, "s": "partition بالـ hash للـ key، وترتيب"}, "→", {"t": "Reducer", "c": 4, "s": "يستلم كل values نفس الـ key ويطلع output"}]} />
+
+- انت بتكتب الـ mapper والـ reducer بس؛ الفريمورك يعمل الباقي.
+- <strong>"Put the computation near the data":</strong> الـ mapper بيشتغل على الماكينة اللي عليها الـ block — بيوفّر نقل على الشبكة.
+- الـ reducers بيحمّلوا الملفات المترتبة من كل mapper ويعملوا merge (= <strong>shuffle</strong>).
+- <strong>Workflows:</strong> MapReduce job واحد محدود، فبتربط jobs ورا بعض (output واحد = input التاني) بـ schedulers زي Oozie, Azkaban, Luigi, Airflow. وأدوات أعلى زي Pig, Hive, Cascading, Crunch بتعمل كده أوتوماتيك. (في LinkedIn workflows من 50–100 job عادي.)
+
+## الـ Joins في Batch
+
+في الـ batch، الـ join معناه حل <strong>كل</strong> الـ associations في الداتا (مش lookup لصف واحد). مثال: عندك activity events (يوزر عمل إيه) وعايز تـ join مع جدول profiles (سن اليوزر) عشان تعرف أنهي صفحات مشهورة عند أنهي سن. Query لكل event على الشبكة لداتابيز بعيدة = بطيء جدًا ونتيجة مش deterministic. الحل: خد <strong>نسخة</strong> من الداتابيز (ETL) وحطها في HDFS جنب الـ events.
+
+| النوع | الفكرة | إمتى |
+|---|---|---|
+| <strong>Sort-merge join</strong> (reduce-side) | mapper لكل input يطلع join key (user ID). الـ shuffle بيجيب كل الـ records بنفس الـ key لنفس الـ reducer، ومترتبة (<En>secondary sort</En>: البروفايل الأول وبعده الـ events). الـ reducer يعمل join في الرام بسهولة. | عام — مش محتاج افتراضات. بس تقيل (sort + نقل). |
+| <strong>Broadcast hash join</strong> (map-side) | input صغير يدخل الرام كله في كل mapper كـ hash table، وكل mapper يمسح الكبير. | واحد من الاتنين صغير. |
+| <strong>Partitioned hash join</strong> (map-side) | الاتنين مقسومين بنفس الطريقة (نفس الـ key، hash، وعدد partitions) → كل mapper يحمّل partition واحد من الصغير. (Hive: bucketed map joins.) | الاتنين partitioned بنفس الشكل. |
+| <strong>Map-side merge join</strong> | الاتنين partitioned ومترتبين بنفس الطريقة → merge مباشر. | غالبًا لو output job سابق. |
+
+<Box type="warn" title="Skew و Hot Keys في الـ joins">
+
+سيليبريتي عنده ملايين المتابعين = reducer واحد يشيل شغل ضخم والباقي فاضيين (والـ job بيخلص لما آخر واحد يخلص). الحلول: <strong>skewed join</strong> في Pig (عينة الأول تحدد الـ hot keys وتوزعها على كذا reducer مع تكرار الطرف التاني)، أو Hive بيحدد الـ hot keys في الـ metadata ويعملهم map-side join، أو aggregation على مرحلتين.
+
+</Box>
+
+## الـ Output بتاع الـ Batch بيروح فين؟
+
+- <strong>Search indexes:</strong> Google عملت MapReduce أصلًا عشان تبني index البحث. mappers يقسموا المستندات، reducers يبنوا index لكل partition ويكتبوه في الـ DFS. immutable وسهل يتعاد بناؤه.
+- <strong>Key-value stores</strong> (machine learning: classifiers، توصيات): <strong>ماتكتبش record record في داتابيز production</strong> من جوه الـ mapper! (بطيء، هيضغط على الداتابيز، وبيكسر الـ all-or-nothing لو الـ job فشل). الصح: الـ job يبني <strong>ملفات داتابيز جديدة كاملة</strong> (Voldemort, Terrapin, ElephantDB, HBase bulk load) والسيرفرات تبدّل عليها atomically.
+
+<Box type="tip" title="فلسفة الـ output في الـ batch">
+
+- المدخلات immutable والمخرجات بتستبدل القديم → لو فيه باج، ارجع للنسخة القديمة من الكود وأعد التشغيل = <strong>human fault tolerance</strong>. (عكس الداتابيز اللي الكتابة الغلط فيها بتفضل.) Kleppmann بيسميها "<En>minimizing irreversibility</En>".
+- Rollback سهل = تطوير أسرع. وفشل الـ task = retry أوتوماتيك. ونفس الـ input ينفع لكذا job.
+- فصل المنطق عن التوصيل زي Unix.
+
+</Box>
+
+## Hadoop vs MPP Databases
+
+|   | MPP (Teradata، …) | Hadoop |
+|---|---|---|
+| التخزين | داتا لازم تتعمل لها model مقدمًا (schema). | أي bytes — "dump it in" = <En>data lake</En>. الـ schema وقت القراءة (<En>sushi principle: raw data is better</En>). |
+| المعالجة | SQL بس — مُحسّن جدًا. | كود عام: SQL (Hive)، ML، بحث، image analysis… ونظام تشغيل للداتا بالمعنى الواسع (HBase، Impala). |
+| الأعطال | لو نود وقعت، الكويري كلها تتعاد. (الكويريز قصيرة.) | يعيد الـ task بس، وبيكتب لديسك كتير. السبب الحقيقي: Google كانت بتشغل الـ batch كـ <strong>low priority</strong> ممكن يتقتل في أي وقت (preemption) لصالح الخدمات المهمة — فرص قتل task ساعة ≈ 5%. |
+
+## ما بعد MapReduce
+
+### مشكلة الـ Materialization
+
+MapReduce بيكتب الـ output الوسيط (بين كل job والتاني) في HDFS ومنسوخ على كذا ماكينة. ده بطيء: job لازم يستنى كل الـ tasks اللي قبله تخلص، mappers مالهاش لازمة بتقرا وتعيد كتابة، وreplication لداتا مؤقتة. (Unix pipes بتعمل streaming!)
+
+### Dataflow Engines: Spark, Tez, Flink
+
+بيتعاملوا مع الـ workflow كله كـ job واحد (DAG من الـ <En>operators</En>):
+
+<Chips items={["Sort بس لو محتاج فعلًا", "مفيش mappers مالهاش لازمة", "الـ scheduler عارف الصورة كلها فيعمل locality", "الوسيط في الرام أو local disk", "Operators تبدأ أول ما الـ input يجهز", "إعادة استخدام الـ JVM processes"]} />
+
+<strong>Fault tolerance:</strong> بما إن الوسيط مش متخزن، لو ماكينة وقعت بيعيد حسابه من آخر داتا متاحة (Spark: <En>RDD</En> lineage؛ Flink: checkpoints). المهم: الـ operators تبقى <Hl c="o">deterministic</Hl> (احذر من: ترتيب hash table، random من غير seed، الوقت الحالي) — وإلا لو اتعاد الحساب هيطلع نتيجة مختلفة والـ downstream يتلخبط.
+
+### Graphs والمعالجة التكرارية
+
+خوارزميات زي PageRank محتاجة تكرار لحد ما توصل (iterative). MapReduce وحش فيها (بيقرا الداتا كلها كل مرة). الحل: <strong>Bulk Synchronous Parallel (BSP)</strong> / <En>Pregel</En> model (Apache Giraph، Spark GraphX، Flink Gelly): كل vertex "بيفتكر" state وبيبعت رسايل لجيرانه على الـ edges في كل iteration. وfault tolerance بـ checkpoints دورية. المشكلة: الـ partitioning بيتعمل غالبًا عشوائي، والشبكة بتبقى bottleneck — لو الجراف يدخل في ماكينة واحدة، غالبًا هتبقى أسرع!
+
+### High-level APIs
+
+Hive, Pig, Cascading, Crunch، وبعدين Spark و Flink عملوا APIs بـ relational operators (join، group by، filter). ميزتها مش بس كود أقل: الـ framework يقدر يختار <strong>join algorithm</strong> أوتوماتيك (<En>cost-based optimizer</En>) — بيقربوا من الـ declarative بتاع MPP مع الاحتفاظ بمرونة الكود العادي. وكمان column-oriented formats (Parquet) و vectorized execution. وفيه مكتبات متخصصة: ML (Mahout, MLlib)، k-nearest neighbors، genome analysis.
+
+## 🧪 Lab
+
+اعمل log analysis بأدوات Unix على أي access log عندك (nginx مثلًا):
+
+```bash
+cat access.log | awk '{print $7}' | sort | uniq -c | sort -rn | head -n 5
+```
+
+بعدين اعمل نفس الحاجة بـ Spark (`pyspark` أو Spark SQL):
+
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+df = spark.read.text("access.log")
+df.selectExpr("split(value, ' ')[6] as url").groupBy("url").count().orderBy("count", ascending=False).show(5)
+```
+
+<Checklist id="ddia-ch10" title="✅ الخلاصة — Checklist" items={[
+  "فلسفة Unix → MapReduce → Dataflow engines: inputs immutable، outputs تبقى inputs لغيرها، أدوات صغيرة تتركب.",
+  "الـ interface: Unix = files + pipes. MapReduce = HDFS. Dataflow = pipes داخلية + HDFS للأول والآخر.",
+  "المشكلتين الأساسيتين: **Partitioning** (تجميع الـ records بنفس الـ key) و **Fault tolerance** (retry للـ task بس).",
+  "Joins: sort-merge، broadcast hash، partitioned hash.",
+  "الكود في الـ batch stateless ومن غير side effects → الفريمورك يعمل retry بأمان والـ output كأنه مفيش أعطال.",
+  "الـ output الأحسن: ملفات immutable جديدة (indexes، DB files) مش كتابة record record في production DB.",
+  "الـ batch input **bounded** (حجمه معروف) — الفصل الجاي: unbounded streams."
+]} />
+
+<Quiz>
+  <Q n={1} q="عندك جدول صغير (100MB) وجدول events ضخم — أنسب join؟">Broadcast hash join (الصغير في الرام في كل mapper).</Q>
+  <Q n={2} q="ليه كتابة الـ output مباشرة لداتابيز production من الـ mappers فكرة وحشة؟">بطيئة، بتضغط على الداتابيز، وبتكسر الـ all-or-nothing لو الـ task اتعادت (side effects).</Q>
+  <Q n={3} q="ليه الـ operators لازم تبقى deterministic في Spark؟">عشان لو حصل recompute بعد عطل، النتيجة تطلع نفس الأولى ومايتلخبطش اللي بعدها.</Q>
+</Quiz>

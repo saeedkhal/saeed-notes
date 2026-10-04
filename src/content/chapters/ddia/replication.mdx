@@ -1,127 +1,236 @@
 ---
 title: "الـ Replication: نفس الداتا على كذا ماكينة"
-short: Replication
+short: "Replication"
 order: 5
-label: فصل ٥
-badge: الموزعة · فصل ٥
-en: Single-leader · multi-leader · leaderless · replication lag
-keywords: leader · quorum · lag
-goal: تنسخ الداتا عشان القراءة والقرب من اليوزر، وتعرف إيه اللي بيحصل لما النسخة تتأخر.
-part: الموزعة
-color: c5
+label: "فصل ٥"
+badge: "الداتا الموزعة · فصل ٥"
+en: "Replication"
+keywords: "leader · lag · multi-leader · quorum"
+goal: "تعرف الفرق بين single/multi/leaderless replication ومشاكل الـ replication lag وحلولها."
+part: "الداتا الموزعة"
+color: "c5"
 ---
 
-## ليه نوزع أصلًا؟
+## مقدمة الجزء التاني: ليه نوزع أصلًا؟
 
-أول ما الداتا تخرج من ماكينة واحدة، كل حاجة تبقى أصعب. بنوزع عشان latency (داتا قريبة من المستخدم)، و fault tolerance، و scalability.
+<Chips items={["Scalability — حمل أكبر من ماكينة", "Fault tolerance / High availability", "Latency — داتا قريبة من المستخدم جغرافيًا"]} />
+
+| المعمارية | الوصف | المشكلة |
+|---|---|---|
+| <strong>Shared-memory</strong> (scale up) | CPUs ورامات وهاردات كتير تحت OS واحد. | التكلفة بتزيد أسرع من الأداء، وفي مكان جغرافي واحد. |
+| <strong>Shared-disk</strong> | ماكينات مستقلة بتشارك array هاردات بشبكة سريعة (data warehouses). | الـ locking والـ contention بيحدوا التوسع. |
+| <strong>Shared-nothing</strong> ⭐ | كل نود (ماكينة) مستقلة بالكامل، والتنسيق على الشبكة في السوفتوير. | تعقيد في الأبلكيشن — وده موضوع الجزء ده كله. |
+
+طريقتين لتوزيع الداتا (وغالبًا بيتعملوا مع بعض): <Hl c="b">Replication</Hl> (نسخ نفس الداتا) و <Hl c="o">Partitioning</Hl> (تقطيعها، الفصل 6).
+
+## ليه Replication؟
+
+عشان: الداتا تبقى قريبة من المستخدم (latency)، السيستم يفضل شغال لو جزء وقع (availability)، وتوزيع القراءات على ماكينات أكتر (read throughput). <Hl c="u">الصعوبة كلها في التعامل مع التغييرات</Hl> — لو الداتا ثابتة خلاص انسخها مرة وخلّصت.
+
+تلات استراتيجيات أساسية: <strong>Single-leader</strong>، <strong>Multi-leader</strong>، <strong>Leaderless</strong>.
+
+## Single-Leader (Leader–Follower)
+
+<Flow items={[{"t": "Client writes", "c": 1, "s": "للـ leader بس"}, "→", {"t": "Leader", "c": 2, "s": "master / primary"}, "⇉", {"t": "Followers", "c": 3, "s": "replicas / slaves بيطبقوا الـ replication log بنفس الترتيب"}]} />
+
+القراءة ممكن من أي حد، الكتابة من الـ leader بس. مستخدم في PostgreSQL، MySQL، Oracle Data Guard، SQL Server AlwaysOn، MongoDB، RethinkDB، Espresso، وكمان Kafka و RabbitMQ.
+
+### Synchronous vs Asynchronous
 
 <Grid2>
-<Card title="Shared-memory" c={4}>
+<Card title="Synchronous" c={1}>
 
-CPUs ورامات تحت OS واحد. التكلفة بتزيد أسرع من الأداء، وفي مكان جغرافي واحد.
+الـ leader يستنى الـ follower يأكد قبل ما يقول للعميل "تم". ✅ الـ follower نسخة مضمونة. ❌ لو الـ follower وقف، كل الكتابات تقف. عمليًا: follower واحد sync والباقي async = <En>semi-synchronous</En>.
 
 </Card>
-<Card title="⭐ Shared-nothing" c={3}>
+<Card title="Asynchronous" c={4}>
 
-كل نود مستقلة، والتنسيق على الشبكة في السوفتوير. ده موضوع الجزء ده.
+الـ leader مايستناش. ✅ مش بيقف أبدًا. ❌ لو الـ leader مات قبل ما يوصّل، <strong>كتابات اتأكدت للعميل هتضيع</strong>. ومع ذلك منتشر جدًا، خصوصًا مع followers كتير أو موزعين جغرافيًا.
 
 </Card>
 </Grid2>
 
-طريقتين بيتجمعوا غالبًا: **replication** نسخ نفس الداتا، و **partitioning** تقطيعها. الصعوبة في التغييرات. لو الداتا ثابتة، انسخها مرة وخلّصت.
+### إضافة follower جديد من غير downtime
 
-ليه replication؟ الداتا قريبة من المستخدم، السيستم يفضل شغال لو جزء وقع، والقراءات تتوزع. ثلاث استراتيجيات: single-leader، multi-leader، leaderless.
+<Flow items={[{"t": "Snapshot", "c": 1, "s": "متسق للـ leader بدون lock"}, "→", {"t": "Copy", "c": 2, "s": "للنود الجديدة"}, "→", {"t": "Catch up", "c": 3, "s": "يطلب كل التغييرات من بعد position الـ snapshot (log sequence number / binlog coordinates)"}]} />
 
-## Single-leader
+### لما نود تقع
 
-الكتابة للـ leader بس. الـ followers يطبقوا الـ replication log بنفس الترتيب. القراءة من أي حد. مستخدم في Postgres و MySQL و Mongo و Kafka.
+- <strong>Follower وقع:</strong> سهلة — <En>catch-up recovery</En>: يشوف آخر transaction عنده في الـ log ويطلب الباقي.
+- <strong>Leader وقع → Failover:</strong> (1) نكتشف إنه مات (غالبًا timeout)، (2) نختار leader جديد (انتخاب أو controller — الأفضل اللي عنده أحدث داتا = مشكلة consensus)، (3) نعيد ضبط السيستم (العملاء يكتبوا للجديد، والقديم لما يرجع يعرف إنه بقى follower).
+
+<Box type="warn" title="الـ Failover مليان ألغام">
+
+- مع async: الـ leader الجديد ممكن مايكونش عنده آخر كتابات القديم. لما القديم يرجع، الكتابات دي غالبًا <strong>بتترمي</strong> — ودي كارثة لو أنظمة تانية شافتها. (حادثة GitHub: follower متأخر بقى leader وأعاد استخدام primary keys كانت متخزنة في Redis → بيانات خاصة اتكشفت لمستخدمين غلط!)
+- <strong>Split brain:</strong> نودين فاكرين نفسهم leader → الاتنين بيقبلوا كتابات → داتا بايظة. ولو آلية القتل (STONITH) اتعملت غلط ممكن الاتنين يقفلوا.
+- <strong>الـ timeout المناسب:</strong> طويل = recovery بطيء. قصير = failovers مالهاش لازمة (مثلًا لما يبقى فيه spike في الحمل) وده يزود المشكلة.
+
+عشان كده فرق تشغيل كتير بتفضل الـ failover اليدوي.
+
+</Box>
+
+### إزاي الـ Replication Log بيتنفذ؟
+
+| الطريقة | الفكرة | المشاكل |
+|---|---|---|
+| <strong>Statement-based</strong> | ابعت جمل SQL نفسها (INSERT/UPDATE). | دوال non-deterministic زي `NOW()` و `RAND()`، auto-increment لازم نفس الترتيب بالظبط، triggers و stored procedures. (MySQL القديمة استخدمته.) |
+| <strong>WAL shipping</strong> | ابعت الـ WAL نفسه (بايتات على مستوى الديسك). PostgreSQL و Oracle. | مربوط جدًا بالـ storage engine — غالبًا لازم نفس الـ version على الليدر والفولورز، فالـ upgrade من غير downtime صعب. |
+| <strong>Logical (row-based)</strong> | log منفصل بيوصف التغيير على مستوى الصف (insert بكل القيم، delete بالمفتاح، update بالقيم الجديدة). MySQL binlog. | ✅ منفصل عن الـ engine، ونسخ مختلفة تشتغل مع بعض، وأنظمة تانية تقدر تقراه = <strong>Change Data Capture</strong>. |
+| <strong>Trigger-based</strong> | في الأبلكيشن: triggers تكتب التغييرات في جدول ويقراه process خارجي (Databus, Bucardo). | Overhead أكبر وباجات أكتر — بس مرونة كاملة. |
+
+## مشاكل الـ Replication Lag
+
+مع async، الـ follower ممكن يكون متأخر — عادة كسور ثانية، بس تحت الضغط ممكن دقايق. ده بيدّي <En>eventual consistency</En>: "لو وقفت كتابة، في الآخر هيتساووا" — والـ"في الآخر" ده مش محدد! وده بيعمل 3 مشاكل مشهورة:
+
+| المشكلة | اللي بيحصل | الضمان المطلوب والحل |
+|---|---|---|
+| 😱 <strong>اختفاء كتابتك</strong> | كتبت كومنت وعملت refresh → القراءة راحت لـ follower متأخر → الكومنت مش موجود! | <strong>Read-your-writes</strong>: اقرا الحاجات اللي ممكن اليوزر يعدلها (بروفايله) من الـ leader؛ أو لمدة دقيقة بعد آخر تعديل اقرا من الـ leader؛ أو الكلاينت يفتكر timestamp آخر كتابة. وخد بالك من <strong>cross-device</strong> (كتب من الموبايل وفتح من اللابتوب). |
+| ⏪ <strong>الزمن بيرجع لورا</strong> | refresh مرتين: أول مرة من follower محدّث (شاف الكومنت)، تاني مرة من follower متأخر (اختفى!). | <strong>Monotonic reads</strong>: كل يوزر يقرا دايمًا من نفس الـ replica (مثلًا hash على الـ user ID). |
+| 🔮 <strong>النتيجة قبل السبب</strong> | شايف الرد قبل السؤال، لأن البارتيشنز مختلفة بتتأخر بشكل مختلف. | <strong>Consistent prefix reads</strong>: الكتابات المرتبطة سببيًا تتكتب في نفس البارتيشن، أو تتبع الـ causal dependencies. |
+
+<Box type="tip" title="نصيحة عملية">
+
+اسأل نفسك: لو الـ lag بقى دقايق، الأبلكيشن هيتصرف إزاي؟ لو ده مش مقبول، صمم لضمانات أقوى. وخد بالك إن حلها في كود الأبلكيشن معقد وسهل يغلط — ده بالظبط اللي الـ transactions موجودة عشانه، بس كتير من الأنظمة الموزعة سابتها وقالت "eventual consistency حتمي" (وده مش دقيق).
+
+</Box>
+
+## Multi-Leader Replication
+
+أكتر من نود بيقبل كتابات، وكل leader هو follower للباقيين. نادرًا ماتستاهل جوه داتاسنتر واحد، بس مفيدة في:
 
 <Grid2>
-<Card title="Synchronous" c={5}>
+<Card title="🌍 Multi-datacenter" c={1}>
 
-الـ leader يستنى الـ follower يأكد قبل ما يقول للعميل "تم". آمن. لو الـ follower وقف، الكتابات تقف. عمليًا follower واحد sync والباقي async.
+leader في كل داتاسنتر. ✅ latency أحسن، يستحمل وقوع داتاسنتر، والشبكة بين الداتاسنترات لو وقعت مش بتوقف الكتابة.
 
 </Card>
-<Card title="Asynchronous" c={2}>
+<Card title="📱 Offline clients" c={4}>
 
-الـ leader مايستناش. مش بيقف. لو مات قبل ما يوصّل، كتابات اتأكدت للعميل تضيع. ده المنتشر، خصوصًا عبر القارات.
+كل جهاز (تقويم الموبايل) هو leader فيه داتابيز محلية وبيعمل sync لما النت يرجع. (CouchDB مصمم لكده.)
+
+</Card>
+<Card title="✍️ Collaborative editing" c={3}>
+
+Google Docs: كل يوزر بيكتب محلي وبيتعمل sync. ممكن تـ lock (زي single-leader) أو تخلي الوحدة صغيرة جدًا (ضغطة زرار).
 
 </Card>
 </Grid2>
 
-Follower وقع: يشوف آخر موضع في الـ log ويكمّل. Leader وقع: نكتشفه (timeout)، نختار leader جديد، والعملاء يكتبوا للجديد. القديم لما يرجع يبقى follower.
+<Box type="warn" title="العيب الكبير: Write Conflicts">
 
-<Box type="warn" title="الـ failover مليان ألغام">
-
-مع async، الـ leader الجديد ممكن مايكونش عنده آخر كتابات. لما القديم يرجع، الكتابات دي غالبًا بتترمي. ودي كارثة لو أنظمة تانية شافتها (حادثة GitHub: follower متأخر بقى leader وأعاد استخدام primary keys).
-
-**Split brain:** نودين فاكرين نفسهم leader والاتنين بيقبلوا كتابات. الـ timeout القصير يعمل failovers ملهاش لازمة. عشان كده فرق كتير بتفضل الـ failover اليدوي.
+يوزرين عدّلوا نفس العنوان في نفس الوقت على leaders مختلفين — الاتنين نجحوا محليًا، والتعارض بيتكتشف بعدين. وكمان فيه features بتبوظ مع multi-leader: auto-increment keys، triggers، integrity constraints. عشان كده الـ multi-leader يعتبر "منطقة خطر" يحسن تتجنبها لو تقدر.
 
 </Box>
 
-الـ log نفسه يا جملة SQL (بتتكسر مع `NOW()` و `RAND()`)، يا WAL على مستوى الديسك (مربوط بالـ version)، يا logical على مستوى الصف (الأنسب لـ change data capture)، يا triggers في الأبلكيشن.
+### التعامل مع الـ conflicts
 
-## لما النسخة تتأخر
+- <strong>Avoidance (الأفضل):</strong> كل ريكورد ليه leader "بيته" — مثلًا كل يوزر يكتب دايمًا لداتاسنتر واحد. بيبوظ بس لو غيّرت الـ home.
+- <strong>Convergence:</strong> لازم كل الـ replicas توصل لنفس القيمة في الآخر:
+  - <strong>LWW (Last Write Wins):</strong> كل كتابة ليها ID أو timestamp والأكبر يكسب — بسيط بس <strong>بيضيّع داتا</strong>.
+  - أولوية لـ replica معينة (برضه بيضيّع).
+  - دمج القيم (مثلًا "B/C" بترتيب أبجدي).
+  - تسجّل التعارض وتسيبه للأبلكيشن أو اليوزر.
+- <strong>Custom logic:</strong> on write (handler يتنفذ وقت اكتشاف التعارض — Bucardo) أو on read (كل النسخ ترجع والأبلكيشن/اليوزر يختار — CouchDB).
+- <strong>أفكار أوتوماتيك:</strong> <En>CRDTs</En> (data structures بتتدمج لوحدها — Riak)، <En>mergeable persistent data structures</En> (زي Git — three-way merge)، و<En>Operational Transformation</En> (Etherpad, Google Docs).
 
-مع async، التأخير عادة كسور ثانية، وتحت الضغط دقايق. "Eventual consistency" معناها لو وقفت كتابة هيتساووا في الآخر، والآخر ده مش محدد.
+### Topologies
 
-| المشكلة | اللي بيحصل | الضمان |
-| --- | --- | --- |
-| اختفاء كتابتك | كتبت كومنت وعملت refresh، والقراءة راحت لـ follower متأخر | Read-your-writes: اقرا بروفايلك من الـ leader |
-| الزمن بيرجع لورا | refresh من نسخة محدّثة وبعدين من نسخة متأخرة | Monotonic reads: نفس اليوزر يقرا من نفس الـ replica |
-| النتيجة قبل السبب | شايف الرد قبل السؤال لأن البارتشنز اتأخرت مختلف | Consistent prefix: الكتابات المرتبطة في نفس البارتشن |
+<Flow items={[{"t": "Circular", "c": 1, "s": "كل واحد للي بعده (MySQL)"}, {"t": "Star", "c": 2, "s": "واحد في النص بيوزع"}, {"t": "All-to-all", "c": 3, "s": "الكل للكل — الأكثر انتشارًا"}]} />
 
-<Box type="tip" title="نصيحة">
+الدايري والنجمة: لو نود واحدة وقعت السلسلة اتقطعت (ولازم كل نود تسجل ID عشان الرسالة ماتلفش للأبد). الـ all-to-all أكثر fault tolerance، بس ممكن الرسايل توصل <strong>بترتيب غلط</strong> (update قبل الـ insert) → الحل: <Hl c="y">version vectors</Hl>. وخد بالك إن conflict detection مش متطبق صح في سيستمات كتير.
 
-اسأل: لو الـ lag بقى دقايق، الأبلكيشن هيترصف إزاي؟ حلها في كود الأبلكيشن معقد. ده اللي الـ transactions موجودة عشانه.
+## Leaderless Replication (Dynamo-style)
 
-</Box>
+مفيش leader! الكلاينت (أو coordinator) بيبعت الكتابة لكذا replica مع بعض، والقراءة كمان من كذا replica. فكرة Amazon Dynamo، ومستخدمة في <strong>Riak، Cassandra، Voldemort</strong>.
 
-## Multi-leader
+### Quorums
 
-أكتر من نود بيقبل كتابات. نادرًا يستاهل جوه داتا سنتر واحد. مفيد بين داتا سنترز (الكتابة محلية)، وللأجهزة الأوفلاين (التقويم على الموبايل)، وللتحرير المشترك.
+<Box type="idea" title="المعادلة السحرية: w + r > n">
 
-<Box type="warn" title="العيب: write conflicts">
-
-اتنين عدّلوا نفس الحاجة على leaders مختلفين، الاتنين نجحوا محليًا، والتعارض يتكتشف بعدين. والـ auto-increment والـ triggers والـ constraints بتبوظ. منطقة خطر.
-
-</Box>
-
-أحسن حل إنك تتجنب التعارض: كل ريكورد ليه leader بيته. لو لازم تدمج: last-write-wins بيضيّع داتا، أو تدمج القيم، أو تسيبها لليوزر. الـ CRDTs بتندمج لوحدها. الـ topology: الكل للكل أكثر تحملًا، بس الرسايل ممكن توصل بترتيب غلط، فمحتاج version vectors.
-
-## Leaderless
-
-مفيش leader. الكتابة والقراءة لكذا replica. Dynamo و Cassandra و Riak.
-
-<Box type="idea" title="المعادلة">
-
-`w + r > n`: عدد اللي يأكدوا الكتابة زائد عدد اللي بتسألهم في القراءة أكبر من عدد النسخ. المجموعتين لازم يتقاطعوا، فواحدة على الأقل عندها آخر كتابة. المعتاد `n=3, w=2, r=2`.
+n = عدد الـ replicas، w = عدد اللي لازم يأكدوا الكتابة، r = عدد اللي بنسألهم في القراءة. لو <strong>w + r > n</strong> يبقى أكيد على الأقل نود واحدة من اللي بتقرا منهم عندها آخر كتابة (لأن المجموعتين لازم يتقاطعوا). المعتاد: n فردي (3 أو 5)، و w = r = (n+1)/2. مثلًا n=3, w=2, r=2 → تستحمل نود واحدة واقعة. n=5 تستحمل 2.<br/> تقدر تظبطها حسب الـ workload: قراءات كتير؟ w=n, r=1 (قراءة سريعة، بس نود واحدة واقعة توقف الكتابة).
 
 </Box>
 
-النسخة اللي رجعت تلحق بـ read repair (وقت القراءة) أو anti-entropy (في الخلفية). والـ quorum مش ضمان مطلق: sloppy quorum، وكتابتين concurrent، وقراءة وكتابة في نفس اللحظة، كلها ممكن ترجّع قديم.
+طب الـ replica اللي كانت واقعة ورجعت إزاي تلحق؟
 
-لو الشبكة اتقطعت، sloppy quorum يكتب على أي نود متاحة، ولما الشبكة ترجع hinted handoff يرجّع الداتا لبيتها. ده بيزوّد الـ availability وبيكسر ضمان الـ quorum.
+<Grid2>
+<Card title="Read repair" c={1}>
 
-<Box type="story" title="عربية تسوق">
+وقت القراءة لو لقيت replica بقيمة قديمة (بالـ version number) تكتب لها الجديدة. كويس للداتا اللي بتتقرا كتير.
 
-السيرفر بيدي version لكل key. الكلاينت لما يكتب يبعت الـ version اللي قراه. السيرفر يسيب القيم اللي محدش منهم عارف التاني (siblings) والأبلكيشن يدمجهم. المسح محتاج tombstone، وإلا الـ union هيرجّع الحاجة. مع كذا replica يبقى version vector مش رقم واحد.
+</Card>
+<Card title="Anti-entropy" c={4}>
+
+process في الخلفية بيقارن الـ replicas ويصلح الفروقات (مش بترتيب، وممكن يتأخر).
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="حدود الـ Quorum — مش ضمان كامل">
+
+حتى مع w + r > n ممكن تقرا قيمة قديمة في حالات:
+
+- Sloppy quorum (تحت).
+- كتابتين concurrent — مين الأول؟ ولو LWW بالـ clocks ممكن كتابات تضيع.
+- قراءة وكتابة في نفس الوقت.
+- الكتابة نجحت في أقل من w → مابتترجعش في الـ replicas اللي نجحت.
+- نود فيها القيمة الجديدة وقعت واترجعت من replica قديمة.
+
+يعني دي <strong>eventual consistency</strong> ومفيش ضمانات read-your-writes ولا monotonic reads. ولازم تراقب الـ staleness (أصعب من single-leader لأن مفيش ترتيب ثابت للكتابات).
 
 </Box>
 
-Last-write-wins بالساعة بيوصّل لاتفاق وبيضيع كتابات. آمن بس لو كل key بيتكتب مرة واحدة.
+### Sloppy Quorums و Hinted Handoff
 
-<Checklist id="ddia-replication" title="Checklist الـ replication" items={[
-  "Single-leader هو الافتراضي لو مفيش سبب للتاني.",
-  "عارف مشاكل الـ lag: read-your-writes و monotonic و prefix.",
-  "الـ failover مش سحر: split brain وكتابات بتترمي.",
-  "`w + r > n` مش ضمان مطلق.",
-  "LWW بيضيّع داتا. الـ concurrent يعني محدش عارف التاني.",
+لو الشبكة قطعت والكلاينت مش واصل للـ n "الأصليين"، نقبل الكتابة على أي w نودز متاحة (حتى لو مش من "بيت" المفتاح)، ولما الشبكة ترجع تتنقل لبيتها الأصلي = <En>hinted handoff</En>. <Hl c="u">ده بيزود الـ write availability بس يكسر ضمان الـ quorum</Hl> — ده مجرد "ضمان durability" إن الداتا متخزنة في w مكان. وفي multi-datacenter: Cassandra/Voldemort بيعملوا n موزعة على الداتاسنترات و quorum محلي، و Riak بيخلي الـ replication بين الداتاسنترات async.
+
+### اكتشاف الكتابات الـ Concurrent
+
+الأحداث ممكن توصل بترتيب مختلف لكل نود — لو كل نود خلّت آخر قيمة شافتها، النودز مش هتتساوى أبدًا. الحلول:
+
+- <strong>LWW:</strong> نجبر ترتيب (timestamp) ونرمي الباقي. Cassandra بتعتمده. بيوصل لـ convergence بس <strong>بيضيّع كتابات اتقال للكلاينت إنها نجحت</strong>. الاستخدام الآمن الوحيد: كل key يتكتب مرة واحدة بس (immutable، زي UUID كمفتاح).
+- <strong>Happens-before:</strong> عملية B "بتعتمد" على A لو B عارفة بـ A أو مبنية عليها. لو مفيش واحدة عارفة التانية → <Hl c="p">concurrent</Hl>. "Concurrent" هنا مش معناها في نفس اللحظة بالظبط — معناها <strong>محدش فيهم كان عارف بالتاني</strong>.
+
+<Box type="story" title="مثال: عربية تسوق مشتركة (خوارزمية الـ version number)" icon="🍽️">
+
+1. السيرفر بيدي version number لكل key، ويزوده مع كل كتابة.
+2. الكلاينت لما يقرا بياخد كل القيم اللي لسه ماتدمجتش + الـ version.
+3. لما يكتب، لازم يبعت الـ version اللي قراه ويدمج كل اللي قراه.
+4. السيرفر يشيل كل القيم بـ version أقل أو يساوي، ويسيب القيم الأعلى (دي concurrent) كـ <strong>siblings</strong>.
+
+بعدين الأبلكيشن يدمج الـ siblings (مثلًا union للعربية). بس لو مسحت منتج، الـ union هيرجعه! → لازم <En>tombstone</En>. والـ CRDTs بتعمل ده أوتوماتيك.
+
+</Box>
+
+ومع كذا replica بدل version number واحد: <Hl c="b">Version vector</Hl> — version لكل replica لكل key، والكلاينت بيبعته مع الكتابة. Riak بيستخدم <En>dotted version vector</En> وبيبعته كـ"causal context". (version vector ≠ vector clock بالظبط بس قريبين.)
+
+## 🧪 Lab
+
+شغّل Postgres primary + replica بـ Docker (فيه images جاهزة زي `bitnami/postgresql` بتدعم replication بـ env vars — راجع الـ docs).
+
+1. اكتب في الـ primary واقرا من الـ replica فورًا.
+2. وقّف الـ replica، اكتب كذا صف، ورجّعها — شوف الـ catch-up.
+3. شوف الـ lag بنفسك:
+
+```sql
+-- على الـ primary
+SELECT client_addr, state, replay_lag FROM pg_stat_replication;
+```
+
+<Checklist id="ddia-ch5" title="✅ الخلاصة — Checklist" items={[
+  "Replication لـ: availability، latency، read scalability، والشغل وقت الانقطاع.",
+  "Single-leader: بسيط وبدون conflicts. Multi-leader: أحسن للـ multi-DC والـ offline بس فيه conflicts. Leaderless: مرن مع quorums.",
+  "Sync آمن بس ممكن يقف؛ async سريع بس ممكن يضيّع كتابات وقت الـ failover.",
+  "الـ failover: split brain، كتابات ضايعة، وتحديد الـ timeout.",
+  "Replication logs: statement، WAL، logical (row) ← الأفضل، trigger.",
+  "الـ lag بيطلب ضمانات: read-your-writes، monotonic reads، consistent prefix reads.",
+  "Quorum w+r>n مش ضمان مطلق. Sloppy quorum + hinted handoff للـ availability.",
+  "Concurrent = محدش عارف التاني. LWW بيضيّع داتا؛ version vectors + siblings بتحافظ عليها."
 ]} />
 
 <Quiz>
-  <Q n={1} q="ليه async replication منتشر رغم إنه ممكن يضيّع كتابات؟">لأن الـ sync يوقف الكتابة كلها لو follower واحد بطّأ، وده أقسى مع نسخ كتير أو عبر القارات.</Q>
-  <Q n={2} q="اليوزر كتب كومنت وعمل refresh ومش شايفه. اسم الضمان الناقص؟">Read-your-writes. الحل يقرا من الـ leader لفترة بعد الكتابة.</Q>
-  <Q n={3} q="`n=3` و `w=2` و `r=2`. ليه فيه تقاطع؟">لأن `2+2 > 3`. مجموعة الكتابة ومجموعة القراءة لازم يشتركوا في نود على الأقل.</Q>
-  <Q n={4} q="امتى multi-leader يستاهل؟">بين داتا سنترز، أو أجهزة أوفلاين، أو تحرير مشترك. جوه داتا سنتر واحد نادرًا يستاهل تعقيد التعارض.</Q>
+  <Q n={1} q="يوزر عدل بروفايله وعمل refresh ولقى القديم — اسم المشكلة والحل؟">Read-your-writes. اقرا البروفايل من الـ leader (أو حسب timestamp آخر كتابة).</Q>
+  <Q n={2} q="n=5، عايز تستحمل نودين واقعين في القراءة والكتابة — w و r كام؟">w=3, r=3.</Q>
+  <Q n={3} q="إمتى LWW آمن؟">لما كل key يتكتب مرة واحدة ومايتعدلش (immutable).</Q>
+  <Q n={4} q="إيه هو split brain؟">نودين فاكرين نفسهم leader وبيقبلوا كتابات في نفس الوقت.</Q>
 </Quiz>

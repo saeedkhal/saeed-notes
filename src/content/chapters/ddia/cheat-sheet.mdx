@@ -1,55 +1,32 @@
 ---
 title: "Cheat Sheet: لو المشكلة… فكّر في…"
-short: Cheat Sheet
+short: "Cheat Sheet"
 order: 12
-label: الآخر
-badge: الآخر
-en: One-page decision guide
-keywords: cheatsheet · tradeoffs
-goal: صفحة واحدة قبل ما تختار أداة — المشكلة على الشمال، والاتجاه على اليمين.
-part: بعدها
-color: dark
+label: "الآخر"
+badge: "الآخر"
+en: "One-page decision guide"
+keywords: "cheatsheet · interview"
+goal: "صفحة واحدة ترجعلها لما تيجي تختار: المشكلة فوق والحل تحتها."
+part: "الداتا المشتقة"
+color: "dark"
 ---
 
-<Cheat items={[
-  ["الـ p99 عالي والمتوسط حلو", "Tail latency، head-of-line blocking، GC، أو compaction في LSM"],
-  ["داتا شجرية بتتحمل كلها مرة واحدة", "Document model"],
-  ["علاقات many-to-many معقدة", "Relational، ولو كل حاجة مرتبطة بكل حاجة فـ Graph"],
-  ["كتابات كتير جدًا (logs, metrics)", "LSM-tree (Cassandra, RocksDB)"],
-  ["قراءات متوقعة و transactions قوية", "B-tree (Postgres, MySQL)"],
-  ["تحليلات على ملايين الصفوف", "Warehouse + column storage + star schema"],
-  ["Rolling deploy والـ schema بتتغير", "Protobuf أو Avro، حقول جديدة optional وبـ default"],
-  ["الـ retries بتعمل تكرار", "Idempotency key"],
-  ["القراءات أكتر بكتير من الكتابات", "Single-leader + read replicas، وخد بالك من الـ lag"],
-  ["اليوزر مش شايف تعديله بعد refresh", "Read-your-writes: اقرا من الـ leader"],
-  ["داتا سنترز كتير أو أوفلاين", "Multi-leader + حل تعارض، أو تجنّب الكتابة على نفس الـ record"],
-  ["الكتابة تكمل حتى مع أعطال", "Leaderless + quorum (`w + r > n`)"],
-  ["الداتا أكبر من ماكينة", "Partitioning: range للـ range queries، أو hash للتوزيع"],
-  ["Hot key (مشهور)", "Salting، واجمع وقت القراءة"],
-  ["عدادات أو أرصدة بتضيع", "Atomic update، أو `SELECT FOR UPDATE`، أو compare-and-set"],
-  ["اتأكد إن مفيش… وبعدين اكتب", "Write skew: serializable (SSI) أو materialize التعارض"],
-  ["Backup أو report بيشوف أرقام متضاربة", "Snapshot isolation (MVCC)"],
-  ["Lock خلّص وزومبي لسه بيكتب", "Fencing tokens"],
-  ["محتاج leader election موزع", "ZooKeeper أو etcd (Raft / Zab). متكتبهاش"],
-  ["ترتيب أحداث بين نودز", "Logical clocks أو version vectors، مش ساعة الحائط"],
-  ["Transaction بين داتابيز وطابور", "تجنّب XA. استخدم outbox أو CDC ومستهلك idempotent"],
-  ["تحويل داتا ضخمة دوريًا", "Batch: Spark أو Flink، والـ output ملفات جديدة"],
-  ["الكاش أو السيرش لازم يلحق الداتابيز", "CDC مش dual writes"],
-  ["محتاج تاريخ كل تغيير", "Event sourcing + CQRS"],
-  ["مقاييس لحظية", "Stream windows على event time"],
-  ["طابور شغل والترتيب مش مهم", "RabbitMQ. لو الترتيب والـ replay مهمين: Kafka"],
-]} />
+<Cheat items={[["الـ p99 عالي رغم إن المتوسط حلو", "Tail latency amplification، head-of-line blocking، GC pauses، compaction (LSM)."], ["داتا شجرية بتتحمل كلها مرة واحدة", "Document model (locality)."], ["علاقات many-to-many كتير ومعقدة", "Relational، ولو كل حاجة مرتبطة بكل حاجة: Graph (Cypher)."], ["كتابات كتير جدًا (logs، metrics، events)", "LSM-tree (Cassandra, RocksDB)."], ["قراءات متوقعة + transactions قوية", "B-tree (Postgres, MySQL)."], ["تحليلات على ملايين الصفوف", "Data warehouse + column storage + star schema."], ["Rolling deploy والـ schema بتتغير", "Backward + forward compatibility؛ Protobuf/Avro؛ fields جديدة optional بـ default."], ["Retries بتعمل تكرار", "Idempotency keys / dedup."], ["القراءات أكتر بكتير من الكتابات", "Single-leader + read replicas (وخد بالك من replication lag)."], ["يوزر مش شايف تعديله بعد refresh", "Read-your-writes (اقرا من الـ leader)."], ["داتاسنترات كتير أو شغل offline", "Multi-leader + conflict resolution (CRDTs) — أو تجنب الـ conflicts بـ home leader."], ["Availability عالية للكتابة حتى مع أعطال", "Leaderless + quorums (w+r>n) + sloppy quorums."], ["الداتا أكبر من ماكينة", "Partitioning: range (range queries) أو hash (توزيع عادل) أو compound key."], ["Hot key (سيليبريتي)", "Salting المفتاح بأرقام عشوائية + جمع وقت القراءة."], ["عدادات/أرصدة بتضيع تحديثاتها", "Atomic UPDATE، أو SELECT FOR UPDATE، أو compare-and-set."], ["\"اتأكد إن مفيش… وبعدين اكتب\" (حجز، on-call)", "Write skew → serializable (SSI) أو materializing conflicts."], ["Backup أو report طويل بيشوف أرقام متضاربة", "Snapshot isolation (MVCC)."], ["Lock موزع وزومبي بيكتب بعد ما الـ lease انتهى", "Fencing tokens."], ["محتاج leader election / unique constraint موزع", "Consensus: ZooKeeper / etcd (Raft/Zab) — ماتكتبوش بنفسك."], ["ترتيب الأحداث بين نودز", "Logical clocks (Lamport) أو version vectors — مش الساعات الفيزيائية."], ["Transaction بين داتابيز و queue", "تجنب XA لو تقدر؛ استخدم CDC / outbox + idempotent consumers."], ["تحويل داتا ضخمة دوريًا (indexes، ML)", "Batch: Spark/Flink، والـ output ملفات immutable جديدة."], ["Search index / cache لازم يفضل متزامن مع الـ DB", "CDC (Debezium) + Kafka — مش dual writes."], ["محتاج audit كامل وتاريخ التغييرات", "Event sourcing + CQRS."], ["Real-time metrics / dashboards", "Stream analytics + windows على event time."], ["Task queue والترتيب مش مهم", "RabbitMQ (AMQP/JMS). ولو الترتيب + replay مهمين: Kafka."]]} />
 
-<Box type="idea" title="رسالة المذكرة">
+<Box type="interview" title="أسئلة إنترفيو بتتكرر من الكتاب ده">
 
-مفيش أداة الأحسن. كل حاجة tradeoff: الأداء ضد الضمانات، والبساطة ضد المرونة. اللي يفرق إنك تعرف النظام بيضمن إيه فعلًا، وإيه اللي ممكن يبوظ، وإزاي تصممه يستحمل.
+<Chips items={["LSM vs B-Tree", "Isolation levels والـ anomalies", "CAP بشكل صحيح", "Linearizability vs Serializability", "2PC ومشاكله", "Raft بشكل عام", "Replication lag guarantees", "Hash vs range partitioning", "Kafka vs RabbitMQ", "Exactly-once", "Fan-out on read vs write", "Percentiles"]} />
 
 </Box>
 
-<Checklist id="ddia-final" title="🏁 Checklist النهاية" items={[
-  "أوصف الحمل بـ percentiles مش بالمتوسط.",
-  "أختار موديل الداتا من شكل العلاقات مش من الموضة.",
-  "أفرّق بين LSM و B-tree، وبين leader و quorum.",
-  "أعرف مستوى العزل بيمنع أنهي باج.",
-  "أبني الكاش والسيرش من لوج، مش بكتابتين ورا بعض.",
-]} />
+<Box type="tip" title="رسالة الكتاب الكبيرة">
+
+مفيش أداة "الأحسن". كل حاجة <strong>trade-off</strong>: الأداء vs الضمانات، البساطة vs المرونة. اللي يفرق المهندس الكويس إنه يعرف <strong>الضمانات اللي بياخدها فعلًا</strong> من كل أداة (مش اللي مكتوب في التسويق)، ويعرف إيه اللي ممكن يبوظ وإزاي يصممه يستحمل.
+
+</Box>
+
+<Box type="idea" title="ملحوظة عن النسخة دي">
+
+النسخة الـ PDF اللي عندك (Early Release 2017) فيها الفصول من 1 لـ 11 بس. النسخة النهائية فيها فصل 12 "The Future of Data Systems" عن دمج الأنظمة (unbundling databases)، الـ dataflow من أول لآخر، الصحة والـ integrity، وأخلاقيات الداتا والخصوصية — يستاهل تقراه لو وصلتله.
+
+</Box>

@@ -1,0 +1,178 @@
+---
+title: "الـ Encoding والتطوّر"
+short: "Encoding & Evolution"
+order: 4
+label: "فصل ٤"
+badge: "الأساسيات · فصل ٤"
+en: "Encoding and Evolution"
+keywords: "protobuf · avro · compatibility · RPC"
+goal: "تغيّر الـ schema وتعمل rolling deploy من غير ما القديم والجديد يتخانقوا."
+part: "الأساسيات"
+color: "c4"
+---
+
+## المشكلة: الكود القديم والجديد عايشين مع بعض
+
+التطبيقات بتتغير، والـ schema بتتغير. بس التغيير مش بيحصل في لحظة واحدة:
+
+- في السيرفر: <En>rolling upgrade</En> — بتنزّل النسخة الجديدة على كام نود في المرة (من غير downtime).
+- في الكلاينت (موبايل/ديسكتوب): المستخدم ممكن مايحدثش أصلًا لشهور!
+
+<Grid2>
+<Card title="⬅️ Backward compatibility" c={1}>
+
+<strong>الكود الجديد</strong> يقرا داتا كتبها كود قديم. (سهلة نسبيًا — انت عارف الفورمات القديم.)
+
+</Card>
+<Card title="➡️ Forward compatibility" c={4}>
+
+<strong>الكود القديم</strong> يقرا داتا كتبها كود جديد. (أصعب — لازم القديم يتجاهل الحاجات اللي مايعرفهاش.)
+
+</Card>
+</Grid2>
+
+## أشكال الـ Encoding
+
+في الرام الداتا objects و pointers، وعلى الديسك أو الشبكة لازم تبقى <strong>بايتات متسلسلة</strong>. التحويل = <En>encoding / serialization / marshalling</En> والعكس decoding.
+
+### 1) فورمات خاصة بلغة معينة
+
+زي Java Serializable، Python pickle، Ruby Marshal. مريحة بس <Hl c="p">وحشة</Hl>:
+
+- مربوطة بلغة واحدة.
+- <strong>ثغرات أمنية:</strong> الـ decoding بيقدر يعمل instantiate لـ classes عشوائية = تنفيذ كود.
+- الـ versioning متهمل.
+- الأداء ضعيف (Java serialization مشهور ببطئه وحجمه).
+
+### 2) JSON و XML و CSV
+
+نصية، مقروءة، ومنتشرة. بس فيها مشاكل:
+
+<Box type="warn" title="مشاكل JSON/XML اللي بتعض">
+
+- <strong>الأرقام:</strong> XML/CSV مش بيفرقوا بين رقم ونص. JSON مش بيفرق بين integer و float. والأرقام أكبر من 2<sup>53</sup> بتبوظ في JavaScript (double). عشان كده Twitter بيرجع الـ tweet ID مرتين: رقم ونص!
+- <strong>Binary strings:</strong> مش مدعومة، فبنستخدم Base64 (+33% حجم).
+- <strong>Schemas:</strong> اختيارية ومعقدة (XML Schema, JSON Schema)، فكتير بيـ hardcode التفسير.
+- <strong>CSV:</strong> مفيش schema خالص، والـ escaping (فاصلة جوه القيمة) مش كل الناس بتطبقه صح.
+
+ومع ذلك: كويسين جدًا كـ <strong>فورمات تبادل بين شركات</strong> — الأهم إن الطرفين يتفقوا، مش الكفاءة.
+
+</Box>
+
+فيه binary variants لـ JSON (MessagePack, BSON, BJSON…) بس بتوفر حاجة بسيطة لأنها لسه بتكتب أسماء الـ fields في كل record.
+
+### 3) Thrift و Protocol Buffers
+
+Binary + <Hl c="y">schema إجباري</Hl> (IDL). أداة code generation بتطلعلك classes بلغتك. الفكرة الذكية: بدل ما تكتب اسم الـ field (`"userName"`) بتكتب <Hl c="g">field tag</Hl> (رقم زي 1، 2، 3) — حجم أصغر بكتير.
+
+Thrift عنده BinaryProtocol و <En>CompactProtocol</En> (بيدمج الـ tag والنوع في بايت، وأرقام variable-length). Protobuf شبه CompactProtocol.
+
+| التغيير | ينفع؟ | ليه |
+|---|---|---|
+| تغيير اسم field | ✅ | الاسم مش في الداتا المتشفرة أصلًا — الـ tag بس. |
+| تغيير رقم الـ tag | ❌ | كل الداتا القديمة هتبوظ. |
+| إضافة field جديد | ✅ بشرط | tag جديد. الكود القديم يتجاهله (forward ✓). والجديد يقرا القديم بشرط <strong>الـ field يبقى optional أو له default</strong> — لو required الكود الجديد هيفشل يقرا القديم. |
+| حذف field | ✅ بشرط | لازم يكون optional، و<strong>ماتستخدمش رقم الـ tag ده تاني أبدًا</strong>. |
+| تغيير النوع | ⚠️ | ممكن (int32 → int64) بس الكود القديم ممكن يقطع القيمة. Protobuf: optional → repeated مسموح. |
+
+### 4) Avro
+
+اتعمل عشان Hadoop. أصغر encoding فيهم: <Hl c="b">مفيش tags ولا أنواع في الداتا خالص</Hl> — مجرد قيم ورا بعض. طب إزاي تفهم؟ لازم تعرف الـ schema اللي اتكتبت بيها بالظبط.
+
+<Flow items={[{"t": "Writer's schema", "c": 4, "s": "اللي اتكتب بيه"}, "↔", {"t": "Schema resolution", "c": 3, "s": "مطابقة بالاسم"}, "↔", {"t": "Reader's schema", "c": 5, "s": "اللي الكود مستنيه"}]} />
+
+- المكتبة بتقارن الاتنين <strong>بأسماء الـ fields</strong> (فالترتيب مش مهم): field في الـ writer مش في الـ reader → يتجاهل. في الـ reader مش في الـ writer → ياخد الـ default.
+- القاعدة: <strong>تضيف أو تشيل fields ليها default بس</strong>. (و null لازم يتعمل بـ union type صريح — Avro مش عنده optional/required.)
+- طب الـ reader يعرف الـ writer's schema منين؟ فايل كبير: مرة واحدة في أوله. داتابيز: رقم version مع كل record وجدول schemas. شبكة: يتفقوا وقت الـ connection (Avro RPC).
+
+<Box type="idea" title="ميزة Avro الجامدة: Dynamic schemas">
+
+عشان مفيش tag numbers، تقدر <strong>تولّد الـ schema أوتوماتيك</strong> من schema الداتابيز (كل جدول record، كل عمود field) وتعمل dump. ولو الجدول اتغير، تولّد schema جديد والـ reader يطابق بالاسم. مع Thrift/Protobuf كان لازم حد يوزع الـ tags بإيده! كمان Avro مش محتاج code generation — مناسب للغات الـ dynamic.
+
+</Box>
+
+### مميزات الـ schemas عمومًا
+
+<Chips items={["حجم أصغر بكتير", "الـ schema = documentation دايمًا محدّث", "تقدر تتأكد من compatibility قبل الـ deploy", "Code generation + type checking"]} />
+
+## الداتا بتمشي إزاي؟ (Modes of Dataflow)
+
+### أ) عبر الداتابيز
+
+اللي بيكتب = encoder، واللي بيقرا = decoder (ممكن انت نفسك في المستقبل — "<strong>بتبعت رسالة لنفسك في المستقبل</strong>"). مع الـ rolling upgrade، نسخة قديمة ممكن تقرا داتا كتبتها نسخة جديدة → forward compatibility لازم.
+
+<Box type="warn" title="فخ خطير">
+
+كود قديم يقرا record فيه field جديد، يحوّله لـ object (الـ field يضيع)، يعدّل حاجة، ويكتبه تاني → <strong>الـ field الجديد اتمسح</strong>! لازم الكود يحافظ على الحقول المجهولة.
+
+</Box>
+
+<strong>"Data outlives code":</strong> الكود بيتبدل في دقايق، بس الداتا عمرها سنين. عشان كده الـ migration الكامل (rewrite) نادر، والداتابيز بتسيب القديم زي ما هو وتملا الـ null وقت القراءة. وفي الـ archival/backup تقدر تعيد الـ encoding بأحدث schema (Avro object container أو Parquet).
+
+### ب) عبر الخدمات: REST و RPC
+
+Client/Server — والسيرفر ممكن نفسه يبقى client لخدمة تانية = <En>SOA / Microservices</En>. الهدف: كل فريق ينشر خدمته مستقل → لازم compatibility بين النسخ.
+
+<Grid2>
+<Card title="REST" c={3}>
+
+فلسفة فوق HTTP: URLs للـ resources، cache control، auth، content negotiation. بسيطة ومتسقة مع الويب. (OpenAPI/Swagger للتوثيق.)
+
+</Card>
+<Card title="SOAP" c={2}>
+
+XML protocol معقد، WSDL، ومعتمد على الـ tooling. Interoperability بين الشركات كانت سيئة. بقى أقل انتشارًا.
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="الـ RPC معيوب من الأساس">
+
+فكرة RPC (من السبعينات): تخلي الـ network call شكلها <strong>function call محلية</strong> (location transparency). بس ده وهم:
+
+- الـ local call يا نجحت يا فشلت. الـ network call ممكن <strong>ترجع timeout</strong> ومتعرفش حصل إيه.
+- لو عملت retry ممكن تتنفذ <strong>مرتين</strong> → محتاج <Hl c="o">idempotence</Hl> (dedup).
+- الوقت مش متوقع خالص (شبكة زحمة، الطرف التاني مضغوط).
+- لازم تعمل encoding لكل البراميترات — مينفعش تبعت pointers أو objects كبيرة.
+- الطرفين ممكن يبقوا بلغات مختلفة (أزمة أنواع زي الأرقام الكبيرة في JS).
+
+الأدوات الحديثة (gRPC, Finagle, Rest.li) بتعترف بالفرق: futures/promises، streams، service discovery.
+
+</Box>
+
+<strong>Custom RPC</strong> (Thrift/gRPC) أسرع وأنسب للخدمات الداخلية جوه نفس الشركة، وREST أنسب للـ public APIs وأسهل في التجربة (curl). والـ compatibility: السيرفرات بتتحدث الأول، فلازم backward في الريكوستات و forward في الردود. ولو API عام، غالبًا هتحتاج تدعم versions قديمة للأبد (version في الـ URL أو الـ header).
+
+### ج) عبر الرسايل (Message Brokers)
+
+زي RPC بس asynchronous، والرسالة بتروح لوسيط (RabbitMQ, ActiveMQ, Kafka, NATS…). المميزات:
+
+<Chips items={["Buffer لو المستقبل مش متاح", "إعادة إرسال لو process وقع", "المرسل مش لازم يعرف IP المستقبل", "رسالة واحدة لكذا مستقبل", "فك الارتباط بين المرسل والمستقبل"]} />
+
+الطريقة: producer يبعت لـ <En>queue</En> أو <En>topic</En>، والـ broker يوصّلها لـ consumers/subscribers. المرسل مش بيستنى رد (لو عايز رد يبقى رسالة على queue تانية). والـ broker مش بيفرض data model — أي bytes.
+
+<strong>Actor model</strong> (Akka, Orleans, Erlang OTP): كل actor له state محلي ومش بيشاركه، وبيتواصل برسايل async. والـ distributed actors بتعمل نفس الفكرة على كذا نود — وبما إنها بتفترض أصلًا إن الرسايل ممكن تضيع، فالفرق بين المحلي والموزع أقل من RPC. بس لسه لازم تفكر في compatibility أثناء الـ rolling upgrade.
+
+## 🧪 Lab
+
+1. اعمل ملف `.proto` فيه message بـ 3 fields، وولّد منه كود (أو استخدم `protobufjs`).
+2. اعمل encode لرسالة، وبعدين ضيف field جديد بـ tag جديد واقرا الرسالة القديمة بالكود الجديد — هتشتغل.
+3. جرّب تغيّر رقم tag موجود واقرا القديم — هتشوف الداتا بايظة.
+4. قارن حجم نفس الـ object كـ JSON و Protobuf بـ `Buffer.byteLength`.
+
+راجع الـ docs بتاعة المكتبة لأي flag.
+
+<Checklist id="ddia-ch4" title="✅ الخلاصة — Checklist" items={[
+  "Rolling upgrades = نسخ قديمة وجديدة عايشين مع بعض → لازم backward + forward compatibility.",
+  "فورمات اللغة الواحدة: تجنبها (أمان + compatibility).",
+  "JSON/XML/CSV: منتشرين بس غامضين في الأنواع (الأرقام، الـ binary).",
+  "Thrift/Protobuf: field tags — ماتغيرش رقم tag، والجديد لازم optional.",
+  "Avro: writer's + reader's schema ومطابقة بالاسم — ممتاز للـ schemas المتولدة ديناميك.",
+  "الداتا بتعدي عبر: داتابيز، REST/RPC، أو message brokers/actors.",
+  "RPC بيحاول يخبي الشبكة — وده وهم: timeouts، retries، idempotence."
+]} />
+
+<Quiz>
+  <Q n={1} q="ضفت field جديد required في Protobuf — إيه اللي هيحصل؟">الكود الجديد هيفشل يقرا الداتا القديمة اللي مفيهاش الـ field (كسرت الـ backward compatibility).</Q>
+  <Q n={2} q="ليه Avro مش محتاج tag numbers؟">لأنه بيطابق الـ writer's schema مع الـ reader's schema بأسماء الـ fields.</Q>
+  <Q n={3} q="إيه مشكلة retry في RPC؟">ممكن الطلب الأول اتنفذ والرد اللي ضاع، فيتنفذ مرتين — لازم idempotency.</Q>
+</Quiz>

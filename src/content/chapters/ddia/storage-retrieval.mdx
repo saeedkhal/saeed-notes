@@ -1,0 +1,251 @@
+---
+title: "التخزين والاسترجاع: الداتابيز من جوه"
+short: "Storage & Retrieval"
+order: 3
+label: "فصل ٣"
+badge: "الأساسيات · فصل ٣"
+en: "Storage and Retrieval"
+keywords: "LSM · B-tree · OLAP · column storage"
+goal: "تفهم إزاي الـ storage engines شغالة من جوه (LSM vs B-tree) وليه التحليلات محتاجة column storage."
+part: "الأساسيات"
+color: "c3"
+---
+
+## أبسط داتابيز في الدنيا
+
+تخيل داتابيز عبارة عن فايل بتعمل له append: `set key value` بتضيف سطر في الآخر، و`get key` بتدور على آخر سطر للمفتاح ده.
+
+<Grid2>
+<Card title="الكتابة" c={3}>
+
+سريعة جدًا — مجرد append. وده نفس اللي بتعمله داتابيزات كتير جوه: <Hl c="g">log</Hl> (يعني سجل append-only).
+
+</Card>
+<Card title="القراءة" c={2}>
+
+كارثة — O(n): بتلف على الفايل كله.
+
+</Card>
+</Grid2>
+
+الحل: <Hl c="y">Index</Hl> = بنية إضافية مشتقة من الداتا الأساسية بتساعدك توصل بسرعة. وده <strong>trade-off أساسي</strong>:
+
+<Box type="idea" title="قاعدة ذهبية">
+
+كل index بيسرّع القراءة <strong>وبيبطّأ الكتابة</strong> (لازم يتحدث مع كل write). عشان كده الداتابيز مش بتعمل index لكل حاجة لوحدها — انت اللي بتختار حسب الـ queries بتاعتك.
+
+</Box>
+
+## Hash Indexes
+
+خلي في الرام <En>hash map</En>: كل key → الـ byte offset بتاعه في الفايل. ده بالظبط اللي بيعمله <En>Bitcask</En> (الـ engine الافتراضي في Riak). ممتاز لو المفاتيح قليلة تدخل الرام والقيم بتتحدث كتير (زي عداد مشاهدات فيديو).
+
+<strong>طب الفايل هيكبر للأبد؟</strong> لأ — نقسم الـ log لـ <En>segments</En>، ولما segment يوصل حجم معين نقفله ونبتدي واحد جديد، وفي الخلفية نعمل <Hl c="b">compaction</Hl> (نشيل المفاتيح المكررة ونسيب آخر قيمة) و<En>merge</En> للسيجمنتات. ولكل segment الـ hash map بتاعه.
+
+### تفاصيل التنفيذ
+
+<Chips items={["الفورمات: binary بدل CSV", "المسح: tombstone (ريكورد مخصوص للحذف)", "Crash recovery: snapshot للـ hash map على الديسك", "Partial writes: checksums", "Concurrency: writer thread واحد"]} />
+
+<Box type="tip" title="ليه append-only أحسن من التعديل في المكان؟">
+
+- الكتابة الـ sequential أسرع بكتير من الـ random (على HDD وكمان SSD).
+- الـ concurrency والـ crash recovery أبسط — مفيش قيمة نصها قديم ونصها جديد.
+- الـ merge بيمنع الـ fragmentation.
+
+</Box>
+
+<Box type="warn" title="عيوب الـ hash index">
+
+لازم كل المفاتيح تدخل في الرام (hash على الديسك أداؤه وحش)، و<strong>range queries مستحيلة عمليًا</strong> (عايز كل المفاتيح من kitty00000 لـ kitty99999؟ هتدور على كل واحد لوحده).
+
+</Box>
+
+## SSTables و LSM-Trees
+
+تعديل صغير بفرق كبير: خلي جوه كل segment المفاتيح <Hl c="y">مترتبة</Hl> = <En>Sorted String Table (SSTable)</En>. المميزات:
+
+1. <strong>Merge سهل وفعال</strong> زي merge sort، حتى لو الفايلات أكبر من الرام. ولو المفتاح في كذا segment ناخد الأحدث.
+2. <strong>Sparse index:</strong> مش محتاج تخزن كل المفاتيح في الرام — مفتاح كل كام كيلوبايت يكفي، لأن الترتيب بيخليك تعرف المفتاح هيبقى بين مين ومين وتمسح حتة صغيرة.
+3. ممكن تـ <strong>compress</strong> كل block قبل ما تكتبه — توفير مساحة و I/O.
+
+### طب إزاي نخلي المفاتيح مترتبة والكتابات جاية عشوائي؟
+
+<Flow items={[{"t": "Write", "c": 1, "s": "يتحط في"}, "→", {"t": "Memtable", "c": 2, "s": "شجرة متوازنة في الرام (red-black/AVL)"}, "→", {"t": "Flush", "c": 3, "s": "لما يكبر: يتكتب SSTable جديد"}, "→", {"t": "Compaction", "c": 4, "s": "merge في الخلفية"}]} />
+
+القراءة: دور في الـ memtable، بعدين أحدث segment، وبعدين اللي قبله… ولو السيرفر وقع؟ الـ memtable هيضيع، فبنكتب كل write كمان في <En>log</En> منفصل append-only عشان الـ recovery (وبيتمسح بعد الـ flush).
+
+ده اسمه <strong>LSM-Tree</strong> (Log-Structured Merge-Tree) — مستخدم في LevelDB و RocksDB و Cassandra و HBase (المستوحاة من Bigtable)، وفكرة شبيهة في <strong>Lucene</strong> (محرك Elasticsearch/Solr) للـ term dictionary.
+
+<Box type="tip" title="تحسينات أداء">
+
+- <strong>Bloom filter:</strong> عشان لو المفتاح مش موجود ماتلفش على كل الـ segments — بيقولك "أكيد مش موجود" بسرعة.
+- <strong>استراتيجيات الـ compaction:</strong> <En>size-tiered</En> (السيجمنتات الصغيرة الأحدث تتدمج في الأكبر — HBase) و<En>leveled</En> (مستويات، كل مستوى range محدد — LevelDB/RocksDB). Cassandra بتدعم الاتنين.
+- Range queries سهلة لأن الداتا مترتبة، والـ throughput في الكتابة عالي جدًا.
+
+</Box>
+
+## B-Trees — ملك الداتابيزات
+
+أشهر index من السبعينات، موجود في كل الـ relational DBs وكتير من غيرها. برضه بيخلي المفاتيح مترتبة، بس فلسفة مختلفة تمامًا:
+
+<Grid2>
+<Card title="LSM" c={1}>
+
+segments متغيرة الحجم (ميجات)، وبيكتب sequential دايمًا.
+
+</Card>
+<Card title="B-Tree" c={4}>
+
+الديسك متقسم <strong>pages</strong> ثابتة (غالبًا 4KB)، وبيعدل الصفحة <strong>في مكانها</strong>.
+
+</Card>
+</Grid2>
+
+فيه <En>root page</En>، وكل صفحة فيها مفاتيح و<strong>references</strong> لصفحات أولاد (كل واحدة مسؤولة عن range). بتنزل لحد <En>leaf page</En>. عدد الأولاد للصفحة = <En>branching factor</En> (غالبًا مئات). الشجرة دايمًا <Hl c="g">balanced</Hl>: n مفتاح = عمق O(log n). <strong>4 مستويات</strong> بصفحات 4KB و branching 500 تشيل لحد 256 تيرابايت!
+
+لو الصفحة اتملت وانت بتضيف: تتقسم نصين والأب يتحدث.
+
+### إزاي نخليه يستحمل الـ crash؟
+
+- الكتابة فوق صفحة عملية خطيرة (خصوصًا لو split بيعدل كذا صفحة) — لو وقع في النص الشجرة تبوظ.
+- الحل: <Hl c="o">WAL — Write-Ahead Log</Hl> (اسمه برضه redo log): أي تعديل يتكتب في log append-only <strong>قبل</strong> ما يتنفذ على الشجرة.
+- الـ concurrency: <En>latches</En> (locks خفيفة) عشان threads ماتشوفش الشجرة في حالة نص-نص.
+
+<Box type="tip" title="تحسينات على B-Trees">
+
+- Copy-on-write بدل WAL (LMDB) — الصفحة المعدلة تتكتب في مكان جديد. مفيد كمان للـ snapshots.
+- اختصار المفاتيح في الصفحات الداخلية (B+ tree فكرتها قريبة) = branching أعلى.
+- محاولة إن الـ leaf pages تبقى جنب بعض على الديسك للـ range scans.
+- Pointers بين الأوراق الأخوات عشان تمشي من غير ما ترجع للأب.
+- Fractal trees بتستلف أفكار من LSM.
+
+</Box>
+
+### ⚖️ LSM vs B-Tree — المقارنة اللي هتتسأل فيها
+
+|   | LSM-Tree | B-Tree |
+|---|---|---|
+| الكتابة | ✅ أسرع غالبًا (sequential، و write amplification أقل أحيانًا) | كل write = WAL + الصفحة (وأحيانًا الصفحة كلها عشان تغيير بايتات قليلة) |
+| القراءة | أبطأ شوية (يلف على memtable وكذا segment) | ✅ أسرع ومتوقعة |
+| المساحة | ✅ ضغط أحسن، fragmentation أقل | صفحات فيها مساحة فاضية |
+| Write amplification · (write واحد بيتحول لكام كتابة على الديسك) | موجود بسبب الـ compaction المتكرر — مهم على SSD لأنها بتستحمل عدد كتابات محدود | WAL + page |
+| العيب الكبير | ❌ الـ compaction ممكن يتداخل مع الطلبات ويعمل <strong>tail latency عالي</strong>. ولو الكتابة أسرع من الـ compaction الديسك يتملى. لازم تراقب ده بنفسك. | كل مفتاح موجود في مكان واحد بالظبط → ✅ <strong>transactions و locks على ranges أسهل</strong> |
+
+<Box type="interview" title="الخلاصة العملية">
+
+مفيش قاعدة ثابتة — <strong>جرّب على الـ workload بتاعك</strong>. الـ B-trees راسخة ومتوقعة، والـ LSM بتزيد شعبيتها في الأنظمة الـ write-heavy.
+
+</Box>
+
+## أنواع Indexes تانية
+
+| النوع | الفكرة |
+|---|---|
+| <strong>Secondary index</strong> | على عمود مش primary key، والقيم مش unique → كل entry يشاور على لستة IDs أو المفتاح يبقى (value + row id). مهمة جدًا للـ joins. |
+| <strong>Heap file</strong> | الصفوف نفسها متخزنة في مكان والـ indexes بتشاور عليه — مفيش تكرار. لو القيمة الجديدة أكبر وماتنقلتش لازم forwarding pointer. |
+| <strong>Clustered index</strong> | الصف نفسه متخزن جوه الـ index (InnoDB: الـ primary key clustered والـ secondary بيشاور على الـ PK). <strong>Covering index</strong> = بيخزن شوية أعمدة جواه فبعض الـ queries تتجاوب من الـ index لوحده. التمن: مساحة وكتابة أكتر. |
+| <strong>Multi-column (concatenated)</strong> | زي دليل التليفون (اسم العيلة، الاسم الأول) — مفيد بالترتيب ده بس. |
+| <strong>Multi-dimensional</strong> | لما عايز تبحث بـ 2 أبعاد مع بعض (lat/long في خريطة مطاعم، أو لون RGB، أو تاريخ + حرارة). B-tree عادي مش هيكفي → <strong>R-trees</strong> (PostGIS). |
+| <strong>Full-text / Fuzzy</strong> | بحث بالمرادفات والأخطاء الإملائية (edit distance). Lucene بيستخدم حاجة شبه <En>trie</En> اسمها Levenshtein automaton. |
+
+### كل حاجة في الرام؟ In-Memory DBs
+
+الرامات رخصت، فداتابيزات كتير بقت كلها في الرام (Memcached للكاش، VoltDB, MemSQL, Redis…). ولو عايز durability: battery-backed RAM، log على الديسك، snapshots دورية، أو replication.
+
+<Box type="idea" title="مفاجأة">
+
+ميزة الـ in-memory <strong>مش</strong> إنها مش بتقرا من الديسك (الـ OS أصلًا بيكاش الصفحات في الرام). الميزة الحقيقية إنها <Hl c="p">مش محتاجة تحوّل الداتا لفورمات ينفع يتكتب على الديسك</Hl> (encoding overhead)، وكمان بتقدم data structures صعب تتعمل على الديسك (زي Redis sets و priority queues). وفيه فكرة <En>anti-caching</En>: تطرد الأقل استخدامًا للديسك وترجعه وقت الحاجة.
+
+</Box>
+
+## OLTP vs OLAP — عالمين مختلفين
+
+| الخاصية | OLTP (Transaction Processing) | OLAP (Analytics) |
+|---|---|---|
+| القراءة | عدد صغير من الصفوف بالمفتاح | تجميع على ملايين الصفوف |
+| الكتابة | random، low latency من المستخدم | Bulk import (ETL) أو event stream |
+| مين بيستخدمه | العميل من خلال الأبلكيشن | المحلل الداخلي (business intelligence) |
+| الداتا | أحدث حالة | تاريخ الأحداث على مدار الزمن |
+| الحجم | GB → TB | TB → PB |
+| الـ bottleneck | Disk seek time | Disk bandwidth |
+
+### Data Warehouse
+
+داتابيز منفصلة للتحليلات، read-only، فيها نسخة من داتا كل أنظمة الـ OLTP في الشركة. ليه منفصلة؟ عشان الاستعلامات التحليلية التقيلة ماتضربش أداء النظام اللي العملاء شغالين عليه.
+
+<Flow items={[{"t": "OLTP DBs", "c": 1, "s": "مبيعات، مخازن، CRM…"}, "→", {"t": "ETL", "c": 4, "s": "Extract → Transform → Load"}, "→", {"t": "Data Warehouse", "c": 3, "s": "مُحسّن للتحليل"}]} />
+
+كلهم بيتكلموا SQL في الآخر، بس الـ internals مختلفة جدًا. أمثلة: Teradata, Vertica, Redshift، ومفتوحة المصدر زي Hive و Spark SQL و Impala و Presto.
+
+### Star و Snowflake Schemas
+
+<Box type="story" title="تشبيه: فاتورة سوبرماركت" icon="🍽️">
+
+في النص فيه <strong>Fact table</strong> ضخم: كل صف = حدث (بيع منتج معين في وقت معين) وفيه أرقام (الكمية، السعر) و foreign keys. حواليه <strong>Dimension tables</strong>: مين (العميل)، إيه (المنتج)، فين (الفرع)، إمتى (التاريخ — وفيه معلومات زي "هل اليوم ده عيد؟")، إزاي (الدفع). الشكل زي نجمة ⭐. ولو الـ dimensions نفسها اتقسمت لجداول أصغر (المنتج → الماركة → الفئة) يبقى <strong>Snowflake</strong> ❄️ (أكتر normalization، بس الـ star أبسط للمحللين). الـ fact tables ممكن تبقى عريضة جدًا (100+ عمود).
+
+</Box>
+
+## Column-Oriented Storage
+
+الـ fact table فيها تريليونات صفوف و100 عمود، بس الكويري الواحدة بتحتاج 4-5 أعمدة بس. في التخزين العادي (row-oriented) هتقرا الصف كله! الحل: <Hl c="y">خزّن كل عمود في فايل لوحده</Hl>، والصف رقم k = العنصر k في كل فايل.
+
+### Column Compression
+
+الأعمدة فيها تكرار كتير (منتجات قليلة مختلفة على ملايين المبيعات) → ضغط جامد. أشهر طريقة: <En>Bitmap encoding</En> — لكل قيمة مميزة bitmap (بت لكل صف)، ولو الـ bitmaps فاضية كتير نعمل <En>run-length encoding</En>. وبعدها `WHERE product_sk IN (30, 68, 69)` = عملية OR بين 3 bitmaps — سريعة جدًا.
+
+<Box type="tip" title="Vectorized processing">
+
+الـ bottleneck مش بس الديسك، كمان نقل الداتا من الرام للـ CPU cache. الأعمدة المضغوطة بتدخل في الـ L1 cache وتتعالج في loops ضيقة من غير function calls، وتقدر تستخدم SIMD. ده بيخلي الـ CPU كفء جدًا.
+
+</Box>
+
+<Box type="warn" title="ماتلخبطش">
+
+Cassandra و HBase عندهم <strong>column families</strong> — ده <strong>مش</strong> column-oriented storage! جوه الـ family بيخزنوا الصف كله مع بعض.
+
+</Box>
+
+### ترتيب الأعمدة
+
+- ماينفعش ترتب كل عمود لوحده (هتفقد مين بتاع مين) — لازم ترتب الصفوف كلها بمفتاح، وتختار المفتاح حسب الكويريز الشائعة (مثلًا التاريخ ثم المنتج).
+- العمود الأول المترتب بيتضغط جامد جدًا بالـ run-length.
+- Vertica فكرة حلوة: خزن <strong>نفس الداتا مترتبة بأكتر من طريقة</strong> على replicas مختلفة (بما إنك عامل replication أصلًا)، والكويري تختار الأنسب — شبه multiple secondary indexes.
+
+### الكتابة في column store
+
+Update-in-place مستحيل تقريبًا (ضغط + ترتيب). الحل؟ <strong>LSM-trees تاني!</strong> الكتابة تروح لـ in-memory store، وكل شوية تتدمج مع الملفات على الديسك. والكويري بتقرا من الاتنين.
+
+### Materialized Views و Data Cubes
+
+لو بتعمل نفس الـ aggregations (SUM, COUNT…) كتير، خزّن النتيجة جاهزة = <En>materialized view</En> (نسخة حقيقية مش مجرد كويري متخزنة، فلازم تتحدث مع الكتابة — غالية في OLTP بس منطقية في الـ warehouse). نوع منها: <En>OLAP cube</En> — جدول بأبعاد (تاريخ × منتج × …) وكل خلية فيها مجموع جاهز. سريع جدًا بس أقل مرونة (لو عايز تفلتر بحاجة مش بُعد مش هتنفع).
+
+## 🧪 Lab
+
+ابني أبسط داتابيز في الدنيا بـ bash (append-only log) وحس بالـ trade-off بنفسك:
+
+```bash
+db_set () { echo "$1,$2" >> database; }
+db_get () { grep "^$1," database | sed -e "s/^$1,//" | tail -n 1; }
+
+db_set 42 '{"name":"Cairo"}'
+db_set 42 '{"name":"Giza"}'
+db_get 42   # بيرجع آخر قيمة
+```
+
+وبعدين في Postgres: اعمل جدول فيه مليون صف وقارن `EXPLAIN ANALYZE` لكويري قبل وبعد `CREATE INDEX` — وقيس وقت الـ `INSERT` كمان.
+
+<Checklist id="ddia-ch3" title="✅ الخلاصة — Checklist" items={[
+  "OLTP: كويريز كتير صغيرة بالـ index، والـ seek time هو العائق. OLAP: كويريز قليلة بتمسح ملايين الصفوف، والـ bandwidth هو العائق.",
+  "مدرستين في OLTP: Log-structured (Bitcask, SSTables, LSM, LevelDB, Cassandra, HBase, Lucene) و Update-in-place (B-trees).",
+  "LSM بتحول الـ random writes لـ sequential = write throughput عالي.",
+  "B-Tree: صفحات ثابتة + WAL، قراءة متوقعة، ومناسب للـ transactions.",
+  "Indexes تانية: secondary, clustered, covering, multi-dimensional (R-tree), fuzzy.",
+  "Column storage + compression + vectorization = تحليلات سريعة."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه الـ SSTable بيسمح بـ sparse index؟">لأن المفاتيح مترتبة، فتعرف المفتاح محصور بين أنهي مفتاحين في الـ index وتمسح block صغير.</Q>
+  <Q n={2} q="وظيفة الـ Bloom filter في LSM؟">يقولك بسرعة إن المفتاح "أكيد مش موجود" فماتلفش على كل الـ segments.</Q>
+  <Q n={3} q="ليه الـ WAL ضروري في B-Tree؟">عشان لو حصل crash في نص تعديل كذا صفحة (split) تقدر ترجّع الشجرة لحالة سليمة.</Q>
+  <Q n={4} q="كويري تحليلية بتقرا 3 أعمدة من 100 — تختار تخزين إيه؟">Column-oriented.</Q>
+</Quiz>

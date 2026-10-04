@@ -1,67 +1,160 @@
 ---
-title: مشاكل الأنظمة الموزعة
-short: مشاكل التوزيع
+title: "مشاكل الأنظمة الموزعة: أي حاجة ممكن تبوظ هتبوظ"
+short: "Trouble with Distributed"
 order: 8
-label: فصل ٨
-badge: الموزعة · فصل ٨
-en: Partial failure · clocks · timeouts · fencing tokens
-keywords: timeouts · clocks · fencing
-goal: تبطل تفتكر الشبكة والساعة زي الماكينة الواحدة، وتعرف تحمي نفسك من الزومبي.
-part: الموزعة
-color: c3
+label: "فصل ٨"
+badge: "الداتا الموزعة · فصل ٨"
+en: "The Trouble with Distributed Systems"
+keywords: "network · clocks · GC pauses · fencing"
+goal: "تفهم ليه الشبكة والساعات والـ processes مش موثوقين، وإزاي تصمم وانت عارف ده."
+part: "الداتا الموزعة"
+color: "c3"
 ---
 
-## الفشل الجزئي
+## Partial Failures
 
-على ماكينة واحدة، يا البرنامج شغال يا واقع. في النظام الموزع، جزء شغال وجزء لأ، ومش دايمًا تقدر تفرّق. <Hl c="o">ده partial failure</Hl>، وهو اللي بيخلي التوزيع صعب.
+على كمبيوتر واحد: يا الحاجة شغالة يا مش شغالة (deterministic). لو فيه عطل في الهاردوير، الكمبيوتر غالبًا بيقع كله (أحسن من إنه يطلع نتيجة غلط). في السيستم الموزع: <Hl c="p">جزء بايظ وجزء شغال</Hl>، وبشكل <strong>nondeterministic</strong> — ممكن مش عارف حتى إذا كانت العملية نجحت!
 
-لو تقدر تخلي حاجتك على ماكينة واحدة، اعمل كده. الـ fault tolerance والـ latency الجغرافي هما اللي بيجبروا التوزيع. وعدم الاعتمادية مش قانون طبيعة؛ ده اختيار تكلفة: شبكة رخيصة وغير مضمونة.
+<Grid2>
+<Card title="🖥️ Supercomputer (HPC)" c={1}>
 
-## الشبكة
+لو نود باظت، وقّف كله وارجع من checkpoint. كأنه كمبيوتر واحد كبير.
 
-الرسالة ممكن تضيع، أو تتأخر، أو توصل مرتين. ومش هتعرف الفرق بين "النود ماتت" و "الرسالة لسه في الطريق". الأداة الوحيدة timeout، وهي مش دقيقة:
+</Card>
+<Card title="☁️ Cloud / Internet services" c={4}>
 
-- طويل: الاكتشاف بطيء واليوزر مستني.
-- قصير: بتفتكر نود سليمة ماتت، وتعمل failover ملوش لازمة، والضغط يزيد.
+لازم تفضل شغالة دايمًا، هاردوير عادي (أعطال أكتر)، شبكة IP، آلاف النودز = دايمًا فيه حاجة بايظة. لازم <strong>fault tolerance في السوفتوير</strong>.
 
-قياس الـ timeout بساعة تتظبط من NTP غلط، لأن NTP يرجّعها لورا أو يقفزها. استخدم monotonic clock بتعدي لقدام بس.
+</Card>
+</Grid2>
 
-## الساعات
+<Box type="idea" title="الفكرة">
 
-الساعات بتنحرف بين الماكينات. Last-write-wins بالـ timestamp يضيّع كتابات في صمت: الكتابة اللي ساعتها متأخرة تكسب حتى لو حصلت الأول. الترتيب بين نودز محتاجه logical clocks مش ساعة الحائط.
-
-الـ GC pause يوقف الـ process ثواني وهو فاكر إن الزمن ماشي. يصحى ويكمل وهو متأخر عن العالم. أي قرار مبني على "أنا لسه ماسك الـ lock" يبقى غلط بعد الوقفة دي.
-
-## الزومبي والـ fencing
-
-كلاينت خد lease أو lock، وبعدين اتعمل له GC أطول من مدة الـ lease. حد تاني مسك القفل. الأول يصحى ويكتب. الاتنين فاكرين نفسهم أصحاب الحق.
-
-<Box type="idea" title="Fencing token">
-
-كل مرة القفل يتاخد، رقم بيزيد. التخزين بيرفض أي كتابة برقم أقل من آخر رقم شافه. الزومبي بيكتب بـ token قديم فيترفض.
+زي ما TCP بيبني قناة موثوقة فوق IP مش موثوق، بنبني سيستم موثوق من أجزاء مش موثوقة — بس دايمًا فيه حد لده. ولازم تفترض إن <strong>أي حاجة ممكن تبوظ</strong>، وتختبر السيناريوهات دي.
 
 </Box>
 
-القرار بالأغلبيه (quorum) بيحتاج أغلبية نودز، مش "أغلب اللي شايفهم". نود معزولة شايفة نفسها لوحدها متاخدش قرار.
+## الشبكة مش موثوقة
 
-## Safety و liveness
+معظم الأنظمة الموزعة <En>asynchronous packet networks</En>: مفيش ضمان إمتى الرسالة توصل ولا إذا كانت هتوصل. لما تبعت request ومايجيلكش رد، ممكن يكون:
 
-- **Safety:** حاجة وحشة مش هتحصل. "مفيش اتنين leaders في نفس الوقت." مفيش شرط على الزمن.
-- **Liveness:** حاجة كويسة هتحصل في الآخر. "الريكوست هيرد." مسموح يكون ليها شروط (الأغلبية شغالة والشبكة رجعت).
+<Chips items={["الريكوست ضاع", "مستني في طابور", "النود البعيدة وقعت", "النود وقفت مؤقتًا (GC)", "اتعالج والرد ضاع", "الرد اتأخر"]} />
 
-النماذج دي تبسيط. الواقع فيه firmware bug وديسك بيتمسح. النظرية بتثبت الخوارزمية، والـ implementation لسه بيقابل المستحيل.
+<Hl c="u">مستحيل تعرف الفرق</Hl>. الحل الوحيد العملي: <strong>timeout</strong>. وفي الواقع: كابلات بتتقطع (حتى أسماك قرش بتعض كابلات تحت البحر!)، أخطاء configuration، swich firmware upgrade بيوقف الشبكة دقايق، network partitions. حتى لو نادرة لازم السوفتوير يعرف يتعامل معاها.
 
-<Checklist id="ddia-trouble" title="Checklist التوزيع" items={[
-  "الـ timeout مش بيفرق بين التأخير والموت.",
-  "ترتيب الأحداث بـ logical clock مش ساعة الحائط.",
-  "القفل الموزع معاه fencing token.",
-  "الأغلبية أغلبية الكل مش أغلبية اللي شايفهم.",
-  "لو ماكينة واحدة تكفي، التوزيع مش مكسب.",
+### اكتشاف الأعطال
+
+أحيانًا فيه feedback صريح (connection refused لو مفيش process على البورت، الـ OS بيبلّغ لو الـ process مات، أو الـ switch يقولك اللينك وقع). بس غالبًا لازم timeout + retries، وفي الآخر تعلن إن النود ماتت.
+
+### Timeouts والتأخير المفتوح (Unbounded delay)
+
+- <strong>Timeout طويل:</strong> انتظار طويل قبل ما تكتشف الوفاة.
+- <strong>Timeout قصير:</strong> ممكن تعلن نود ماتت وهي بس بطيئة → شغلها يتنقل لغيرها → ضغط أكتر → <strong>cascading failure</strong>. وممكن العملية تتنفذ مرتين.
+- ليه التأخير متغير؟ <strong>الطوابير</strong> في كل حتة: الـ switch، الـ OS لما الـ CPUs مشغولة، الـ VM monitor، TCP flow control، وإعادة إرسال TCP. وفي الكلاود: <En>noisy neighbors</En>.
+- الحل الأذكى: timeout تكيّفي بيقيس توزيع الـ response time (زي <En>Phi Accrual failure detector</En> في Akka و Cassandra).
+
+<Box type="story" title="ليه شبكة التليفون الأرضي مختلفة؟" icon="🍽️">
+
+المكالمة بتحجز <strong>circuit</strong> بـ bandwidth ثابت طول المكالمة → delay محدود (synchronous network). الإنترنت بيستخدم packet switching لأنه مُحسّن للـ <strong>bursty traffic</strong> (تنزيل ملف مايعرفش الـ bandwidth اللي محتاجه). Circuit = عزل مضمون وموارد ضايعة؛ Packet = استغلال أعلى وتأخير متغير. <strong>الـ unbounded delay مش قانون طبيعة، ده اختيار تكلفة</strong>.
+
+</Box>
+
+## الساعات مش موثوقة
+
+كل ماكينة ليها ساعة (كريستال كوارتز) مش دقيقة 100%. ومحتاجين الوقت في: timeouts، percentiles، صلاحية الكاش، timestamps للأحداث.
+
+<Grid2>
+<Card title="🕐 Time-of-day clock" c={1}>
+
+وقت الحائط (`System.currentTimeMillis()`). متزامن بـ NTP — يعني ممكن <strong>يرجع لورا فجأة</strong>! وبيتجاهل leap seconds غالبًا. ماينفعش لقياس المدد.
+
+</Card>
+<Card title="⏱️ Monotonic clock" c={4}>
+
+(`System.nanoTime()`) بيمشي لقدام دايمًا. ينفع لقياس المدد (timeouts). قيمته المطلقة مالهاش معنى، ومينفعش تقارنه بين ماكينتين.
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="مشاكل التزامن (NTP)">
+
+الكوارتز بينحرف (Google بتفترض 200ppm = 17 ثانية لو اتظبطت مرة في اليوم)، ساعة بعيدة أوي عن NTP ممكن ترفض أو تتظبط بالعافية، firewall بيمنع NTP، تأخير الشبكة بيحد من الدقة، سيرفرات NTP غلط، leap seconds وقّعت أنظمة كبيرة، والـ VMs ساعتها بتقفز لما الـ CPU يتشارك. والأخطر: <strong>ساعة بايظة غالبًا مش بتوقع حاجة — بتضيّع داتا في صمت</strong>. لازم تراقب الـ clock offsets وتشيل النود اللي بتنحرف.
+
+</Box>
+
+### الاعتماد على الساعات — أمثلة خطر
+
+- <strong>LWW بالـ timestamps</strong> (Cassandra, Riak): نود ساعتها متأخرة كتاباتها هتضيع في صمت حتى لو حصلت بعد! والـ timestamps مش بتفرق بين sequential و concurrent. الحل: <En>logical clocks</En> (عدادات متزايدة) بدل الساعات الفيزيائية.
+- <strong>الساعة رقم بـ confidence interval</strong> مش نقطة. Google Spanner بيستخدم <En>TrueTime API</En> اللي بيرجع [earliest, latest]، ولو فترتين مش متقاطعتين يبقى الترتيب أكيد. وبيستنى طول الفترة قبل الـ commit (وعشان كده بيحطوا GPS وساعات ذرية في كل داتاسنتر عشان الفترة ~7ms).
+- <strong>Snapshot isolation موزع</strong> محتاج transaction IDs متزايدة على مستوى global — الساعات ممكن تنفع لو الـ uncertainty معروف (Spanner).
+
+### Process Pauses ⏸️
+
+<Box type="story" title="مشكلة الـ lease" icon="🍽️">
+
+Leader ماسك <strong>lease</strong> لمدة 10 ثواني. الكود: "لو الـ lease فاضل فيه أكتر من 10ms، نفّذ الريكوست". فجأة الـ process وقف 15 ثانية بين الشرط والتنفيذ… لما يصحى مش عارف إنه نام، وبينفذ — وبقى فيه leader تاني أصلًا!
+
+</Box>
+
+أسباب التوقف: <strong>GC stop-the-world</strong> (أحيانًا دقايق)، VM اتعملها suspend/live migration، اللابتوب اتقفل، context switch و steal time، disk I/O متزامن (حتى class loading في Java)، swapping/thrashing، أو `SIGSTOP`. وعلى ماكينة واحدة عندنا mutexes و semaphores، بس الأنظمة الموزعة مفيهاش shared memory.
+
+حلول جزئية: أنظمة <En>hard real-time</En> (طيارات وعربيات — مكلفة جدًا وبتقلل throughput)، أو التعامل مع الـ GC كـ outage مخطط (النود تتشال من الترافيك قبل الـ GC، أو تعمل restart دوري).
+
+## الحقيقة والأكاذيب: مين بيحدد الحقيقة؟
+
+النود مش بتقدر تثق في حكمها على نفسها. ممكن تبقى شغالة بس الكل شايفها ميتة (رسايلها مش واصلة، أو كانت واقفة GC).
+
+<Box type="idea" title="الحقيقة = رأي الأغلبية">
+
+القرارات المهمة بتتاخد بـ <strong>quorum</strong> (أغلبية النودز). لو الأغلبية أعلنت إنك ميت، انت ميت حتى لو مش حاسس. والأغلبية مش ممكن تبقى مجموعتين في نفس الوقت → مفيش قرارات متعارضة.
+
+</Box>
+
+### Fencing Tokens 🎫
+
+مشكلة: client أخد lock، عمل GC pause طويل، الـ lock انتهى وأخده client تاني، الأول صحي وكتب وهو فاكر نفسه لسه ماسك → داتا بايظة (حصلت فعلًا في HBase).
+
+<Flow items={[{"t": "Lock service", "c": 1, "s": "كل مرة يدي lock يدي token متزايد: 33، 34…"}, "→", {"t": "Client", "c": 2, "s": "يبعت الـ token مع كل write"}, "→", {"t": "Storage", "c": 3, "s": "يرفض أي token أقل من أكبر واحد شافه"}]} />
+
+الـ server نفسه هو اللي بيتأكد — مش الكلاينت. (ZooKeeper: `zxid` أو `cversion` ينفعوا كـ fencing token.)
+
+### Byzantine Faults 😈
+
+نود <strong>بتكدب</strong> (بقصد أو بسبب عطل) — بتبعت ردود متناقضة أو مزيفة. <En>Byzantine fault-tolerant</En> = السيستم يشتغل صح حتى لو فيه نودز خاينة (أقل من الثلث). مهم في الطيران (radiation بيبوظ الذاكرة) والـ blockchain/الأنظمة بين أطراف مش واثقة في بعض. لكن في داتاسنتر بتاعك، غالبًا بنفترض إن مفيش Byzantine faults — والحماية البسيطة كفاية: checksums، validation للمدخلات، أكتر من سيرفر NTP.
+
+### System Models — افتراضاتنا الرسمية
+
+| التوقيت | أعطال النودز |
+|---|---|
+| <strong>Synchronous:</strong> delay محدود (مش واقعي). · <strong>Partially synchronous:</strong> غالبًا محدود بس أحيانًا لأ ← <strong>الأكثر واقعية</strong>. · <strong>Asynchronous:</strong> مفيش أي افتراض توقيت، ولا حتى ساعة. | <strong>Crash-stop:</strong> بتقع وماترجعش. · <strong>Crash-recovery:</strong> بتقع وترجع، والـ stable storage بيفضل ← <strong>الأكثر واقعية</strong>. · <strong>Byzantine:</strong> أي حاجة. |
+
+<Box type="tip" title="Safety vs Liveness">
+
+- <strong>Safety</strong> = "حاجة وحشة مش هتحصل أبدًا" (uniqueness، monotonic tokens). لو اتكسرت، فيه لحظة محددة تقدر تشاور عليها، ومايتصلحش. <strong>لازم تتحقق دايمًا</strong> حتى لو كل النودز وقعت.
+- <strong>Liveness</strong> = "حاجة كويسة هتحصل في الآخر" (availability: الريكوست هيترد). مسموح يكون ليها شروط (لو الأغلبية شغالة والشبكة رجعت).
+
+والـ models دي تبسيط — الواقع ممكن يكسرها (الديسك يتمسح، firmware bug). عشان كده النظريات بتثبت صحة الخوارزمية، بس الـ implementation لسه محتاج يتعامل مع الحالات "المستحيلة".
+
+</Box>
+
+## 🧪 Lab
+
+1. في Node: قارن `Date.now()` و `performance.now()` — غيّر ساعة الجهاز وانت شغال وشوف مين اتأثر.
+2. اعمل HTTP call لسيرفر بيعمل `setTimeout` عشوائي من 0 لـ 5 ثواني، وجرّب timeouts مختلفة: كام request اعتبرته "مات" وهو كان هيرد؟
+3. شغّل Node بـ `--trace-gc` على script بيعمل allocations كتير وشوف الـ pauses.
+
+<Checklist id="ddia-ch8" title="✅ الخلاصة — Checklist" items={[
+  "الشبكة: الرسالة ممكن تضيع أو تتأخر — ومش هتعرف الفرق.",
+  "الساعات: بتنحرف وتقفز، والاعتماد عليها في الترتيب (LWW) بيضيّع داتا في صمت.",
+  "الـ processes: ممكن تقف في أي لحظة (GC) وتصحى من غير ما تعرف.",
+  "كل ده = partial failures. والـ timeouts هي أداتنا الوحيدة لاكتشافها، وهي مش دقيقة.",
+  "القرار بالأغلبية (quorum)، والـ fencing tokens بتحمي من الـ zombies.",
+  "لو تقدر تخلي حاجتك على ماكينة واحدة — اعمل كده! بس الـ fault tolerance والـ latency الجغرافي محتاجين توزيع.",
+  "الـ unreliability مش قانون طبيعة؛ ده اختيار تكلفة (cheap & unreliable)."
 ]} />
 
 <Quiz>
-  <Q n={1} q="ليه مينفعش تستخدم time-of-day clock لقياس timeout؟">لأن NTP ممكن يرجعها لورا أو يقفزها. استخدم monotonic clock.</Q>
-  <Q n={2} q="إزاي الـ fencing token بيحمي من كلاينت نام GC؟">التخزين بيرفض أي كتابة بـ token أقل من آخر واحد شافه.</Q>
-  <Q n={3} q='"مفيش اتنين leaders في نفس الوقت" safety ولا liveness؟'>Safety: وعد إن الحاجة الوحشة مش هتحصل، من غير ميعاد.</Q>
-  <Q n={4} q="ليه LWW بالساعة بيضيّع داتا؟">لأن الساعات مش متزامنة. الكتابة الأحدث فعلًا ممكن تاخد timestamp أصغر وتترمي.</Q>
+  <Q n={1} q="ليه مينفعش تستخدم time-of-day clock لقياس timeout؟">لأن NTP ممكن يرجعها لورا أو يقفزها لقدام. استخدم monotonic clock.</Q>
+  <Q n={2} q="إزاي الـ fencing token بيحمي من client نام GC؟">الـ storage بيرفض أي كتابة بـ token أقل من آخر واحد شافه.</Q>
+  <Q n={3} q='"مفيش اتنين leaders في نفس الوقت" — safety ولا liveness؟'>Safety.</Q>
 </Quiz>

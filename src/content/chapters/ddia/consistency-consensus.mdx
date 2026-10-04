@@ -1,0 +1,229 @@
+---
+title: "الـ Consistency والـ Consensus: إزاي النودز تتفق؟"
+short: "Consistency & Consensus"
+order: 9
+label: "فصل ٩"
+badge: "الداتا الموزعة · فصل ٩"
+en: "Consistency and Consensus"
+keywords: "linearizability · CAP · 2PC · Raft"
+goal: "تفرق بين linearizability و causality، وتفهم 2PC والـ consensus وليه ZooKeeper موجود."
+part: "الداتا الموزعة"
+color: "c4"
+---
+
+## الفكرة العامة
+
+بدل ما كل أبلكيشن يحل مشاكل الفصل 8 لوحده، بنبني <Hl c="b">abstractions عامة</Hl> بضمانات مفيدة (زي ما الـ transactions بتخبي الـ crashes والـ concurrency). أهمها: <strong>Consensus</strong> — إن كل النودز توافق على حاجة واحدة.
+
+معظم الداتابيزات الـ replicated بتدي <En>eventual consistency</En> (الأدق نسميها <strong>convergence</strong>): لو الكتابات وقفت، في وقت مش معروف الـ replicas هتتساوى. ده ضمان ضعيف جدًا ومش بيقول <strong>إمتى</strong>. الأحسن نعرف ضمانات أقوى — بس ليها تمن (أداء و availability).
+
+## Linearizability
+
+اسمها كمان <En>atomic consistency</En> / <En>strong consistency</En> / <En>immediate consistency</En>. الفكرة: <Hl c="y">السيستم يبان كأن فيه نسخة واحدة بس من الداتا</Hl>، وكل عملية atomic. أول ما كتابة تخلص (أو قراءة ترجع القيمة الجديدة)، كل القراءات اللي بعدها لازم تشوف الجديد — مينفعش ترجع للقديم.
+
+<Box type="story" title="مثال ماتش كورة" icon="🍽️">
+
+أليس وبوب قاعدين جنب بعض بيتفرجوا على نتيجة الماتش على الموبايل. أليس عملت refresh وشافت النتيجة النهائية وقالت لبوب. بوب عمل refresh بعدها، بس الريكوست بتاعه راح لـ replica متأخرة فشاف إن الماتش لسه شغال! ده <strong>كسر للـ linearizability</strong> — قراءة بوب حصلت بعد قراءة أليس فكان لازم تشوف نفس النتيجة على الأقل.
+
+</Box>
+
+<Box type="warn" title="Linearizability ≠ Serializability">
+
+- <strong>Serializability:</strong> خاصية للـ <strong>transactions</strong> (كذا object): النتيجة كأنها اتنفذت بترتيب ما (مش لازم الترتيب الحقيقي).
+- <strong>Linearizability:</strong> ضمان <strong>recency</strong> على <strong>object واحد</strong> (register): أحدث قيمة دايمًا.
+- الاتنين مع بعض = <En>strict serializability</En> (2PL والـ serial execution بيدوها؛ SSI لأ).
+
+</Box>
+
+### إمتى محتاجها؟
+
+- <strong>Locking و Leader election:</strong> لازم كل النودز تتفق مين ماسك الـ lock (ZooKeeper, etcd). وإلا split brain.
+- <strong>Constraints و Uniqueness:</strong> username unique، رصيد مش سالب، تذكرة مش متباعة مرتين. (لو constraints مرنة ينفع حلول أضعف.)
+- <strong>Cross-channel timing:</strong> مثال: ترفع صورة → تتخزن في file storage → رسالة في queue لـ service تعمل thumbnail. لو الـ queue أسرع من الـ replication، الـ service هيقرا صورة قديمة أو مش موجودة. (قناتين: storage و queue.)
+
+### مين بيحققها؟
+
+| الطريقة | Linearizable؟ |
+|---|---|
+| Single-leader | ⚠️ ممكن — لو قريت من الـ leader أو followers sync. بس ممكن يكسرها split brain أو failover بـ async. |
+| Consensus algorithms (ZooKeeper, etcd) | ✅ — ده أساسًا هدفها. |
+| Multi-leader | ❌ — كتابات concurrent في أماكن مختلفة. |
+| Leaderless (Dynamo) | ❌ غالبًا — حتى quorums ممكن تكسرها (تأخير شبكة متفاوت)، و LWW بالساعات أكيد لأ. ممكن تبقى linearizable بـ read repair synchronous قبل ما ترجع (بتكلفة)، بس compare-and-set مش هيبقى ممكن. |
+
+### الـ CAP Theorem — من غير ما تتلخبط
+
+لو الشبكة اتقطعت (partition) بين داتاسنترين:
+
+<Grid2>
+<Card title="لو محتاج Linearizability (C)" c={1}>
+
+الـ replicas اللي مش واصلة للـ leader <strong>لازم ترفض أو تستنى</strong> → unavailable.
+
+</Card>
+<Card title="لو مش محتاجها (A)" c={4}>
+
+كل replica تكمل تشتغل لوحدها → available بس مش linearizable.
+
+</Card>
+</Grid2>
+
+<Box type="idea" title="CAP الأدق">
+
+الصياغة المشهورة "اختار 2 من 3" <strong>مضللة</strong> — الـ network partitions مش اختيار، دي هتحصل غصب عنك. الأدق: "<strong>Consistent or Available when Partitioned</strong>". وكمان CAP ضيقة جدًا: بتتكلم عن linearizability ونوع واحد من الأعطال بس، ومش بتقول حاجة عن الـ delays أو النودز الميتة. فدلوقتي قيمتها تاريخية أكتر منها عملية.
+
+</Box>
+
+<strong>والسبب الحقيقي للتخلي عن linearizability غالبًا هو الأداء مش الـ fault tolerance</strong>: حتى الرام في الـ multi-core CPU مش linearizable (كل core له cache)! وأُثبت إن response time للقراءة والكتابة في نظام linearizable لازم يكون متناسب مع عدم اليقين في تأخير الشبكة — والشبكة الحقيقية تأخيرها متغير جدًا.
+
+## الترتيب (Ordering) والسببية (Causality)
+
+الترتيب موضوع متكرر في الكتاب كله: ترتيب الـ leader للـ replication log، ترتيب الـ serializability، والـ timestamps في الفصل 8. والسبب: <Hl c="g">الترتيب بيحافظ على السببية</Hl> — السؤال قبل الجواب، الـ insert قبل الـ update، الـ snapshot لازم يكون causally consistent.
+
+<Grid2>
+<Card title="Total order (Linearizability)" c={1}>
+
+أي عمليتين تقدر تقول مين قبل مين. خط زمني واحد.
+
+</Card>
+<Card title="Partial order (Causality)" c={4}>
+
+بعض العمليات مرتبة (لو سبب ونتيجة)، والباقي concurrent ومالوش ترتيب — زي الـ branching والـ merging في Git.
+
+</Card>
+</Grid2>
+
+Linearizability ⇒ causality (أقوى منها). بس <Hl c="p">Causal consistency</Hl> هي <strong>أقوى consistency ممكنة مش بتبطّأ بسبب تأخير الشبكة وبتفضل available وقت الـ partitions</strong>! وفي حالات كتير هي اللي محتاجها فعلًا. التحدي: إزاي تتبع الـ causal dependencies؟ (زي version vectors — بس الداتابيز لازم تعرف <strong>أنهي version</strong> الأبلكيشن قراه قبل ما يكتب.)
+
+### Sequence Numbers و Lamport Timestamps
+
+تتبع كل الـ dependencies مكلف. البديل: <strong>أرقام تسلسلية</strong> (counter) متسقة مع السببية. في single-leader سهلة (الليدر يدي رقم لكل عملية). من غير leader؟ الطرق البسيطة (كل نود أرقام فردية/زوجية، timestamps، blocks) <strong>مش causally consistent</strong>.
+
+<Box type="tip" title="Lamport Timestamp (1978) — من أهم أوراق الأنظمة الموزعة">
+
+كل نود عندها counter + node ID → `(counter, nodeID)`. والأهم: <strong>كل نود وكل client بيتابع أكبر counter شافه</strong> ويبعته مع كل request، ولو حد استقبل رقم أكبر من عنده يرفع عداده ليه. النتيجة: <strong>total order متسق مع السببية</strong>. الترتيب: الـ counter الأكبر أحدث، ولو متساويين الـ node ID الأكبر.<br/>الفرق عن version vectors: version vectors بتقولك اتنين concurrent ولا لأ، Lamport بيفرض ترتيب كامل (فمش هيقولك concurrent ولا لأ).
+
+</Box>
+
+<Box type="warn" title="بس الترتيب لوحده مش كفاية!">
+
+مثال الـ username الـ unique: اتنين بيسجلوا نفس الاسم في نفس الوقت. بعدين تقدر تقارن الـ timestamps وتقول مين الأول — <strong>بس بعد ما الحقيقة كلها تتجمع</strong>. أما في اللحظة اللي النود لازم ترد فيها على اليوزر حالًا، مش عارفة إذا كان فيه نود تانية بتسجل نفس الاسم دلوقتي. محتاج تعرف <strong>إمتى الترتيب اتقفل (finalized)</strong> → ده <strong>Total Order Broadcast</strong>.
+
+</Box>
+
+### Total Order Broadcast (Atomic Broadcast)
+
+بروتوكول لتبادل الرسايل بين النودز بشرطين:
+
+- <strong>Reliable delivery:</strong> لو رسالة وصلت لنود، توصل لكل النودز.
+- <strong>Totally ordered:</strong> كل النودز تستلم الرسايل <strong>بنفس الترتيب</strong>.
+
+ده بالظبط اللي محتاجينه للـ <En>state machine replication</En>: كل replica تنفذ نفس الكتابات بنفس الترتيب = نسخ متسقة. (وكمان serializable transactions لو كل رسالة stored procedure deterministic.) وده بيشبه <strong>log</strong> بالظبط (replication log، transaction log، WAL). ZooKeeper و etcd بيطبقوه. ومهم كمان للـ fencing tokens (رقم الرسالة = token متزايد — في ZooKeeper اسمه `zxid`).
+
+<Box type="idea" title="العلاقة بين Linearizability و Total Order Broadcast">
+
+- <strong>من TOB لـ Linearizable storage:</strong> عايز تحجز username؟ ابعت رسالة في الـ log "أنا عايز الاسم ده"، استنى لحد ما ترجعلك، واقرا الـ log: لو أول رسالة للاسم ده بتاعتك → خدته. لو لأ → abort. (الكتابات بقت linearizable. والقراءات: إما تحطها هي كمان في الـ log، أو تستنى توصل لآخر position، أو تقرا من replica sync — زي ZooKeeper `sync()`.)
+- <strong>من Linearizable CAS لـ TOB:</strong> register فيه counter، اعمل increment-and-get لكل رسالة وخد الرقم. الأرقام من غير فجوات → كل نود تعرف لو فيه رسالة ناقصة تستناها (ده الفرق عن Lamport).
+- الاتنين = <strong>Consensus</strong>. يعني متكافئين!
+
+</Box>
+
+## Distributed Transactions و Consensus
+
+Consensus = <Hl c="o">كذا نود يتفقوا على حاجة واحدة</Hl>. أمثلة: leader election (ومنع split brain)، و <strong>atomic commit</strong> (transaction على كذا نود — يا الكل commit يا الكل abort).
+
+<Box type="warn" title="FLP Impossibility">
+
+نتيجة نظرية: <strong>مفيش خوارزمية تضمن الوصول لـ consensus</strong> لو فيه احتمال إن نود تقع، في النموذج الـ asynchronous (من غير ساعات ولا timeouts). بس عمليًا لو استخدمنا timeouts (حتى لو بتغلط أحيانًا) أو أرقام عشوائية، الـ consensus بيبقى ممكن. ماتقلقش 😅
+
+</Box>
+
+### Atomic Commit و Two-Phase Commit (2PC)
+
+على نود واحدة سهلة: الـ commit record في الـ log هو اللحظة الحاسمة. بس على كذا نود؟ ماينفعش تبعت commit للكل وخلاص — ممكن واحدة تنجح وواحدة تفشل (constraint، crash، شبكة) — والـ commit مايترجعش (حد ممكن يكون قرأه بالفعل).
+
+<Flow items={[{"t": "Coordinator", "c": 1, "s": "transaction manager"}, "→", {"t": "Phase 1: Prepare", "c": 2, "s": "\"تقدر تعمل commit؟\""}, "→", {"t": "كلهم \"نعم\"؟", "c": 3, "s": "يتكتب القرار في log الـ coordinator"}, "→", {"t": "Phase 2: Commit", "c": 4, "s": "وإلا abort للكل"}]} />
+
+<Box type="story" title="زي كتب الكتاب 💍" icon="🍽️">
+
+المأذون (coordinator) بيسأل العريس والعروسة: موافق؟ موافقة؟ لو الاتنين قالوا "موافق" — <strong>خلاص، مفيش رجوع</strong>، حتى لو حد فيهم أغمى عليه بعدها، الجواز حصل. وعند الصحيان يتقاله "انت متجوز". 😄
+
+</Box>
+
+نقطتين اللاعودة: (1) الـ participant لما يقول "نعم" بيوعد إنه <strong>هيعمل commit مهما حصل</strong> (كتب كل حاجة على الديسك). (2) الـ coordinator لما يكتب القرار في الـ log (<En>commit point</En>) لازم ينفذه — يعمل retry للأبد لحد ما الكل ينفذ.
+
+<Box type="warn" title="العيب: Coordinator failure">
+
+لو الـ coordinator وقع بعد ما الـ participants قالوا "نعم" وقبل ما يبلّغهم، الـ participant بقى <strong>in doubt / uncertain</strong>: مايقدرش يعمل commit ولا abort لوحده. لازم يستنى الـ coordinator يرجع — وهو ماسك الـ locks! عشان كده 2PC اسمه <En>blocking atomic commit</En>. (فيه 3PC نظريًا بس بيفترض network بـ delay محدود — مش واقعي.)
+
+</Box>
+
+### Distributed Transactions في الواقع
+
+- <strong>Database-internal:</strong> نفس الداتابيز على كذا نود (VoltDB, MySQL Cluster NDB). أداء معقول لأن كل حاجة من نفس الـ software.
+- <strong>Heterogeneous:</strong> أنظمة مختلفة (داتابيز + message broker) → <En>XA</En> transactions (معيار من 1991، Java: JTA). ممكن تضمن إن رسالة الـ queue تتعالج مرة واحدة بالظبط (exactly-once) مع كتابة الداتابيز.
+
+ليه ليها سمعة وحشة؟ MySQL distributed أبطأ <strong>10 مرات</strong> من single-node. والأخطر: transactions "in doubt" ماسكة locks، ولو الـ coordinator log ضاع → <En>orphaned transactions</En> محتاجة تدخل يدوي (أو heuristic decisions = كسر للـ atomicity). والـ coordinator غالبًا single point of failure، وبيخلي الأبلكيشن stateful. وXA مش بيقدر يكتشف deadlocks بين الأنظمة ولا يشتغل مع SSI. والقاعدة: <Hl c="u">الـ distributed transactions بتضخم الأعطال</Hl> — أي جزء يبوظ، الكل يبوظ.
+
+### Fault-Tolerant Consensus
+
+الخصائص الأربعة:
+
+| الخاصية | المعنى | النوع |
+|---|---|---|
+| Uniform agreement | مفيش نودين يقرروا حاجتين مختلفين. | Safety |
+| Integrity | محدش يقرر مرتين. | Safety |
+| Validity | القرار لازم يكون حاجة حد اقترحها. | Safety |
+| Termination | كل نود شغالة هتوصل لقرار في الآخر (fault tolerance — ده اللي 2PC مش بيحققه). | Liveness |
+
+بشرط إن <strong>الأغلبية</strong> شغالة (n=2f+1 تستحمل f أعطال).
+
+الخوارزميات المشهورة: <En>Viewstamped Replication</En>، <En>Paxos</En> (Multi-Paxos)، <En>Raft</En>، <En>Zab</En> (ZooKeeper). وأغلبها عمليًا بتحقق <strong>total order broadcast</strong> مباشرة (consensus على كل رسالة).
+
+<Box type="idea" title="طب مش هي محتاجة leader؟ والـ leader محتاج consensus؟! 🐔🥚">
+
+الحل: <strong>epoch number</strong> (ballot number في Paxos، view في VR، term في Raft). جوه كل epoch فيه leader واحد مضمون. لو الـ leader اتشك فيه، انتخاب جديد بـ epoch أكبر، والأكبر يكسب. وقبل ما الـ leader يقرر أي حاجة، لازم ياخد <strong>موافقة quorum</strong> — ولو مفيش حد في الـ quorum شاف epoch أعلى، يبقى هو لسه الـ leader. يعني <strong>جولتين تصويت</strong>: مرة للـ leader، ومرة للاقتراح، والـ quorums لازم يتقاطعوا. الفرق عن 2PC: الـ leader بيتنتخب مش ثابت، ومحتاج أغلبية بس مش الكل، وفيه recovery لما leader جديد يطلع.
+
+</Box>
+
+<strong>حدود الـ consensus:</strong> التصويت ده نوع من synchronous replication (بطيء)، محتاج أغلبية (لو الشبكة قطعت، الأقلية واقفة)، أغلبها بيفترض عدد نودز ثابت، بيعتمد على timeouts — في شبكة متغيرة ممكن انتخابات كتير مالهاش لازمة (Raft عنده edge cases لو لينك واحد بايظ).
+
+### Membership & Coordination Services (ZooKeeper / etcd)
+
+زي "داتابيز key-value صغيرة" بس <strong>مش هتستخدمها مباشرة</strong> غالبًا — بتستخدمها مكتبات ومشاريع (HBase, Hadoop YARN, Kafka…). بتديك consensus جاهز ومجرب:
+
+<Chips items={["Linearizable atomic operations (CAS → locks)", "Total ordering → fencing tokens (zxid)", "Failure detection (sessions + heartbeats + ephemeral nodes)", "Change notifications (watch)"]} />
+
+- <strong>Allocating work:</strong> اختيار leader/primary، وتوزيع الـ partitions على النودز وإعادة توزيعها.
+- بتشتغل على 3 أو 5 نودز ثابتين حتى لو السيستم آلاف — الـ consensus على عدد صغير.
+- مناسبة للداتا اللي <strong>بتتغير ببطء</strong> (مين الـ leader لـ partition 7) مش للـ runtime state اللي بيتغير آلاف المرات في الثانية.
+- <strong>Service discovery</strong> (IP الخدمة دي إيه؟) — DNS عادي أنسب غالبًا لأنه مش محتاج linearizability.
+- <strong>Membership:</strong> مين النودز الحية في الكلاستر — ومع consensus الكل يتفق على القائمة.
+
+## 🧪 Lab
+
+شغّل etcd بـ Docker (3 نودز لو تقدر — راجع الـ docs) وجرّب:
+
+```bash
+etcdctl put /config/leader node-1
+etcdctl lock my-lock        # lock موزع — جرّبه من terminal-ين
+etcdctl elect my-election node-a   # leader election
+```
+
+وبعدين اقتل الـ leader node وشوف الكلاستر بينتخب واحد جديد. وجرّب تقتل نودين من 3 — الكتابة هتقف (مفيش أغلبية).
+
+<Checklist id="ddia-ch9" title="✅ الخلاصة — Checklist" items={[
+  "Linearizability: كأن فيه نسخة واحدة + recency. سهلة الفهم بس بطيئة، وبتقع وقت الـ partitions (CAP).",
+  "Causality: ترتيب جزئي — أضعف بس available ومش حساسة للشبكة. Lamport timestamps بتدي total order متسق معاها.",
+  "الترتيب لوحده مش كفاية للـ uniqueness — محتاج تعرف إمتى الترتيب اتقفل → total order broadcast = consensus.",
+  "مشاكل متكافئة كلها = consensus: linearizable CAS، atomic commit، total order broadcast، locks/leases، membership، uniqueness.",
+  "Single leader بيحلها لحد ما يموت. وساعتها: تستنى (2PC/XA — blocking)، failover يدوي، أو خوارزمية consensus أوتوماتيك (Raft/Paxos/Zab).",
+  "متحاولش تكتب consensus بنفسك — استخدم ZooKeeper/etcd.",
+  "مش كل الأنظمة محتاجة consensus: leaderless و multi-leader بيعيشوا من غيره (بس بيتعاملوا مع conflicts)."
+]} />
+
+<Quiz>
+  <Q n={1} q="الفرق بين linearizability و serializability؟">Linearizability = recency على object واحد. Serializability = transactions كأنها اتنفذت بترتيب ما.</Q>
+  <Q n={2} q="ليه 2PC بيتقال عليه blocking؟">لو الـ coordinator وقع بعد الـ prepare، الـ participants فاضلين in doubt ماسكين locks لحد ما يرجع.</Q>
+  <Q n={3} q="ليه Lamport timestamps مش كفاية لـ unique username؟">لأن وقت ما بترد على اليوزر مش عارف إذا كان فيه طلب تاني بـ timestamp أقل لسه ماوصلكش.</Q>
+  <Q n={4} q="الـ epoch number بيحل إيه في Raft/Paxos؟">بيضمن leader واحد لكل epoch، والـ leader الأحدث (epoch أكبر) هو اللي يكسب.</Q>
+</Quiz>

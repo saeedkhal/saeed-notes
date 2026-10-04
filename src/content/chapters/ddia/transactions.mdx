@@ -1,93 +1,196 @@
 ---
 title: "الـ Transactions: يا كله يا بلاش"
-short: Transactions
+short: "Transactions"
 order: 7
-label: فصل ٧
-badge: الموزعة · فصل ٧
-en: ACID · snapshot isolation · write skew · serializability
-keywords: ACID · MVCC · write skew
-goal: تعرف كل مستوى عزل بيمنع أنهي باج، وامتى الـ snapshot مش كفاية.
-part: الموزعة
-color: c2
+label: "فصل ٧"
+badge: "الداتا الموزعة · فصل ٧"
+en: "Transactions"
+keywords: "ACID · isolation · write skew · SSI"
+goal: "تعرف كل isolation level بيمنع إيه، وتكتشف الـ race conditions قبل ما تضرب في production."
+part: "الداتا الموزعة"
+color: "c2"
 ---
 
-## ليه transactions؟
+## ليه Transactions؟
 
-الداتابيز تقع في نص كتابة، اتنين يكتبوا فوق بعض، حد يقرا داتا نصها متحدث. الـ transaction بتجمع كذا read/write في وحدة: يا تنجح كلها (commit) يا تفشل كلها (abort) وتقدر تعمل retry.
+حاجات كتير ممكن تبوظ: الداتابيز تقع في نص كتابة، الأبلكيشن يقع في نص عمليات، الشبكة تقطع، كلاينتين يكتبوا فوق بعض، حد يقرا داتا نصها متحدث… الـ transaction بتجمع كذا read/write في <Hl c="y">وحدة منطقية واحدة</Hl>: يا تنجح كلها (commit) يا تفشل كلها (abort/rollback) — وساعتها تقدر تعمل retry بأمان.
 
-دي abstraction مش قانون طبيعة. موجة NoSQL سابتها بحجة إنها مش بتتوسع. الحقيقة: ليها مميزات وحدود، ولازم تعرف بتضمن إيه بالظبط.
+<Box type="idea" title="Transactions مش قانون طبيعة">
 
-## ACID من غير الشعارات
+دي <strong>abstraction</strong> اتعملت عشان تبسّط الـ programming model. مع موجة NoSQL ناس كتير سابتها وقالوا "مش قابلة للتوسع"، وفي المقابل ناس شايفينها ضرورية لأي داتا مهمة. الحقيقة: ليها مميزات وحدود، ولازم تعرف بتضمنلك إيه بالظبط.
+
+</Box>
+
+## معنى ACID (وإيه اللي مخبي وراه)
 
 | الحرف | المعنى الحقيقي |
-| --- | --- |
-| Atomicity | مش ليها علاقة بالـ concurrency. معناها abortability: لو حصل خطأ في النص، كل اللي اتكتب يرجع. فتقدر تعمل retry من غير نص كتابة |
-| Consistency | الكلمة دي متتحمّلش. هنا معناها إن الـ invariants بتاعة الأبلكيشن تفضل صح. ده مسؤولية الأبلكيشن، والحرف اتحط عشان الاختصار يمشي |
-| Isolation | الـ transactions المتزامنة ماتدخلش في بعض. النظري serializability. عمليًا كتير بتدي أضعف عشان الأداء |
-| Durability | اللي اتعمل له commit مايضيعش (WAL أو replication). مفيش durability مطلقة: الهاردات بتموت والـ replicas ممكن تقع كلها |
+|---|---|
+| <strong>A — Atomicity</strong> | مش ليها علاقة بالـ concurrency! معناها <Hl c="g">abortability</Hl>: لو حصل خطأ في النص، كل اللي اتكتب يترجع. فتقدر تعمل retry بأمان من غير ما تخاف من نص كتابة. |
+| <strong>C — Consistency</strong> | كلمة متحمّلة معاني كتير! هنا معناها إن الـ <strong>invariants</strong> بتاعة الأبلكيشن تفضل صح (زي: الحسابات المدينة والدائنة متوازنة). وده <strong>مسؤولية الأبلكيشن</strong> مش الداتابيز — الـ C "اتحطت عشان الاختصار يمشي". |
+| <strong>I — Isolation</strong> | الـ transactions الـ concurrent ماتدخلش في بعض. النظري: <strong>serializability</strong> (كأنهم اتنفذوا واحد ورا التاني). عمليًا داتابيزات كتير بتدي أضعف من كده عشان الأداء. |
+| <strong>D — Durability</strong> | اللي اتعمله commit مايضيعش (ديسك + WAL، أو replication). بس مفيش durability مطلقة: الهاردات بتموت، SSDs بتبوظ بعد قطع الكهربا، الـ replicas ممكن تقع كلها مع بعض. |
 
-واللي مش ACID بيتقال عليه BASE، وده تعريف أغمض. معظم الداتابيزات بتضمن atomicity و isolation على object واحد (increment، compare-and-set). الـ multi-object لازم لما foreign keys أو denormalized data أو secondary indexes تتحدث مع بعض.
+والأنظمة اللي مابتحققش ACID بيقولوا عنها <En>BASE</En> (Basically Available, Soft state, Eventual consistency) — وده تعريف مبهم أكتر من ACID نفسها 😄.
 
-<Box type="warn" title="الـ retry مش بالبساطة دي">
+### Single-object vs Multi-object
 
-الطلب ممكن يكون نجح والرد ضاع فيتنفذ مرتين. لو الفشل بسبب ضغط، الـ retry بيزوده، فاعمل backoff. والأخطاء الدائمة (constraint) ملهاش retry. والإيميل اللي اتبعت مش هيرجع.
+- <strong>Single-object:</strong> تقريبًا كل الداتابيزات بتضمن atomicity و isolation على مستوى الـ object الواحد (log للـ recovery و lock لكل object)، وفيه عمليات زي increment و compare-and-set. دي مش transactions بالمعنى الكامل.
+- <strong>Multi-object</strong> ضرورية لما: foreign keys بين جداول، denormalized data في document DBs لازم تتحدث مع بعض، secondary indexes لازم تتحدث مع الداتا.
 
-</Box>
+<Box type="warn" title="الـ Retry مش بالبساطة دي">
 
-## مستويات العزل
-
-الـ serializable مكلف، فالداتابيزات بتقدم أضعف. والمستويات دي سببت فلوس ضايعة فعلًا.
-
-**Read committed** يمنع dirty reads (متشوفش كتابة لسه مترجعتش) و dirty writes (متكتبش فوق داتا ماتعملش commit). ده الـ default في Postgres و Oracle. القراءة من غير ما تقفل الصف: الداتابيز تفتكر القيمة القديمة لحد الـ commit.
-
-<Box type="story" title="Read skew">
-
-أليس عندها ١٠٠٠ جنيه في حسابين. وهي بتبص، اتنقل ١٠٠ من حساب للتاني. قرت الأول قبل التحويل والتاني بعده، شافت ٩٠٠. Read committed مش بيمنع ده. مش كارثة في refresh، كارثة في backup أو كويري تحليلية طويلة.
+- ممكن تكون نجحت والرد ضاع → retry = تنفيذ مرتين (محتاج dedup).
+- لو الفشل بسبب ضغط، الـ retry بيزوده → exponential backoff.
+- مالوش لازمة مع الأخطاء الدائمة (constraint violation).
+- لو فيه side effects برّه الداتابيز (إيميل اتبعت) مش هتترجع.
+- لو الكلاينت نفسه مات وهو بيعمل retry، الداتا ضاعت.
 
 </Box>
 
-**Snapshot isolation:** كل transaction تقرا من صورة ثابتة من لحظة ما بدأت. القراء مش بيعطلوا الكتاب والعكس. التنفيذ MVCC: كذا version لكل صف، و `created_by` و `deleted_by`. الصف يبان لو اللي عمله عمل commit قبل ما أنت تبدأ.
+## مستويات العزل الضعيفة (Weak Isolation)
+
+الـ serializable مكلف، فالداتابيزات بتقدم مستويات أضعف — والمستويات دي سببت فلوس ضايعة حقيقي وفساد داتا. لازم تفهم كل واحد بيمنع إيه:
+
+### Read Committed
+
+<Grid2>
+<Card title="❌ No dirty reads" c={1}>
+
+ماتشوفش داتا transaction تانية لسه ماعملتش commit. (وإلا ممكن تشوف حاجة هتترجع، أو نص تحديث.)
+
+</Card>
+<Card title="❌ No dirty writes" c={4}>
+
+ماتكتبش فوق داتا لسه ماتعملهاش commit. (مثال: اتنين بيشتروا نفس العربية — الفاتورة تروح لواحد والعربية لواحد تاني!)
+
+</Card>
+</Grid2>
+
+<strong>التنفيذ:</strong> الـ dirty writes بـ row-level locks. الـ dirty reads: مش بالـ lock (هيبطّأ القراءة)، بل الداتابيز بتفتكر <strong>القيمة القديمة المتعملها commit</strong> وتديها للقارئين لحد الـ commit. ده الـ default في PostgreSQL و Oracle و SQL Server.
+
+### Snapshot Isolation (Repeatable Read)
+
+<Box type="story" title="مشكلة Read Skew (Non-repeatable read)" icon="🍽️">
+
+أليس عندها 1000 جنيه في حسابين (500 + 500). وهي بتبص، transfer 100 من حساب للتاني بيحصل. لو قرت الحساب الأول قبل التحويل (500) والتاني بعده (400) → هتشوف 900 بس! read committed مش بيمنع ده. مش مشكلة كبيرة لو عملت refresh، بس <strong>كارثة</strong> في: الـ backups (نسخة فيها أجزاء قديمة وأجزاء جديدة)، والكويريز التحليلية الطويلة، وفحص الـ integrity.
+
+</Box>
+
+الحل: كل transaction تقرا من <Hl c="b">snapshot ثابت</Hl> للداتابيز من لحظة ما بدأت. "<strong>القرّاء مش بيعطلوا الكتّاب، والكتّاب مش بيعطلوا القرّاء</strong>".
+
+<strong>التنفيذ: MVCC (Multi-Version Concurrency Control)</strong> — الداتابيز تحتفظ بكذا version لكل صف. كل transaction لها ID متزايد، وكل صف عليه `created_by` و `deleted_by`. قاعدة الظهور: صف يبان لو اللي عمله كان commit قبل ما انت تبدأ، ومحدش مسحه (أو اللي مسحه ماعملش commit قبلك). والـ garbage collection بيشيل القديم. والـ indexes: إما تشاور على كل الـ versions، أو B-trees append-only/copy-on-write (CouchDB, LMDB).
 
 <Box type="warn" title="لخبطة الأسامي">
 
-"Repeatable read" في Oracle اسمها serializable وهي snapshot. في Postgres اسمها repeatable read. المعيار نفسه غامض. اقرا دوكيومنتيشن الداتابيز بتاعتك.
+"Repeatable read" في Oracle اسمها serializable (وهي snapshot isolation)، وفي PostgreSQL و MySQL اسمها repeatable read، والمعيار SQL نفسه معرّفها بشكل غامض. يعني <strong>محدش يعرف repeatable read معناها إيه بالظبط</strong> — اقرا الدوكيومنتيشن بتاع الداتابيز بتاعتك.
 
 </Box>
 
-**Lost update:** اتنين عملوا read-modify-write على عداد أو صفحة ويكي. الحل: `UPDATE` ذري، أو `SELECT FOR UPDATE`، أو compare-and-set. متقرأ الرقم وتزوده في الأبلكيشن من غير قفل.
+### Lost Updates
 
-**Write skew:** الاتنين قروا شرط ("فيه دكتور تاني في الشيفت") وبعدين كتبوا قرار بيخالف الشرط، وكل واحد لوحده كان هيبقى صح. الـ snapshot مش بيمنع ده لأنهم ماكتبوش على نفس الصف. الحل: serializable، أو materialize التعارض في صف يتقفل.
+اتنين بيعملوا <En>read-modify-write</En> في نفس الوقت (زيادة عداد، تعديل JSON، اتنين بيعدلوا صفحة wiki). واحد بيكتب فوق التاني والتعديل يضيع.
 
-**Phantoms:** كويري بمدى ("مفيش حجز في الساعة دي") وبعدين حد يدخل صف جديد في المدى. محتاج index-range locks أو SSI.
+| الحل | إزاي |
+|---|---|
+| Atomic write operations | `UPDATE counters SET value = value + 1 WHERE key='x'` — أحسن حل لو ينفع. (وخلي بالك: الـ ORMs سهل تخليك تعمل read-modify-write في الكود من غير ما تاخد بالك!) |
+| Explicit locking | `SELECT … FOR UPDATE` — لازم تفتكر تعمله في كل مكان. |
+| Automatic detection | الداتابيز تكتشف وتعمل abort (PostgreSQL repeatable read، Oracle serializable، SQL Server snapshot). MySQL InnoDB repeatable read <strong>مابتكتشفش</strong>. |
+| Compare-and-set | `UPDATE … SET content='new' WHERE id=1 AND content='old'` — بس خلي بالك لو الـ WHERE بتقرا من snapshot قديم. |
+| في الـ replication | locks و CAS مابيشتغلوش مع multi-leader/leaderless. الحل: siblings + merge، أو عمليات commutative (increment). وLWW = lost updates (وده الـ default في سيستمات كتير!). |
+
+### Write Skew و Phantoms — الأخطر
+
+<Box type="story" title="مثال الدكاترة المناوبين" icon="🍽️">
+
+لازم دكتور واحد على الأقل يبقى on-call. أليس وبوب الاتنين تعبانين وطلبوا إجازة في نفس اللحظة. كل transaction بتتأكد: "فيه 2 on-call؟ تمام، أقدر أمشي" → الاتنين مشيوا → <strong>مفيش ولا دكتور!</strong> مفيش dirty write ولا lost update (كل واحد عدل صف مختلف) — ده <strong>write skew</strong>.
+
+</Box>
+
+الشكل العام: (1) SELECT بيدور على صفوف بشرط، (2) الأبلكيشن بيقرر بناءً على النتيجة، (3) كتابة بتغير النتيجة اللي كانت أساس القرار. أمثلة تانية: حجز أوضة اجتماعات في نفس الوقت، لعبة multiplayer (لاعبين في نفس المربع)، username مكرر، صرف فلوس مرتين (رصيد سالب).
+
+لو الـ SELECT بيدور على صفوف <strong>موجودة</strong> ممكن تحلها بـ `FOR UPDATE`. بس لو بيتأكد إن حاجة <strong>مش موجودة</strong> (مفيش حجز في الوقت ده) يبقى مفيش صف تقفل عليه! الكتابة اللي بتغير نتيجة البحث بتاعة transaction تانية اسمها <Hl c="p">Phantom</Hl>.
+
+حل يدوي: <En>Materializing conflicts</En> — تعمل جدول فيه كل (أوضة × ربع ساعة) مقدمًا عشان يبقى فيه صفوف تقفل عليها. صعب وقبيح — والأحسن serializable.
+
+## Serializability — أقوى ضمان
+
+النتيجة كأن كل الـ transactions اتنفذت <strong>واحدة ورا التانية</strong>. بيمنع كل المشاكل. تلات طرق للتنفيذ:
+
+### 1) Actual Serial Execution
+
+حرفيًا transaction واحدة في المرة على thread واحد! ليه بقى ممكن مؤخرًا؟ الرام رخص (الداتا كلها في الرام)، والـ OLTP transactions قصيرة وصغيرة. مستخدم في VoltDB/H-Store و Redis و Datomic.
+
+- <strong>Stored procedures</strong> إجباري: مينفعش transaction تستنى اليوزر أو round-trips على الشبكة — الكود كله يتبعت مرة واحدة. (السمعة الوحشة للـ stored procedures جت من لغاتها القديمة PL/SQL؛ دلوقتي فيه Java/Lua/Clojure.) وفي الـ replication: تنفذ نفس الـ procedure على كل replica (لازم deterministic).
+- <strong>Partitioning</strong> عشان تستخدم كذا core: كل partition له thread. بس الـ cross-partition transactions أبطأ جدًا.
+- <strong>الشروط:</strong> transactions صغيرة وسريعة، الـ active data تدخل الرام، throughput الكتابة يتحمله core واحد.
+
+### 2) Two-Phase Locking (2PL)
+
+الطريقة التقليدية لـ 30 سنة. (ماتلخبطهاش مع 2PC!) القاعدة: <Hl c="o">الكتّاب بيعطلوا القرّاء والقرّاء بيعطلوا الكتّاب</Hl> — عكس snapshot isolation.
+
+- كل object عليه lock إما <strong>shared</strong> (للقراءة — كذا واحد مع بعض) أو <strong>exclusive</strong> (للكتابة — واحد بس).
+- بتمسك الـ locks لحد آخر الـ transaction (المرحلة 1: بتاخد، المرحلة 2: بتسيب الكل عند الـ commit).
+- <strong>Deadlocks</strong> بتحصل كتير؛ الداتابيز بتكتشفها وتعمل abort لواحدة.
+- <strong>Phantoms:</strong> <En>predicate locks</En> (lock على شرط بحث — حتى على صفوف لسه مش موجودة) — بس أداؤها وحش، فبيستخدموا <En>index-range locks</En> (next-key locking) كتقريب: تقفل حتة أكبر من اللازم بس أسرع.
+- ❌ الأداء أضعف بكتير، والـ latency مش متوقع خالص (transaction بطيئة واحدة توقف الكل).
+
+### 3) Serializable Snapshot Isolation (SSI)
+
+خوارزمية جديدة (2008) — في PostgreSQL من 9.1 و FoundationDB. <Hl c="g">Optimistic</Hl>: سيب الكل يشتغل على snapshot من غير blocking، ووقت الـ commit اتأكد: لو فيه تعارض اعمل abort.
+
+<Grid2>
+<Card title="Pessimistic (2PL)" c={1}>
+
+"لو ممكن حاجة تبوظ، استنى." زي mutual exclusion.
+
+</Card>
+<Card title="Optimistic (SSI)" c={4}>
+
+"كمّل، ولو طلع فيه مشكلة نلغي." كويس لو الـ contention قليل؛ لو عالي هيبقى aborts كتير.
+
+</Card>
+</Grid2>
+
+بيكتشف إمتى "الفرضية" اللي القرار اتبنى عليها بقت قديمة:
+
+- <strong>قراءة stale MVCC:</strong> وقت الـ commit، هل فيه writes كانت لسه ماعملتش commit لما قريت واتعملها commit دلوقتي؟ → abort.
+- <strong>كتابات بتأثر على قراءات سابقة:</strong> زي index-range locks بس من غير blocking — الداتابيز تسجل مين قرا إيه، ولما حد يكتب تبلّغ القرّاء إن داتاهم بقت قديمة.
+
+✅ مفيش blocking بين القرّاء والكتّاب، latency متوقع، وبيتوزع على كذا ماكينة. ⚠️ الـ transactions الطويلة اللي بتقرا وتكتب كتير ممكن تتعمل abort كتير.
+
+## 🧪 Lab
+
+اعمل write skew بإيدك في Postgres بـ terminal-ين (psql):
+
+```sql
+CREATE TABLE doctors (name text, on_call bool);
+INSERT INTO doctors VALUES ('alice', true), ('bob', true);
+```
+
+في الاتنين: `BEGIN ISOLATION LEVEL REPEATABLE READ;` → `SELECT count(*) FROM doctors WHERE on_call;` → كل واحد يعمل `UPDATE` لنفسه → `COMMIT`. هتلاقي الاتنين نجحوا والـ count بقى صفر 😱.
+
+كرر نفس الخطوات بـ `ISOLATION LEVEL SERIALIZABLE` — واحد منهم هياخد serialization error (ده الـ SSI شغال).
 
 ## مين بيمنع إيه؟
 
-| المشكلة | Read committed | Snapshot | Serializable |
-| --- | --- | --- | --- |
-| Dirty read / write | نعم | نعم | نعم |
-| Read skew | لا | نعم (MVCC) | نعم |
-| Lost update | لا | أحيانًا | نعم |
-| Write skew و phantoms | لا | لا | نعم |
+| المشكلة | Read Committed | Snapshot Isolation | Serializable |
+|---|---|---|---|
+| Dirty reads | ✅ | ✅ | ✅ |
+| Dirty writes | ✅ | ✅ | ✅ |
+| Read skew | ❌ | ✅ (MVCC) | ✅ |
+| Lost updates | ❌ | ⚠️ بعض التطبيقات | ✅ |
+| Write skew | ❌ | ❌ | ✅ |
+| Phantoms (في write skew) | ❌ | ❌ (محتاج index-range locks) | ✅ |
 
-ثلاث طرق للـ serializable: تنفيذ فعلي ورا بعض (serial)، أو two-phase locking (٢PL) اللي بيقفل وبيعمل blocking، أو serializable snapshot isolation (SSI) اللي بيكتشف التعارض وقت الـ commit ويعمل abort من غير ما يقفل القراء. الـ SSI مناسب للكتابات اللي مش كتير أوي؛ الـ transactions الطويلة اللي بتقرا وتكتب كتير بتتعمل لها abort كتير.
-
-<Box type="tip" title="الخلاصة">
-
-من غير transactions، الداتا المتكررة بتخرج عن السيطرة بسهولة. الـ transaction بتحوّل أخطاء كتير لـ "abort وجرّب تاني". بس لازم تعرف المستوى اللي أنت عليه بيمنع أنهي باج.
-
-</Box>
-
-<Checklist id="ddia-tx" title="Checklist الـ transactions" items={[
-  "Atomicity = تراجع، مش تزامن.",
-  "Read committed بيمنع القذر بس، مش الـ skew.",
-  "الـ snapshot (MVCC) بيمنع read skew ومش بيمنع write skew.",
-  "العدادات بتتعمل atomic أو compare-and-set.",
-  "الأسماء في الدوكيومنتيشن بتتراجع، مش بتتحفظ.",
+<Checklist id="ddia-ch7" title="✅ الخلاصة — Checklist" items={[
+  "Transactions بتحوّل أخطاء كتير لـ\"abort وجرّب تاني\" بسيطة.",
+  "من غير transactions، الـ denormalized data بتخرج عن السيطرة بسهولة.",
+  "3 طرق للـ serializable: serial حقيقي، 2PL، SSI."
 ]} />
 
 <Quiz>
-  <Q n={1} q="اتنين قروا رصيد وخصموا في الأبلكيشن. أنهي باج؟">Lost update. الحل atomic update أو قفل الصف أو compare-and-set.</Q>
-  <Q n={2} q="دكتورين شافوا إن التاني موجود وخرجوا الاتنين. الـ snapshot يمنع ده؟">لا. ده write skew. محتاج serializable أو صف يمثّل التعارض ويتقفل.</Q>
-  <Q n={3} q="ليه backup على read committed خطر؟">لأن النسخة ممكن تاخد جزء قديم وجزء جديد من نفس التحويل. الـ snapshot يدي صورة واحدة.</Q>
-  <Q n={4} q="حرف الـ C في ACID مسؤولية مين؟">الأبلكيشن. الداتابيز مش عارفة الـ invariants بتاعتك.</Q>
+  <Q n={1} q='"A" في ACID بتمنع إيه؟'>نص الكتابات — لو حصل خطأ كل حاجة تترجع (abortability). مش ليها علاقة بالـ concurrency.</Q>
+  <Q n={2} q="نظام حجز قاعات اتعمل فيه حجزين لنفس الوقت رغم إنك بتتأكد قبل الحجز — اسم المشكلة؟">Write skew بسبب phantom. الحل: serializable أو materializing conflicts.</Q>
+  <Q n={3} q="ليه الـ backup محتاج snapshot isolation؟">عشان مايبقاش فيه أجزاء من وقت وأجزاء من وقت تاني (read skew) — لو رجعته هتبقى الداتا بايظة دايمًا.</Q>
+  <Q n={4} q="إمتى SSI أداؤه يقع؟">لما الـ contention عالي، فالـ aborts بتكتر.</Q>
 </Quiz>

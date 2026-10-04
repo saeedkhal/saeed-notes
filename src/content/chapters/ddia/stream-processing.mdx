@@ -1,0 +1,236 @@
+---
+title: "الـ Stream Processing: الداتا وهي بتجري"
+short: "Stream Processing"
+order: 11
+label: "فصل ١١"
+badge: "الداتا المشتقة · فصل ١١"
+en: "Stream Processing"
+keywords: "kafka · CDC · event sourcing · windows"
+goal: "تختار بين RabbitMQ و Kafka، وتستخدم CDC و event sourcing، وتتعامل مع الوقت والـ windows."
+part: "الداتا المشتقة"
+color: "c1"
+---
+
+## نقل الـ Events
+
+الـ <En>event</En> = record صغير immutable فيه تفاصيل حاجة حصلت ووقتها. بيتكتب مرة من <strong>producer</strong> (publisher) ويتقرا من <strong>consumers</strong> (subscribers)، والـ events المرتبطة بتتجمع في <En>topic</En> أو stream.
+
+ليه مش polling على داتابيز؟ كل ما تقلل الفترة، الـ overhead بيزيد — الأحسن إن الـ consumer يتبلّغ أول ما الحدث يحصل.
+
+### Messaging Systems — سؤالين مهمين
+
+1. <strong>لو الـ producer أسرع من الـ consumer؟</strong> إما ترمي رسايل، أو تعمل buffer في queue (والـ queue لو كبر هيروح فين؟)، أو <En>backpressure</En> (توقف الـ producer — زي Unix pipes و TCP).
+2. <strong>لو نود وقعت، الرسايل تضيع؟</strong> الـ durability ليها تمن (كتابة ديسك أو replication). أحيانًا ضياع شوية مقبول (sensor readings) — بس في عداد مثلًا، أي رسالة ضايعة = رقم غلط.
+
+- <strong>Direct messaging</strong> (من غير وسيط): UDP multicast (البورصات)، ZeroMQ، StatsD، webhooks. سريع بس محدود في الـ fault tolerance.
+- <strong>Message brokers</strong> (queues): سيرفر في النص، بيستحمل ان الكلاينتس تيجي وتمشي، والـ consumers غالبًا async.
+
+<Grid2>
+<Card title="Load balancing" c={1}>
+
+كل رسالة لـ consumer <strong>واحد</strong> (توزيع الشغل). (JMS: shared subscription)
+
+</Card>
+<Card title="Fan-out" c={4}>
+
+كل رسالة لـ <strong>كل</strong> الـ consumers (topic subscriptions).
+
+</Card>
+</Grid2>
+
+والـ <strong>Acknowledgment</strong>: الـ consumer يأكد إنه خلص، وإلا الـ broker يعيد إرسالها لحد تاني. بس مع load balancing + redelivery → <Hl c="p">الترتيب بيتلخبط</Hl>. لو الترتيب مهم: queue منفصل لكل consumer.
+
+### Partitioned Logs (Kafka) ⭐
+
+الـ brokers التقليدية (AMQP/JMS) بتمسح الرسالة بعد الـ ack — مش زي الداتابيز. يعني مينفعش ترجع تقرا القديم، وconsumer جديد يشوف الجديد بس. الفكرة: نجمع <strong>durability الداتابيز</strong> مع <strong>low-latency الـ messaging</strong> → <strong>Log</strong>:
+
+<Flow items={[{"t": "Producer", "c": 1, "s": "append لآخر الـ log"}, "→", {"t": "Topic = partitions", "c": 3, "s": "كل partition = log مترتب، وكل رسالة ليها offset"}, "→", {"t": "Consumers", "c": 5, "s": "كل واحد بيقرا partitions كاملة ويحفظ offset"}]} />
+
+أمثلة: Apache Kafka، Amazon Kinesis، Twitter DistributedLog. (ملايين الرسايل في الثانية بالـ partitioning، والـ replication للـ fault tolerance.)
+
+|   | AMQP/JMS (RabbitMQ…) | Log-based (Kafka) |
+|---|---|---|
+| بعد المعالجة | الرسالة تتمسح | تفضل (retention بالحجم أو المدة — ring buffer على الديسك، ممكن أيام أو أسابيع) |
+| التوزيع | رسالة رسالة لأي consumer | partition كامل لـ consumer واحد (عدد الـ consumers ≤ عدد الـ partitions) |
+| الترتيب | ممكن يتلخبط | مضمون جوه الـ partition |
+| التتبع | ack لكل رسالة | <strong>offset</strong> واحد (زي log sequence number في الـ replication) |
+| القراءة من الأول | ❌ | ✅ Replay — زي الـ batch: القراءة مش بتغير حاجة |
+| مناسب لـ | Task queues، المعالجة مكلفة والترتيب مش مهم | Throughput عالي، معالجة سريعة، والترتيب مهم |
+
+<Box type="warn" title="Head-of-line blocking في الـ logs">
+
+رسالة واحدة بطيئة في partition بتأخر كل اللي وراها. ولو الـ consumer اتأخر جدًا عن الـ retention هيفقد رسايل — بس ده نادر لأن الـ buffer ضخم، ولازم تراقب المسافة (consumer lag).
+
+</Box>
+
+## الداتابيز والـ Streams
+
+الـ replication log في الفصل 5 أصلًا stream of events! والفكرة هنا: نستخدم الـ streams عشان نخلي كذا سيستم متزامنين (داتابيز + cache + search index + data warehouse).
+
+<Box type="warn" title="Dual writes — فخ">
+
+الأبلكيشن يكتب في الداتابيز وبعدين يحدث الـ search index بنفسه. المشاكل: <strong>race condition</strong> (كلاينتين بيكتبوا، الداتابيز تاخد ترتيب والـ index ياخد العكس → اختلاف دائم في صمت)، ولو كتابة نجحت والتانية فشلت → inconsistency (محتاج atomic commit = غالي).
+
+</Box>
+
+### Change Data Capture (CDC)
+
+بدل dual writes: خلي الداتابيز هي الـ leader، و<Hl c="g">اقرا الـ replication log بتاعها كـ stream</Hl> وطبّقه على الأنظمة التانية بنفس الترتيب. أمثلة: LinkedIn Databus، Facebook Wormhole، Debezium و Maxwell (MySQL binlog)، Bottled Water (Postgres WAL)، Mongoriver. وغالبًا async.
+
+- <strong>Initial snapshot:</strong> مش هتحتفظ بالـ log كله للأبد — تاخد snapshot وتعرف الـ offset بتاعه.
+- <strong>Log compaction (Kafka):</strong> يحتفظ بآخر قيمة لكل key بس (والـ delete = tombstone). فالـ topic يبقى فيه نسخة كاملة من الداتابيز تقدر تبني منها أي derived system من الصفر.
+- وداتابيزات بقت بتدعم change streams كـ feature (RethinkDB, Firebase, CouchDB, Meteor, VoltDB، و Kafka Connect).
+
+### Event Sourcing
+
+فكرة من مجتمع DDD: خزّن <strong>كل التغييرات كـ events immutable</strong> على مستوى الأبلكيشن (مش على مستوى الداتابيز زي CDC).
+
+<Grid2>
+<Card title="CDC" c={1}>
+
+low-level: الداتابيز بتتعدل عادي (mutable)، والـ log بيتطلع منها. الأبلكيشن مش واخد باله.
+
+</Card>
+<Card title="Event Sourcing" c={4}>
+
+الأبلكيشن نفسه بيكتب events بتعبر عن <strong>نية اليوزر</strong> ("طالب لغى تسجيله في كورس") مش "اتمسح صف". الـ log هو مصدر الحقيقة.
+
+</Card>
+</Grid2>
+
+- الـ state الحالي = تطبيق كل الـ events من الأول (مع snapshots للتسريع). ومينفعش compaction لأن الـ event الأحدث مش بيلغي اللي قبله بالضرورة.
+- <strong>Commands vs Events:</strong> الطلب الأول <En>command</En> ممكن يترفض (validation). لما يتقبل يبقى <En>event</En> = حقيقة (fact) مش ممكن تتغير. لو اليوزر لغى بعدين = event جديد.
+
+<Box type="story" title="زي دفتر الحسابات عند المحاسب 📒" icon="🍽️">
+
+المحاسب مابيمسحش أبدًا. لو فيه غلطة بيكتب قيد تصحيح. الرصيد (state) = مجموع القيود (events). الـ state هو الـ <strong>integral</strong> للـ stream، والـ stream هو الـ <strong>derivative</strong> للـ state.<br/>"<strong>The truth is the log. The database is a cache of a subset of the log.</strong>" — Pat Helland
+
+</Box>
+
+### مميزات الـ Immutability
+
+<Chips items={["Audit و debugging أسهل", "Recovery من باجات (الأحداث موجودة)", "تحليلات (مين حط منتج في السلة وشاله)", "كذا view من نفس الـ log", "CQRS: فصل شكل الكتابة عن شكل القراءة", "Concurrency control أبسط"]} />
+
+الحدود: داتا بتتغير كتير → التاريخ يبقى ضخم والـ compaction/GC مهم. وأحيانًا لازم <strong>تمسح فعلًا</strong> لأسباب قانونية/خصوصية (excision في Datomic) — وده صعب لأن النسخ في كل حتة (backups وغيرها).
+
+## معالجة الـ Streams
+
+تعمل إيه بالـ stream؟ (1) تكتبه في داتابيز/كاش/index، (2) تبعته للمستخدمين (إيميل، notification، dashboard)، (3) تعالجه وتطلع stream جديد (pipeline من <En>operators</En> زي Unix). والفرق الأساسي عن الـ batch: الـ stream مش بيخلص أبدًا — فمفيش sort-merge joins، والـ fault tolerance مختلف (مش هتعيد تشغيل job شغال سنين من الأول).
+
+| الاستخدام | الفكرة |
+|---|---|
+| <strong>Complex Event Processing (CEP)</strong> | تخزن <strong>الكويري</strong> وتعدّي عليها الـ events (عكس الداتابيز!). بتدور على patterns معينة (Esper, IBM InfoSphere). |
+| <strong>Stream analytics</strong> | aggregations ومقاييس على windows: معدل حدث، متوسط متحرك، مقارنة بالفترة اللي فاتت. وفيه probabilistic algorithms (Bloom filter، HyperLogLog). (Storm, Spark Streaming, Flink, Samza, Kafka Streams, Google Dataflow). |
+| <strong>Materialized views</strong> | تحديث cache/search index/view من الـ changelog باستمرار — محتاج كل الأحداث من الأول مش window بس. |
+| <strong>Search on streams</strong> | تخزن queries وتطابق عليها المستندات الجاية (Elasticsearch percolator) — تنبيهات عقارات مثلًا. |
+| <strong>Actors vs Streams</strong> | الـ actors مش مخصصة للـ data management، والرسايل غالبًا ephemeral وممكن تلف دواير. أما الـ stream processing فـ pipelines acyclic وdurable. |
+
+### التعامل مع الوقت ⏰
+
+<Grid2>
+<Card title="Event time" c={1}>
+
+الوقت اللي الحدث حصل فعلًا (مسجّل في الـ event).
+
+</Card>
+<Card title="Processing time" c={4}>
+
+الوقت اللي الـ processor شاف فيه الحدث (ساعة الماكينة).
+
+</Card>
+</Grid2>
+
+<Box type="story" title="مثال فيلم Star Wars" icon="🍽️">
+
+الأفلام اتعرضت بترتيب Episode 4, 5, 6 ثم 1, 2, 3 — ترتيب العرض (processing) غير ترتيب القصة (event). لو الـ stream processor اتأخر (restart، أو موبايل أوفلاين لساعات) وعمل processing time، هيبان كأن فيه spike مفاجئ في الأحداث وهو مش حقيقي.
+
+</Box>
+
+- <strong>Stragglers:</strong> إمتى تقول الـ window خلص؟ أحداث متأخرة ممكن توصل بعد ما تقفل. الحل: تتجاهلها (وتراقب عددها) أو تبعت <strong>تصحيح</strong> للنتيجة.
+- <strong>ساعة الموبايل مش موثوقة:</strong> سجّل 3 timestamps: وقت الحدث على ساعة الجهاز، وقت الإرسال على ساعة الجهاز، وقت الاستلام على ساعة السيرفر. الفرق بين التانيين = offset الساعة → صحح الأول.
+
+### أنواع الـ Windows
+
+<Grid2>
+<Card title="Tumbling" c={1}>
+
+ثابت ومن غير تداخل: كل دقيقة لوحدها (10:03:00–10:03:59).
+
+</Card>
+<Card title="Hopping" c={4}>
+
+ثابت ومتداخل: 5 دقايق كل دقيقة (10:03–10:08، 10:04–10:09).
+
+</Card>
+<Card title="Sliding" c={3}>
+
+كل الأحداث اللي بينها أقل من مدة معينة (buffer مترتب بالوقت).
+
+</Card>
+<Card title="Session" c={2}>
+
+مالوش مدة ثابتة: كل أحداث يوزر لحد ما يبقى inactive فترة (30 دقيقة مثلًا) — website analytics.
+
+</Card>
+</Grid2>
+
+### Stream Joins
+
+| النوع | مثال | إزاي |
+|---|---|---|
+| <strong>Stream-stream</strong> (window join) | بحث + click على نتيجة: احسب الـ click-through rate. | الـ processor يحفظ state (الأحداث في آخر ساعة مثلًا متفهرسة بالـ session ID)، ولما الحدث التاني ييجي يطابق. ولو مفيش click → event "مفيش". |
+| <strong>Stream-table</strong> (enrichment) | activity events + profiles: ضيف معلومات اليوزر للحدث. | بدل query لداتابيز بعيدة لكل event، خد نسخة محلية من الجدول وحدّثها بـ CDC (زي broadcast hash join بس الجدول بيتحدث). |
+| <strong>Table-table</strong> (materialized view) | Twitter timeline cache: tweets + follows. | الاتنين changelogs، وكل تغيير في جهة يتعمله join مع آخر state للجهة التانية — زي materialized view لـ join query. |
+
+<Box type="warn" title="Time-dependence في الـ joins">
+
+لو الأحداث في الـ streams جاية بترتيب مختلف، نتيجة الـ join بتبقى nondeterministic. مثال: سعر ضريبة اتغير — الفاتورة القديمة تتحسب بأنهي سعر؟ في الداتا ويرهاوس اسمها <En>slowly changing dimension (SCD)</En>، والحل إنك تدي version ID لكل نسخة من السعر (بس ده بيمنع log compaction).
+
+</Box>
+
+### Fault Tolerance و Exactly-Once
+
+في الـ batch سهلة (task فشلت → أعدها، والـ output يظهر بس لو نجحت). في الـ stream؟ مش هتستنى الـ stream يخلص (مش هيخلص!). الهدف: <Hl c="y">exactly-once semantics</Hl> (الأدق: <strong>effectively-once</strong>) = النتيجة كأن كل حدث اتعالج مرة واحدة حتى لو اتعاد.
+
+| الطريقة | الفكرة |
+|---|---|
+| <strong>Microbatching</strong> | Spark Streaming: قسم الـ stream لـ batches صغيرة (~ثانية) وعاملها كـ batch عادي. (حجم الـ batch بيأثر على الـ latency والـ overhead.) |
+| <strong>Checkpointing</strong> | Flink: snapshots دورية للـ state بـ barriers في الـ stream. لو وقع يرجع لآخر checkpoint. |
+| <strong>Atomic commit</strong> | كل الـ outputs والـ side effects (رسايل، كتابات، offset) تحصل مع بعض أو لأ — جوه الفريمورك (Google Cloud Dataflow, VoltDB, Kafka مخطط). |
+| <strong>Idempotence</strong> ⭐ | عملية لو اتعملت مرتين نفس نتيجة مرة. ولو مش idempotent بطبيعتها: خزّن الـ offset مع الكتابة وماتطبقش نفس الـ offset تاني. (محتاج ترتيب ثابت، deterministic processing، و fencing لو نود قديمة لسه حية.) |
+| <strong>Rebuilding state</strong> | الـ state المحلي (counters، join tables) يتخزن remotely أو local مع replication، أو يتعاد بناؤه من الـ input stream/changelog (Kafka Streams، Samza). |
+
+## 🧪 Lab
+
+شغّل Kafka بـ Docker (image `apache/kafka` — راجع الـ docs) وجرّب:
+
+1. اعمل topic بـ 3 partitions، وابعت رسايل بـ key (user ID).
+2. شغّل consumer-ين في نفس الـ group — كل واحد هياخد partitions مختلفة.
+3. اقفل الـ consumers، ابعت رسايل، وارجع: هيكمّلوا من الـ offset.
+4. اعمل consumer group جديد بـ `--from-beginning` — replay لكل حاجة!
+
+```bash
+kafka-topics.sh --create --topic jobs --partitions 3 --bootstrap-server localhost:9092
+kafka-console-producer.sh --topic jobs --property parse.key=true --property key.separator=: --bootstrap-server localhost:9092
+kafka-console-consumer.sh --topic jobs --group g1 --bootstrap-server localhost:9092
+```
+
+بونص: جرّب Debezium عشان تعمل CDC من Postgres لـ Kafka.
+
+<Checklist id="ddia-ch11" title="✅ الخلاصة — Checklist" items={[
+  "Stream = batch على input مش بيخلص. والـ brokers/logs = الـ filesystem بتاع عالم الـ streams.",
+  "AMQP/JMS: رسالة رسالة + ack + مسح — للـ task queues. Log-based: partitions + offsets + retention + replay — للـ pipelines والـ derived state.",
+  "الداتابيز ممكن تتشاف كـ stream: CDC (implicit) و Event Sourcing (explicit). وlog compaction بيحتفظ بنسخة كاملة.",
+  "ابعد عن dual writes — خلي الـ log مصدر الترتيب والأنظمة التانية تبقى derived.",
+  "استخدامات: CEP، stream analytics، materialized views، search on streams.",
+  "Event time vs processing time، stragglers، وأنواع الـ windows: tumbling, hopping, sliding, session.",
+  "Joins: stream-stream، stream-table، table-table.",
+  "Exactly-once عن طريق microbatching، checkpoints، atomic commit، و idempotence."
+]} />
+
+<Quiz>
+  <Q n={1} q="عايز تبني search index جديد من داتا الداتابيز كلها — إيه اللي بيسهل ده؟">CDC + log compaction: تبدأ من أول الـ topic وتعدي على كل الأحداث.</Q>
+  <Q n={2} q="تحليل جلسات اليوزر على الموقع — نوع الـ window؟">Session window.</Q>
+  <Q n={3} q="ليه dual writes خطر حتى لو الاتنين نجحوا؟">Race condition: ترتيب الكتابات ممكن يختلف بين النظامين فيفضلوا مختلفين للأبد.</Q>
+  <Q n={4} q="إزاي تعمل كتابة idempotent في stream processing؟">خزن الـ offset بتاع الرسالة مع الكتابة، ولو نفس الـ offset جه تاني ماتطبقهوش.</Q>
+</Quiz>
