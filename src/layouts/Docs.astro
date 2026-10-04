@@ -18,22 +18,24 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
 ---
 <Base title={title} description={description} hasSidebar>
   <div class="shell">
-    <nav class="sidebar" aria-label="الفصول">
-      <a class="side-topic" href={url(`${topic.id}/`)}>
+    <nav class="sidebar" aria-label="الفصول" transition:name="sidebar" transition:animate="none">
+      <a class="side-topic" href={url(`${topic.id}/`)} data-astro-prefetch="hover">
         {topic.data.emoji} {topic.data.title}
         <small>{topic.data.subtitle}</small>
       </a>
       <ul class="side-list">
         {chapters.map((c) => (
           <li>
+            <button type="button" class="read-toggle" data-read={c.id} aria-pressed="false" aria-label={`علّم «${c.data.short}» إنه اتقرأ`}></button>
             <a
               class="side-link"
               href={chapterHref(c)}
+              data-astro-prefetch="hover"
               style={`--cc: ${colorVar(c.data.color)}`}
               aria-current={current?.id === c.id ? "page" : undefined}
             >
               <span class="pill">{c.data.label}</span>
-              <span>{c.data.short}</span>
+              <span data-read-title={c.id}>{c.data.short}</span>
             </a>
           </li>
         ))}
@@ -41,7 +43,7 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
       {others.length > 0 && (
         <div class="side-other">
           <div class="side-section">مواضيع تانية</div>
-          {others.map((t) => <a href={url(`${t.id}/`)}>{t.data.emoji} {t.data.title}</a>)}
+          {others.map((t) => <a href={url(`${t.id}/`)} data-astro-prefetch="hover">{t.data.emoji} {t.data.title}</a>)}
         </div>
       )}
     </nav>
@@ -53,7 +55,7 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
       </div>
     </main>
 
-    <aside class="toc" aria-label="في الصفحة دي">
+    <aside class="toc" aria-label="في الصفحة دي" transition:name="toc" transition:animate="none">
       {toc.length > 0 && (
         <>
           <div class="toc-title">في الصفحة دي</div>
@@ -69,21 +71,61 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
 </Base>
 
 <script>
-  // يعلّم العنوان اللي انت واقف عنده في الـ TOC
-  const links = [...document.querySelectorAll<HTMLAnchorElement>(".toc a")];
-  const targets = links
-    .map((a) => document.getElementById(decodeURIComponent(a.hash.slice(1))))
-    .filter((el): el is HTMLElement => !!el);
-  if (targets.length) {
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          links.forEach((a) => a.classList.toggle("active", decodeURIComponent(a.hash.slice(1)) === e.target.id));
-        }
-      },
-      { rootMargin: "-70px 0px -70% 0px" },
-    );
-    targets.forEach((t) => io.observe(t));
-  }
+  const READ_KEY = "masry-notes:read";
+  let tocObserver: IntersectionObserver | undefined;
+
+  const bootDocs = () => {
+    const readButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-read]")];
+    const readMap: Record<string, true> = (() => {
+      try { return JSON.parse(localStorage.getItem(READ_KEY) ?? "{}"); } catch { return {}; }
+    })();
+    const paintRead = (id: string, on: boolean) => {
+      for (const b of readButtons) {
+        if (b.dataset.read !== id) continue;
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+        const label = b.querySelector(".read-label");
+        if (label) label.textContent = on ? "اتقرأ ✓" : "علّمه اتقرأ";
+      }
+      for (const el of document.querySelectorAll<HTMLElement>("[data-read-title]")) {
+        if (el.dataset.readTitle === id) el.classList.toggle("is-read", on);
+      }
+    };
+    for (const id of new Set(readButtons.map((b) => b.dataset.read!))) paintRead(id, !!readMap[id]);
+    for (const b of readButtons) {
+      if (b.dataset.bound) continue;
+      b.dataset.bound = "1";
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = b.dataset.read!;
+        const on = b.getAttribute("aria-pressed") !== "true";
+        if (on) readMap[id] = true;
+        else delete readMap[id];
+        try { localStorage.setItem(READ_KEY, JSON.stringify(readMap)); } catch {}
+        paintRead(id, on);
+        document.dispatchEvent(new Event("masry-read"));
+      });
+    }
+
+    tocObserver?.disconnect();
+    tocObserver = undefined;
+    const links = [...document.querySelectorAll<HTMLAnchorElement>(".toc a")];
+    const targets = links
+      .map((a) => document.getElementById(decodeURIComponent(a.hash.slice(1))))
+      .filter((el): el is HTMLElement => !!el);
+    if (targets.length) {
+      tocObserver = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            links.forEach((a) => a.classList.toggle("active", decodeURIComponent(a.hash.slice(1)) === e.target.id));
+          }
+        },
+        { rootMargin: "-70px 0px -70% 0px" },
+      );
+      targets.forEach((t) => tocObserver?.observe(t));
+    }
+  };
+  bootDocs();
+  document.addEventListener("astro:page-load", bootDocs);
 </script>

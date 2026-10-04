@@ -11,7 +11,8 @@ import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "../styles/global.css";
 import "../styles/layout.css";
-import { url } from "../lib/content";
+import { ClientRouter } from "astro:transitions";
+import { getChapters, getTopics, url } from "../lib/content";
 
 interface Props {
   title: string;
@@ -21,6 +22,16 @@ interface Props {
 }
 const { title, description = "مذكرات تقنية ملوّنة بالمصري", hasSidebar = false } = Astro.props;
 const siteName = "مذكرات سعيد";
+const topics = await getTopics();
+const chaptersByTopic: Record<string, string[]> = {};
+for (const topic of topics) {
+  chaptersByTopic[topic.id] = (await getChapters(topic.id)).map((c) => c.id);
+}
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+const relPath = Astro.url.pathname.slice(basePath.length).replace(/^\/|\/$/g, "");
+const topicId = relPath.split("/")[0] ?? "";
+const progressIds = chaptersByTopic[topicId] ?? Object.values(chaptersByTopic).flat();
+const progressHref = chaptersByTopic[topicId] ? url(`${topicId}/`) : undefined;
 ---
 <!doctype html>
 <html lang="ar" dir="rtl">
@@ -36,19 +47,45 @@ const siteName = "مذكرات سعيد";
         if (t) document.documentElement.dataset.theme = t;
       } catch {}
     </script>
+    <ClientRouter />
   </head>
   <body>
-    <header class="site-header">
-      {hasSidebar && (
-        <button class="menu-btn" aria-label="افتح القايمة" aria-expanded="false" data-menu-btn>
-          <span></span><span></span><span></span>
-        </button>
-      )}
-      <a class="brand" href={url("/")}>
-        <span class="brand-logo">📦</span>
-        <span>{siteName}</span>
-      </a>
+    <header class="site-header" transition:name="site-header" transition:animate="none">
+      <div class="header-start">
+        {hasSidebar && (
+          <button class="menu-btn" aria-label="افتح القايمة" aria-expanded="false" data-menu-btn>
+            <span></span><span></span><span></span>
+          </button>
+        )}
+        <a class="brand" href={url("/")}>
+          <span class="brand-logo">📦</span>
+          <span class="brand-name">{siteName}</span>
+        </a>
+      </div>
+      <form class="search" role="search" data-search data-index={url("search-index.json")}>
+        <input
+          type="search"
+          data-search-input
+          placeholder="دوّر في المذكرات…"
+          aria-label="بحث في المذكرات"
+          aria-autocomplete="list"
+          aria-expanded="false"
+          aria-controls="search-drop"
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        <div class="search-drop" id="search-drop" role="listbox" hidden data-search-drop></div>
+      </form>
       <div class="header-actions">
+        {progressHref ? (
+          <a class="read-progress" href={progressHref} data-astro-prefetch="hover" data-read-progress data-chapters={JSON.stringify(progressIds)}>
+            <span data-read-label>اتقرأ</span>
+          </a>
+        ) : (
+          <span class="read-progress" data-read-progress data-chapters={JSON.stringify(progressIds)}>
+            <span data-read-label>اتقرأ</span>
+          </span>
+        )}
         <button class="theme-btn" data-theme-btn aria-label="غيّر الثيم">
           <span class="sun">☀️</span><span class="moon">🌙</span>
         </button>
@@ -56,42 +93,356 @@ const siteName = "مذكرات سعيد";
     </header>
     <slot />
     <script>
-      // ثيم
-      const root = document.documentElement;
-      document.querySelector("[data-theme-btn]")?.addEventListener("click", () => {
-        const dark =
-          root.dataset.theme === "dark" ||
-          (!root.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
-        root.dataset.theme = dark ? "light" : "dark";
-        try { localStorage.setItem("masry-notes:theme", root.dataset.theme); } catch {}
+      import { navigate } from "astro:transitions/client";
+
+      // الثيم متسجل على html من سكربت أول التحميل. تبديل الصفحة بيمسح
+      // الـ attributes اللي مش مكتوبة في الـ HTML، فنرجّعه قبل التبديل.
+      document.addEventListener("astro:before-swap", (event) => {
+        const next = "newDocument" in event ? (event.newDocument as Document) : undefined;
+        if (!next) return;
+        const theme = document.documentElement.dataset.theme;
+        if (theme) next.documentElement.dataset.theme = theme;
+        else next.documentElement.removeAttribute("data-theme");
       });
 
-      // قايمة الموبايل
-      const btn = document.querySelector<HTMLButtonElement>("[data-menu-btn]");
-      const close = () => { document.body.classList.remove("nav-open"); btn?.setAttribute("aria-expanded", "false"); };
-      btn?.addEventListener("click", () => {
-        const open = document.body.classList.toggle("nav-open");
-        btn.setAttribute("aria-expanded", String(open));
-      });
-      document.querySelector("[data-scrim]")?.addEventListener("click", close);
-      addEventListener("keydown", (e) => e.key === "Escape" && close());
+      const ar = (n: number) => n.toLocaleString("ar-EG");
+      const paintProgress = () => {
+        const progressEl = document.querySelector<HTMLElement>("[data-read-progress]");
+        if (!progressEl) return;
+        const progressIds: string[] = JSON.parse(progressEl.dataset.chapters || "[]");
+        let map: Record<string, true> = {};
+        try { map = JSON.parse(localStorage.getItem("masry-notes:read") ?? "{}"); } catch {}
+        const done = progressIds.filter((id) => map[id]).length;
+        const total = progressIds.length;
+        const label = progressEl.querySelector("[data-read-label]");
+        const narrow = matchMedia("(max-width: 860px)").matches;
+        if (label) label.textContent = narrow ? `${ar(done)}/${ar(total)}` : `اتقرأ ${ar(done)} من ${ar(total)}`;
+        progressEl.setAttribute("aria-label", `اتقرأ ${ar(done)} من ${ar(total)}`);
+        progressEl.classList.toggle("is-done", total > 0 && done === total);
+      };
+      document.addEventListener("masry-read", paintProgress);
+      document.addEventListener("click", (e) => {
+        const target = e.target;
+        if (!(target instanceof Element) || !target.closest("[data-read]")) return;
+        setTimeout(paintProgress, 0);
+      }, true);
+      addEventListener("storage", (e) => { if (e.key === "masry-notes:read") paintProgress(); });
+      matchMedia("(max-width: 860px)").addEventListener("change", paintProgress);
 
-      // زرار نسخ للأكواد
-      for (const pre of document.querySelectorAll<HTMLPreElement>(".prose pre")) {
-        const b = document.createElement("button");
-        b.className = "copy-btn";
-        b.type = "button";
-        b.textContent = "نسخ";
-        b.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(pre.querySelector("code")?.innerText ?? "");
-            b.textContent = "اتنسخ ✓";
-            b.classList.add("done");
-            setTimeout(() => { b.textContent = "نسخ"; b.classList.remove("done"); }, 1500);
-          } catch {}
+      const bindTheme = () => {
+        const btn = document.querySelector<HTMLButtonElement>("[data-theme-btn]");
+        if (!btn || btn.dataset.bound) return;
+        btn.dataset.bound = "1";
+        btn.addEventListener("click", () => {
+          const root = document.documentElement;
+          const dark =
+            root.dataset.theme === "dark" ||
+            (!root.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+          root.dataset.theme = dark ? "light" : "dark";
+          try { localStorage.setItem("masry-notes:theme", root.dataset.theme); } catch {}
         });
-        pre.appendChild(b);
-      }
+      };
+
+      const closeMenu = () => {
+        document.body.classList.remove("nav-open");
+        document.querySelector("[data-menu-btn]")?.setAttribute("aria-expanded", "false");
+      };
+      const bindMenu = () => {
+        const btn = document.querySelector<HTMLButtonElement>("[data-menu-btn]");
+        const scrim = document.querySelector<HTMLElement>("[data-scrim]");
+        if (btn && !btn.dataset.bound) {
+          btn.dataset.bound = "1";
+          btn.addEventListener("click", () => {
+            const open = document.body.classList.toggle("nav-open");
+            btn.setAttribute("aria-expanded", String(open));
+          });
+        }
+        if (scrim && !scrim.dataset.bound) {
+          scrim.dataset.bound = "1";
+          scrim.addEventListener("click", closeMenu);
+        }
+      };
+      addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || e.defaultPrevented) return;
+        closeMenu();
+      });
+
+      // بحث: فهرس كل المواضيع، والنتيجة بتفتح على الجملة
+      const HL_SEL = "p, li, h1, h2, h3, td, th, .box > .t, .card > .t, .chip, .node, summary, .ans, .cell, .chap-goal, .chap-en, .chap-title";
+      type SearchEntry = { topic: string; where: string; href: string; text: string };
+      let searchIndex: SearchEntry[] | null = null;
+      let searchLoading: Promise<SearchEntry[]> | null = null;
+      let hideSearch = () => {};
+      document.addEventListener("pointerdown", (e) => {
+        const form = document.querySelector("[data-search]");
+        if (!form?.contains(e.target as Node)) hideSearch();
+      });
+
+      const foldMap = (input: string) => {
+        let folded = "";
+        const map: number[] = [];
+        for (let i = 0; i < input.length; i++) {
+          const ch = input[i]!;
+          if (/[\u064B-\u0652\u0670"'«»“”‘’]/.test(ch)) continue;
+          let out = ch.toLowerCase();
+          if (out === "أ" || out === "إ" || out === "آ") out = "ا";
+          else if (out === "ة") out = "ه";
+          else if (out === "ى") out = "ي";
+          folded += out;
+          map.push(i);
+        }
+        return { folded, map };
+      };
+      const fold = (s: string) => foldMap(s).folded.replace(/\s+/g, " ").trim();
+
+      const markText = (el: HTMLElement, text: string, query: string) => {
+        const { folded, map } = foldMap(text);
+        const words = fold(query).split(" ").filter((w) => w.length > 1);
+        const ranges: [number, number][] = [];
+        for (const w of words) {
+          let from = 0;
+          while (from < folded.length) {
+            const at = folded.indexOf(w, from);
+            if (at < 0 || at + w.length - 1 >= map.length) break;
+            ranges.push([map[at]!, map[at + w.length - 1]! + 1]);
+            from = at + w.length;
+          }
+        }
+        ranges.sort((a, b) => a[0] - b[0]);
+        const merged: [number, number][] = [];
+        for (const r of ranges) {
+          const prev = merged.at(-1);
+          if (prev && r[0] <= prev[1]) prev[1] = Math.max(prev[1], r[1]);
+          else merged.push([r[0], r[1]]);
+        }
+        let cursor = 0;
+        for (const [s, e] of merged) {
+          if (s > cursor) el.append(text.slice(cursor, s));
+          const mark = document.createElement("mark");
+          mark.textContent = text.slice(s, e);
+          el.append(mark);
+          cursor = e;
+        }
+        if (cursor < text.length) el.append(text.slice(cursor));
+      };
+
+      const snippet = (text: string, query: string) => {
+        const { folded, map } = foldMap(text);
+        const words = fold(query).split(" ").filter((w) => w.length > 1);
+        let at = folded.indexOf(fold(query));
+        let len = fold(query).length;
+        if (at < 0) {
+          const w = words.find((word) => folded.includes(word));
+          if (!w) return text.length > 140 ? `${text.slice(0, 140)}…` : text;
+          at = folded.indexOf(w);
+          len = w.length;
+        }
+        const start = map[Math.max(0, at - 36)] ?? 0;
+        const endIdx = map[Math.min(folded.length - 1, at + len + 80)];
+        const end = endIdx === undefined ? text.length : endIdx + 1;
+        let slice = text.slice(start, end).trim();
+        if (start > 0) slice = `…${slice}`;
+        if (end < text.length) slice = `${slice}…`;
+        return slice;
+      };
+
+      let hitFor = "";
+      const showHit = () => {
+        if (hitFor === location.href) return;
+        hitFor = location.href;
+        const hl = new URLSearchParams(location.search).get("hl");
+        if (!hl) return;
+        const needle = fold(hl);
+        if (needle.length < 8) return;
+        const root = document.querySelector("main") ?? document.body;
+        const hits = [...root.querySelectorAll<HTMLElement>(HL_SEL)].filter((el) => {
+          if (el.closest(".pager, .sidebar, .toc, .search")) return false;
+          return fold(el.textContent ?? "").includes(needle);
+        });
+        hits.sort((a, b) => (a.textContent?.length ?? 0) - (b.textContent?.length ?? 0));
+        const best = hits[0];
+        if (!best) return;
+        let parent: HTMLElement | null = best;
+        while (parent) {
+          if (parent instanceof HTMLDetailsElement) parent.open = true;
+          parent = parent.parentElement;
+        }
+        best.classList.add("search-hit");
+        const jump = () => {
+          const prev = root.style.scrollBehavior;
+          document.documentElement.style.scrollBehavior = "auto";
+          best.scrollIntoView({ block: "center" });
+          document.documentElement.style.scrollBehavior = prev;
+        };
+        requestAnimationFrame(jump);
+      };
+
+      const bindSearch = () => {
+        const searchForm = document.querySelector<HTMLFormElement>("[data-search]");
+        const searchInput = document.querySelector<HTMLInputElement>("[data-search-input]");
+        const searchDrop = document.querySelector<HTMLDivElement>("[data-search-drop]");
+        if (!searchForm || !searchInput || !searchDrop || searchForm.dataset.bound) return;
+        searchForm.dataset.bound = "1";
+        let shown: SearchEntry[] = [];
+        let active = 0;
+
+        const loadIndex = () => {
+          if (searchIndex) return Promise.resolve(searchIndex);
+          if (!searchLoading) {
+            searchLoading = fetch(searchForm.dataset.index ?? "")
+              .then((r) => r.json())
+              .then((data: SearchEntry[]) => (searchIndex = data));
+          }
+          return searchLoading;
+        };
+
+        const hideDrop = () => {
+          searchDrop.hidden = true;
+          searchDrop.replaceChildren();
+          searchInput.setAttribute("aria-expanded", "false");
+          shown = [];
+        };
+        hideSearch = hideDrop;
+
+        const paintActive = () => {
+          const links = [...searchDrop.querySelectorAll<HTMLAnchorElement>("a")];
+          links.forEach((a, i) => a.classList.toggle("active", i === active));
+          links[active]?.scrollIntoView({ block: "nearest" });
+        };
+
+        const renderDrop = (list: SearchEntry[], query: string) => {
+          shown = list;
+          active = 0;
+          searchDrop.replaceChildren();
+          if (!list.length) {
+            const empty = document.createElement("p");
+            empty.className = "search-empty";
+            empty.textContent = "مفيش نتيجة للكلمة دي";
+            searchDrop.append(empty);
+          } else {
+            list.forEach((hit, i) => {
+              const a = document.createElement("a");
+              a.href = hit.href;
+              a.dataset.astroPrefetch = "hover";
+              a.className = "search-hit-link";
+              a.setAttribute("role", "option");
+              const small = document.createElement("small");
+              small.textContent = `${hit.topic} · ${hit.where}`;
+              const span = document.createElement("span");
+              span.dir = "auto";
+              markText(span, snippet(hit.text, query), query);
+              a.append(small, span);
+              a.addEventListener("pointerenter", () => {
+                active = i;
+                paintActive();
+              });
+              searchDrop.append(a);
+            });
+            paintActive();
+          }
+          searchDrop.hidden = false;
+          searchInput.setAttribute("aria-expanded", "true");
+        };
+
+        const runQuery = async () => {
+          const query = searchInput.value.trim();
+          if (fold(query).length < 2) {
+            hideDrop();
+            return;
+          }
+          const entries = await loadIndex();
+          const q = fold(query);
+          const words = q.split(" ").filter((w) => w.length > 1);
+          const ranked = entries
+            .map((entry) => {
+              const text = fold(entry.text);
+              const where = fold(`${entry.topic} ${entry.where}`);
+              if (words.length && !words.every((w) => text.includes(w) || where.includes(w))) return null;
+              if (!words.length && !text.includes(q) && !where.includes(q)) return null;
+              let score = 0;
+              if (text.includes(q)) score += 40;
+              if (where.includes(q)) score += 24;
+              for (const w of words) {
+                if (text.includes(w)) score += 6;
+                if (where.includes(w)) score += 3;
+              }
+              const at = text.indexOf(words[0] ?? q);
+              if (at >= 0) score += Math.max(0, 12 - at / 20);
+              return { entry, score };
+            })
+            .filter((x): x is { entry: SearchEntry; score: number } => !!x && x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 12)
+            .map((x) => x.entry);
+          renderDrop(ranked, query);
+        };
+
+        let timer = 0;
+        searchInput.addEventListener("input", () => {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(() => void runQuery(), 60);
+        });
+        searchInput.addEventListener("focus", () => {
+          void loadIndex();
+          if (searchInput.value.trim().length >= 2) void runQuery();
+        });
+        searchForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const hit = shown[active];
+          if (hit) void navigate(hit.href);
+        }, true);
+        searchInput.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            if (!searchDrop.hidden) {
+              e.preventDefault();
+              e.stopPropagation();
+              hideDrop();
+            }
+            return;
+          }
+          if (searchDrop.hidden || !shown.length) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            active = (active + 1) % shown.length;
+            paintActive();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            active = (active - 1 + shown.length) % shown.length;
+            paintActive();
+          }
+        });
+      };
+
+      const bindCopy = () => {
+        for (const pre of document.querySelectorAll<HTMLPreElement>(".prose pre")) {
+          if (pre.querySelector(".copy-btn")) continue;
+          const b = document.createElement("button");
+          b.className = "copy-btn";
+          b.type = "button";
+          b.textContent = "نسخ";
+          b.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(pre.querySelector("code")?.innerText ?? "");
+              b.textContent = "اتنسخ ✓";
+              b.classList.add("done");
+              setTimeout(() => { b.textContent = "نسخ"; b.classList.remove("done"); }, 1500);
+            } catch {}
+          });
+          pre.appendChild(b);
+        }
+      };
+
+      const boot = () => {
+        paintProgress();
+        bindTheme();
+        bindMenu();
+        showHit();
+        bindSearch();
+        bindCopy();
+      };
+      boot();
+      document.addEventListener("astro:page-load", boot);
     </script>
   </body>
 </html>

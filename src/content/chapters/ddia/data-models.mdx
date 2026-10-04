@@ -1,0 +1,123 @@
+---
+title: نماذج الداتا ولغات الاستعلام
+short: نماذج الداتا
+order: 2
+label: فصل ٢
+badge: الأساسيات · فصل ٢
+en: Relational · document · graph · declarative queries
+keywords: document · graph · schema-on-read
+goal: تختار الموديل حسب شكل العلاقات، وتعرف ليه الـ declarative أقوى من ما تمشي في الداتا بإيدك.
+part: الأساسيات
+color: c2
+---
+
+## ليه الموديل مهم؟
+
+كل أبلكيشن طبقات فوق بعض، وكل طبقة بتخبي تعقيد اللي تحتها: objects في الكود، ثم JSON أو جداول أو جراف، ثم بايتات على الديسك.
+
+<Hl c="y">الموديل اللي بتختاره بيحدد إيه السهل وإيه الصعب</Hl>. ده قرار كبير مش تفصيلة.
+
+## Relational ولا Document؟
+
+الموديل العلائقي (جداول وصفوف) فضل مسيطر عقود. NoSQL ظهرت عشان scalability، وopen source، واستعلامات متخصصة، وزهق من قيود الـ schema. المستقبل غالبًا <En>polyglot persistence</En>: كذا نوع داتابيز جنب بعض.
+
+الكود بيفكر بـ objects والداتابيز بجداول. الـ ORM بيترجم، بس مش بيخبي الفرق كله. ده اسمه impedance mismatch.
+
+<Box type="story" title="بروفايل LinkedIn">
+
+اسم + وظايف + تعليم + تواصل. ده شجرة one-to-many. في SQL هتحطه في كذا جدول وتعمل joins، أو JSON في عمود. في document DB هو مستند واحد: locality أحسن، وكويري واحدة تجيب الكل.
+
+</Box>
+
+ليه نخزن `region_id` بدل اسم المدينة نص؟ عشان <En>normalization</En>: معلومة ليها معنى بشري تتخزن مرة واحدة. بحث أحسن، تعديل في مكان واحد، مفيش التباس. التمن joins. والـ document DBs دعمها للـ joins ضعيف، فالجوين بيترمي على كود الأبلكيشن. ومع الوقت الداتا بترتبط أكتر (many-to-many)، وهنا الجداول بترتاح.
+
+<Box type="idea" title="التاريخ بيعيد نفسه">
+
+في السبعينات IMS كان شجرة زي JSON، والـ many-to-many كانت صعبة. الـ network model خلّاك تمشي في pointers بإيدك. الـ relational كسب لأن الجداول مكشوفة والـ optimizer هو اللي يختار الطريق: تضيف index والكود مايتغيرش.
+
+</Box>
+
+<Grid2>
+<Card title="📄 Document" c={3}>
+
+- Schema مرن، وأقرب للـ objects.
+- Locality: المستند كله مرة واحدة.
+- مناسب لو الداتا شجرة ومش بتعمل joins كتير.
+- joins ضعيفة، ومش بتقدر تشاور على عنصر جوّه المستند بسهولة.
+
+</Card>
+<Card title="🧮 Relational" c={5}>
+
+- Joins ممتازة.
+- many-to-one و many-to-many مريحين.
+- تقطيع الشجرة لجداول كتير ممكن يبقى مزعج.
+
+</Card>
+</Grid2>
+
+"Schemaless" اسم مضلل. الأدق:
+
+- **Schema-on-write:** الـ schema صريحة والداتابيز تفرضها. زي static typing.
+- **Schema-on-read:** الـ schema ضمنية والكود يفسّرها وهو بيقرأ. زي dynamic typing. مفيدة لما الداتا heterogeneous فعلًا.
+
+<Box type="warn" title="Locality مش ببلاش">
+
+الداتابيز بتحمّل المستند كله حتى لو عايز حتة صغيرة، والتعديل غالبًا بيعيد كتابة المستند. خلّي المستندات صغيرة. والفكرة مش حكر على الـ documents: فيه interleaving و column families في أنظمة تانية. و Postgres بقى يدعم JSON، و Mongo بقى يقرب من الـ joins. الهجين هو المستقبل.
+
+</Box>
+
+## Declarative ولا imperative؟
+
+<Grid2>
+<Card title="Declarative — SQL" c={1}>
+
+بتقول عايز إيه. الـ optimizer يقرر إزاي. أقصر، وسهل يتظبط من غير ما تغيّر الكويري، وسهل يتوازى لأنك محددتش الترتيب.
+
+</Card>
+<Card title="Imperative" c={2}>
+
+بتقول للكمبيوتر الخطوة خطوة: loop وفلترة. أي تحسين في المحرك مش هيستفيد منه كودك.
+
+</Card>
+</Grid2>
+
+<Box type="story" title="من الويب">
+
+`li.selected > p` في CSS declarative: بتوصف إيه اللي تلّونه، ولو الكلاس اتشال اللون يتشال. لو عملتها بـ JS بإيدك، الكود أطول واللون ممكن يفضل. نفس فكرة React قدام jQuery.
+
+</Box>
+
+MapReduce كان في النص: دالتين `map` و `reduce` لازم يبقوا pure، والفريمورك يوزعهم. Mongo بعد كده رجعت لـ aggregation pipeline أقرب للـ declarative.
+
+## الجراف
+
+لو أغلب علاقاتك many-to-many، الجراف طبيعي: vertices (عقد) و edges (علاقات). سوشيال، لينكات، خرايط.
+
+| الموديل | التكوين | اللغة |
+| --- | --- | --- |
+| Property graph | vertex فيه id و edges و properties. الـ edge ليه اتجاه و label | Cypher. نفس الكويري في SQL بـ `WITH RECURSIVE` بتطول جدًا |
+| Triple-store | كل حاجة جملة من ٣: subject, predicate, object | SPARQL |
+| Datalog | rules تتبني فوق بعض | أقوى للحاجات المعقدة، أقل سهولة للبسيط |
+
+أي vertex يقدر يرتبط بأي vertex. تمشي لقدام ولورا بكفاءة. تضيف نوع علاقة جديد من غير ما تكرس القديم. والـ traversal بطول مش معروف مقدمًا ("أي حد ساكن في أي مكان جوه أوروبا") هو قوته.
+
+<Box type="warn" title="ماتلخبطش">
+
+Graph DB مش CODASYL. هناك كان فيه schema بيمشي في access path والأطفال مرتبين. الجراف من غير القيود دي، وبلغات declarative.
+
+</Box>
+
+<Checklist id="ddia-models" title="Checklist الموديلات" items={[
+  "أختار document لما الداتا شجرة وبتتحمل كلها مرة واحدة.",
+  "أختار relational لما many-to-many والـ joins كتير.",
+  "أختار graph لما العلاقات هي السؤال نفسه.",
+  "فاهم إن schemaless معناها schema-on-read.",
+  "بفضّل declarative عشان الـ optimizer والتوازي.",
+]} />
+
+<Quiz>
+  <Q n={1} q="سيستم CV كل واحد مستند مستقل بيتعرض كله مرة واحدة. تختار إيه؟">Document model: شكل شجرة، و locality لأنك بتحمّل المستند كله.</Q>
+  <Q n={2} q="ليه بنخزن ID بدل نص المدينة؟">Normalization: مصدر حقيقة واحد، مفيش تكرار، وتعديل في مكان واحد.</Q>
+  <Q n={3} q="إيه مزية SQL على الـ access paths بتاعة CODASYL؟">الـ query optimizer يختار المسار. تضيف index والكويري مايتغيرش.</Q>
+  <Q n={4} q="امتى الجراف أنسب من الجدول؟">لما العلاقات many-to-many هي لب السؤال، والـ traversal طوله مش معروف مقدمًا.</Q>
+</Quiz>

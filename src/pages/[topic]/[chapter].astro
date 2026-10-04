@@ -29,6 +29,9 @@ const d = chapter.data;
     <h1 class="chap-title">{d.title}</h1>
     <div class="chap-en">{d.en}</div>
     {d.goal && <div class="chap-goal">🎯 الهدف: <Fragment set:html={d.goal.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,.9);color:#b45309;padding:0 .4em;border-radius:5px;font-family:var(--mono);font-size:.85em">$1</code>')} /></div>}
+    <button type="button" class="read-toggle chap-read" data-read={chapter.id} aria-pressed="false">
+      <span class="read-label">علّمه اتقرأ</span>
+    </button>
   </header>
 
   <article class="prose">
@@ -37,12 +40,12 @@ const d = chapter.data;
 
   <nav class="pager" aria-label="التنقل بين الفصول">
     {prev && (
-      <a class="prev" href={chapterHref(prev)}>
+      <a class="prev" href={chapterHref(prev)} data-astro-prefetch="hover">
         <small>→ اللي قبله</small><b>{prev.data.title}</b>
       </a>
     )}
     {next && (
-      <a class="next" href={chapterHref(next)}>
+      <a class="next" href={chapterHref(next)} data-astro-prefetch="viewport">
         <small>اللي بعده ←</small><b>{next.data.title}</b>
       </a>
     )}

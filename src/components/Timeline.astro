@@ -5,6 +5,7 @@
  *   [meta]           • عنوان ................ #tag #tag
  */
 export interface TimelineItem {
+  id: string;
   href: string;
   meta: string;
   title: string;
@@ -28,14 +29,14 @@ const { groups } = Astro.props;
         <span class="tl-count">{g.count}</span>
       </div>
       {g.items.map((i) => (
-        <a class="tl-row tl-item" href={i.href} style={i.color ? `--dot: ${i.color}` : undefined}>
+        <div class="tl-row tl-item" style={i.color ? `--dot: ${i.color}` : undefined}>
           <span class="tl-meta">{i.meta}</span>
           <span class="tl-rail"><span class="tl-dot"></span></span>
-          <span class="tl-title">{i.title}</span>
+          <a class="tl-title" href={i.href} data-astro-prefetch="hover" data-read-title={i.id}>{i.title}</a>
           {i.tags && i.tags.length > 0 && (
             <span class="tl-tags">{i.tags.map((t) => `#${t}`).join(" ")}</span>
           )}
-        </a>
+        </div>
       ))}
     </section>
   ))}

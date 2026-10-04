@@ -1,0 +1,82 @@
+---
+title: "الـ Consistency والـ Consensus: إزاي يتفقوا"
+short: Consensus
+order: 9
+label: فصل ٩
+badge: الموزعة · فصل ٩
+en: Linearizability · CAP · total order · Raft · two-phase commit
+keywords: linearizability · Raft · 2PC
+goal: تفرّق بين أنواع الاتساق، وتعرف إن انتخاب الـ leader مسألة consensus مش if.
+part: الموزعة
+color: c4
+---
+
+## الفكرة
+
+بدل ما كل أبلكيشن يحل أعطال الفصل اللي فات لوحده، بنبني abstractions بضمانات. أهمها <En>consensus</En>: النودز توافق على حاجة واحدة.
+
+أغلب الداتابيزات المنسوخة بتدي eventual consistency، والأدق نسميها convergence: لو الكتابات وقفت، النسخ هتتساوى في وقت مش معروف. ضمان ضعيف. الأقوى ليه تمن في الأداء والـ availability.
+
+## Linearizability
+
+السيستم يبان كأن فيه نسخة واحدة. أول ما كتابة تخلص، كل قراءة بعدها تشوف الجديد. مينفعش ترجع للقديم.
+
+<Box type="story" title="ماتش كورة">
+
+أليس عملت refresh وشافت النتيجة وقالت لبوب الجنبها. بوب عمل refresh بعده وشاف الماتش لسه شغال، لأن ريكوسته راح لنسخة متأخرة. ده كسر للـ linearizability: قراءته حصلت بعد قراءتها فكان لازم يشوف نفس النتيجة على الأقل.
+
+</Box>
+
+<Box type="warn" title="Linearizability مش serializability">
+
+Serializability خاصية لـ transactions على كذا object: النتيجة كأنها اتنفذت بترتيب ما. Linearizability ضمان recency على object واحد. الاتنين مع بعض strict serializability.
+
+</Box>
+
+محتاجها لما: انتخاب leader أو lock (وإلا split brain)، أو uniqueness (يوزرنيم، تذكرة)، أو قناتين لازم يشوفوا نفس اللحظة (رفعت صورة وبعدين رسالة للـ thumbnail، والطابور أسرع من الـ replication فالخدمة تقرا صورة مش موجودة).
+
+| الطريقة | Linearizable؟ |
+| --- | --- |
+| Single-leader | ممكن لو قريت من الـ leader. الـ async failover و split brain يكسرونها |
+| Consensus (ZooKeeper, etcd) | أيوه. ده هدفها |
+| Multi-leader | لأ. كتابات في أماكن مختلفة |
+| Leaderless | غالبًا لأ حتى مع quorum. LWW بالساعات لأ |
+
+## CAP من غير الخلط
+
+لو الشبكة اتقطعت بين مجموعتين، مش هتقدر تدي linearizability وتفضل ترد على الاتنين. تختار: ترد بداتا ممكن تكون قديمة (availability)، أو ترفض لحد ما تتفق (consistency بالمعنى الضيق: linearizability).
+
+الـ CAP مش بيقول "الاختيار بين الاتساق والتوافر" بالمعنى التسويقي. هو عن linearizability وقت partition. أنظمة كتير مش linearizable أصلًا، وبرضه بتضحي بحاجات تانية. الجملة "اختر اتنين من تلاتة" بتضيّع التفاصيل.
+
+## الترتيب والسببية
+
+الترتيب بيحافظ على السببية: السؤال قبل الجواب، والـ insert قبل الـ update. مش كل العمليات لازم تترتب على بعض. اللي مرتبطين بسبب يكفي.
+
+الساعة الفيزيائية مش بتحفظ السببية كويس. Lamport clocks و version vectors بيحفظوا "مين حصل قبل مين" من غير ما تثق في ساعة الحائط. Total order broadcast: كل النودز تشوف نفس تسلسل الرسائل. ده قريب جدًا من consensus.
+
+## Consensus و 2PC
+
+Consensus يعني: النودز تتفق على قيمة، والاتفاق نهائي، والقيمة دي قيمة حد اقترحها فعلًا. Raft و Zab (جوه ZooKeeper و etcd) بيعملوا كده: leader واحد، وأغلبية لازم توافق، والزومبي القديم مش بيكتب.
+
+متكتبهاش بنفسك. استخدم ZooKeeper أو etcd لانتخاب الـ leader والـ locks والـ unique constraints الموزعة.
+
+<Box type="warn" title="Two-phase commit">
+
+الـ 2PC بيخلّي كذا داتابيز تعمل commit مع بعض: prepare ثم commit. لو الـ coordinator وقع بعد الـ prepare، الباقي واقفين مستنيين. قرار blocking. والـ coordinator نقطة حساسة. عشان كده transaction بين داتابيز وطابور (XA) بيتتجنب لما تقدر، ويتستبدل بـ outbox أو CDC ومستهلكين idempotent.
+
+</Box>
+
+<Checklist id="ddia-consensus" title="Checklist الاتفاق" items={[
+  "Linearizability = أحدث قيمة على object واحد.",
+  "الـ CAP عن linearizability وقت قطع الشبكة، مش شعار.",
+  "انتخاب leader و uniqueness الموزعة = consensus جاهز.",
+  "الترتيب السببي أهم من ساعة الحائط.",
+  "الـ 2PC بيقف لو المنسق وقع بعد الـ prepare.",
+]} />
+
+<Quiz>
+  <Q n={1} q="بوب شاف نتيجة قديمة بعد ما أليس شافت الجديدة. أنهي ضمان اتكسر؟">Linearizability. قراءته بعد قراءتها فكان لازم يشوف الجديد.</Q>
+  <Q n={2} q="ليه ZooKeeper linearizable والـ multi-leader لأ؟">ZooKeeper فيه اتفاق على ترتيب واحد. الـ multi-leader بيقبل كتابات في أماكن مختلفة من غير ما يتفقوا الأول.</Q>
+  <Q n={3} q="إيه اللي يقف في الـ 2PC؟">لو المنسق وقع بعد ما الباقي قالوا prepare، هما مش عارفين يعملوا commit ولا abort، فبيستنوا.</Q>
+  <Q n={4} q="ليه متستخدمش ساعة السيرفر عشان ترتب الأحداث بين نودز؟">الساعات بتنحرف. الترتيب السببي محتاجه logical clocks أو total order من consensus.</Q>
+</Quiz>

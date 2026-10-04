@@ -132,6 +132,7 @@ img { max-width: 100%; }
   background: var(--n, var(--c1));
   box-shadow: 0 4px 12px -4px var(--n, var(--c1));
 }
+.prose h2.no-num { margin-top: 0; }
 .prose h2.no-num::before { display: none; }
 .prose h2:nth-of-type(5n + 1) { --n: var(--c1); }
 .prose h2:nth-of-type(5n + 2) { --n: var(--c2); }

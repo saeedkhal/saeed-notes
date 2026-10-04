@@ -4,6 +4,17 @@ import { getChapters, getTopics, url } from "../lib/content";
 
 const topics = await getTopics();
 const counts = await Promise.all(topics.map(async (t) => (await getChapters(t.id)).length));
+const accents = ["c1", "c2", "c3", "c4", "c5"];
+const countLabel = (n: number) =>
+  n === 1 ? "فصل واحد" : n === 2 ? "فصلين" : `${n.toLocaleString("ar-EG")} فصول`;
+const mix = (s: string) =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/(?:[A-Za-z][A-Za-z0-9+#./-]*[ \t]*)+/g, (w) => {
+      const phrase = w.trimEnd();
+      return `<bdi dir="ltr">${phrase}</bdi>${w.slice(phrase.length)}`;
+    });
 ---
 <Base title="مذكرات سعيد">
   <div class="home">
@@ -12,16 +23,21 @@ const counts = await Promise.all(topics.map(async (t) => (await getChapters(t.id
       <p>شرح وملخصات ملوّنة لمواضيع البرمجة — بأمثلة من الحياة، صناديق تحذير ونصايح، وفي آخر كل فصل checklist واختبر نفسك.</p>
     </section>
     <div class="topics">
-      {topics.map((t, i) => (
-        <a class="topic-card" href={url(`${t.id}/`)}>
-          <div class="em">{t.data.emoji}</div>
-          <h2>{t.data.title}</h2>
-          <p>{t.data.description}</p>
-          <span class="meta">{counts[i]} فصول</span>
-        </a>
-      ))}
+      {topics.map((t, i) => {
+        const [before, after] = t.data.title.split(t.data.highlight);
+        return (
+          <a class="topic-card" href={url(`${t.id}/`)} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
+            <div class="topic-top">
+              <span class="em">{t.data.emoji}</span>
+              <span class="meta">{countLabel(counts[i] ?? 0)}</span>
+            </div>
+            <h2>{before}<mark class="hl y">{t.data.highlight}</mark>{after}</h2>
+            <p set:html={mix(t.data.description)} />
+          </a>
+        );
+      })}
       <div class="topic-card soon">
-        <div class="em">➕</div>
+        <span class="em">➕</span>
         <p>مواضيع جاية قريب…</p>
       </div>
     </div>

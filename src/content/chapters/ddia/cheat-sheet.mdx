@@ -1,0 +1,55 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 12
+label: الآخر
+badge: الآخر
+en: One-page decision guide
+keywords: cheatsheet · tradeoffs
+goal: صفحة واحدة قبل ما تختار أداة — المشكلة على الشمال، والاتجاه على اليمين.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["الـ p99 عالي والمتوسط حلو", "Tail latency، head-of-line blocking، GC، أو compaction في LSM"],
+  ["داتا شجرية بتتحمل كلها مرة واحدة", "Document model"],
+  ["علاقات many-to-many معقدة", "Relational، ولو كل حاجة مرتبطة بكل حاجة فـ Graph"],
+  ["كتابات كتير جدًا (logs, metrics)", "LSM-tree (Cassandra, RocksDB)"],
+  ["قراءات متوقعة و transactions قوية", "B-tree (Postgres, MySQL)"],
+  ["تحليلات على ملايين الصفوف", "Warehouse + column storage + star schema"],
+  ["Rolling deploy والـ schema بتتغير", "Protobuf أو Avro، حقول جديدة optional وبـ default"],
+  ["الـ retries بتعمل تكرار", "Idempotency key"],
+  ["القراءات أكتر بكتير من الكتابات", "Single-leader + read replicas، وخد بالك من الـ lag"],
+  ["اليوزر مش شايف تعديله بعد refresh", "Read-your-writes: اقرا من الـ leader"],
+  ["داتا سنترز كتير أو أوفلاين", "Multi-leader + حل تعارض، أو تجنّب الكتابة على نفس الـ record"],
+  ["الكتابة تكمل حتى مع أعطال", "Leaderless + quorum (`w + r > n`)"],
+  ["الداتا أكبر من ماكينة", "Partitioning: range للـ range queries، أو hash للتوزيع"],
+  ["Hot key (مشهور)", "Salting، واجمع وقت القراءة"],
+  ["عدادات أو أرصدة بتضيع", "Atomic update، أو `SELECT FOR UPDATE`، أو compare-and-set"],
+  ["اتأكد إن مفيش… وبعدين اكتب", "Write skew: serializable (SSI) أو materialize التعارض"],
+  ["Backup أو report بيشوف أرقام متضاربة", "Snapshot isolation (MVCC)"],
+  ["Lock خلّص وزومبي لسه بيكتب", "Fencing tokens"],
+  ["محتاج leader election موزع", "ZooKeeper أو etcd (Raft / Zab). متكتبهاش"],
+  ["ترتيب أحداث بين نودز", "Logical clocks أو version vectors، مش ساعة الحائط"],
+  ["Transaction بين داتابيز وطابور", "تجنّب XA. استخدم outbox أو CDC ومستهلك idempotent"],
+  ["تحويل داتا ضخمة دوريًا", "Batch: Spark أو Flink، والـ output ملفات جديدة"],
+  ["الكاش أو السيرش لازم يلحق الداتابيز", "CDC مش dual writes"],
+  ["محتاج تاريخ كل تغيير", "Event sourcing + CQRS"],
+  ["مقاييس لحظية", "Stream windows على event time"],
+  ["طابور شغل والترتيب مش مهم", "RabbitMQ. لو الترتيب والـ replay مهمين: Kafka"],
+]} />
+
+<Box type="idea" title="رسالة المذكرة">
+
+مفيش أداة الأحسن. كل حاجة tradeoff: الأداء ضد الضمانات، والبساطة ضد المرونة. اللي يفرق إنك تعرف النظام بيضمن إيه فعلًا، وإيه اللي ممكن يبوظ، وإزاي تصممه يستحمل.
+
+</Box>
+
+<Checklist id="ddia-final" title="🏁 Checklist النهاية" items={[
+  "أوصف الحمل بـ percentiles مش بالمتوسط.",
+  "أختار موديل الداتا من شكل العلاقات مش من الموضة.",
+  "أفرّق بين LSM و B-tree، وبين leader و quorum.",
+  "أعرف مستوى العزل بيمنع أنهي باج.",
+  "أبني الكاش والسيرش من لوج، مش بكتابتين ورا بعض.",
+]} />

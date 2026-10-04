@@ -1,0 +1,107 @@
+---
+title: "الـ Partitioning: الداتا أكبر من ماكينة"
+short: Partitioning
+order: 6
+label: فصل ٦
+badge: الموزعة · فصل ٦
+en: Key range · hash · secondary indexes · rebalancing
+keywords: hot spot · rebalancing · routing
+goal: تقسم الداتا والحمل بالعدل، ومن غير ما نقل المفاتيح يبوظ لما تضيف ماكينة.
+part: الموزعة
+color: c1
+---
+
+## الفكرة
+
+كل record في partition واحد، وكل partition كأنه داتابيز صغيرة. الأسماء بتختلف: shard، region، tablet، vnode. الهدف <Hl c="g">توزيع الداتا والكويريز</Hl>. وعادة مع replication: كل partition ليه نسخ، والنود تبقى leader لبعضهم و follower لغيرهم.
+
+<Box type="story" title="دولاب الملفات">
+
+عشر موظفين وأرشيف ضخم. لو قسمت غلط وموظف واحد مسك كل الشغل، الباقي قاعدين وهو غرقان. ده skew، والموظف ده hot spot.
+
+</Box>
+
+## تقسيم المفتاح
+
+التقسيم العشوائي يوزّع كويس بس مش هتعرف المفتاح فين، فتسأل الكل.
+
+<Grid2>
+<Card title="📚 Key range" c={4}>
+
+زي مجلدات الموسوعة: A–B ثم C–D. الـ range queries ممتازة لأن المفاتيح مرتبة جوه الـ partition. الخطر: مفتاح زي timestamp يبعبص كتابات النهارده كلها في partition واحد. الحل: حط اسم السينسور قبل الوقت.
+
+</Card>
+<Card title="#️⃣ Hash" c={3}>
+
+hash ثابت (مش `hashCode` بتاع Java اللي يتغير بين العمليات) وكل partition ياخد مدى من الـ hashes. توزيع عادل. الترتيب ضاع، فالـ range query تتبعت لكل الـ partitions.
+
+</Card>
+</Grid2>
+
+<Box type="tip" title="الهجين في Cassandra">
+
+Compound key: الجزء الأول يتعمل له hash ويحدد الـ partition، والباقي يترتب جوه. `(user_id, update_timestamp)` يجيب بوستات يوزر في فترة من partition واحد. والكتاب بيفضل اسم hash partitioning على consistent hashing عشان الاسم التاني بيتلخبط.
+
+</Box>
+
+حتى الـ hash مش بيحل المشهور: key واحد عليه ملايين طلبات. الحل اليدوي salting: رقم عشوائي من خانتين في آخر المفتاح فيتوزع على ١٠٠ مفتاح. القراءة بقت تجمع من المية، ولازم تعرف أنهي مفاتيح محتاجة كده.
+
+## الـ secondary indexes
+
+"هات كل العربيات الحمرا" المفتاح مش لون العربية.
+
+<Grid2>
+<Card title="📄 Local — document-partitioned" c={1}>
+
+كل partition عنده index لداتاه. الكتابة سهلة (partition واحد). القراءة scatter/gather: تسأل الكل، وفي tail latency amplification.
+
+</Card>
+<Card title="🏷️ Global — term-partitioned" c={5}>
+
+الـ index نفسه متقسم بقيمة الـ term: الأحمر في partition والتاني في غيره. القراءة من partition واحد. الكتابة أصعب لأن document واحد يحدّث كذا partition، والتحديث غالبًا async.
+
+</Card>
+</Grid2>
+
+## إعادة التوزيع
+
+الحمل بيزيد أو ماكينة بتموت، فلازم ننقل partitions. الحمل يفضل عادل، والداتابيز تفضل شغالة، ومننقلش أكتر من اللازم.
+
+<Box type="warn" title="ليه hash % N وحش؟">
+
+لو `N` اتغير من ١٠ لـ ١١، تقريبًا كل المفاتيح هتتنقل. نقل ملوش لازمة.
+
+</Box>
+
+| الاستراتيجية | إزاي | ملاحظات |
+| --- | --- | --- |
+| عدد partitions ثابت | تعمل partitions أكتر بكتير من النودز. النود الجديدة تسرق partitions كاملة. المفتاح → partition ثابت | لازم تختار العدد من الأول |
+| Dynamic | partition كبر يتقسم، والصغير يندمج مع جاره | العدد بيتكيف. داتابيز فاضية = partition واحد، فاعمل pre-splitting |
+| Proportional to nodes | عدد ثابت لكل نود. الجديدة تاخد نص partitions عشوائية | محتاج hash partitioning |
+
+الـ rebalancing أوتوماتيك بالكامل خطر: نود بطيئة تتحسب ماتت، يبدأ نقل، الضغط يزيد، cascading failure. الأحسن السيستم يقترح وإنسان يوافق.
+
+## الطلب يروح فين؟
+
+1. الكلاينت يكلم أي نود، ولو مش عندها تحوّل (gossip).
+2. طبقة routing في النص عارفة الخريطة.
+3. الكلاينت نفسه عارف الـ partition على أنهي نود.
+
+مين ماسك الخريطة؟ غالبًا ZooKeeper: النودز تسجل نفسها، والـ routing يعمل subscribe. Mongo عنده config servers و mongos. والكلاينت يعرف IPs الـ routing عن طريق DNS.
+
+تحليلات الـ MPP بتقسم الكويري المعقدة (joins و aggregations) لمراحل بالتوازي. الـ NoSQL غالبًا كويري على key واحد. والكتابة على أكتر من partition صعبة، وده موضوع الـ transactions.
+
+<Checklist id="ddia-partition" title="Checklist التقسيم" items={[
+  "Range للـ range queries، و hash للتوزيع العادل.",
+  "المفتاح الساخن يتعالج بـ salting مع book-keeping.",
+  "Local index كتابة سهلة وقراءة scatter. Global العكس.",
+  "ممنوع `hash % N` لما العدد يتغير.",
+  "الـ rebalancing عليه موافقة بني آدم.",
+]} />
+
+<Quiz>
+  <Q n={1} q="سينسورات بتكتب بالـ timestamp كمفتاح و range partitioning. المشكلة والحل؟">كل كتابات اللحظة في partition واحد. حط اسم السينسور قبل الوقت.</Q>
+  <Q n={2} q="ليه الـ global index أسرع في القراءة؟">لأن كل term في partition واحد، مش محتاج تسأل كل النودز.</Q>
+  <Q n={3} q="ليه rebalancing أوتوماتيك بالكامل خطر؟">ممكن يتلخبط مع اكتشاف الأعطال ويعمل cascading failure.</Q>
+  <Q n={4} q="ليه `hash % N` بينقل تقريبًا كل المفاتيح؟">لأن باقي القسمة بيتغير لما N تتغير، فمكان كل مفتاح بيتغير.</Q>
+</Quiz>

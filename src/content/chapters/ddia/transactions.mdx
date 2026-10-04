@@ -1,0 +1,93 @@
+---
+title: "الـ Transactions: يا كله يا بلاش"
+short: Transactions
+order: 7
+label: فصل ٧
+badge: الموزعة · فصل ٧
+en: ACID · snapshot isolation · write skew · serializability
+keywords: ACID · MVCC · write skew
+goal: تعرف كل مستوى عزل بيمنع أنهي باج، وامتى الـ snapshot مش كفاية.
+part: الموزعة
+color: c2
+---
+
+## ليه transactions؟
+
+الداتابيز تقع في نص كتابة، اتنين يكتبوا فوق بعض، حد يقرا داتا نصها متحدث. الـ transaction بتجمع كذا read/write في وحدة: يا تنجح كلها (commit) يا تفشل كلها (abort) وتقدر تعمل retry.
+
+دي abstraction مش قانون طبيعة. موجة NoSQL سابتها بحجة إنها مش بتتوسع. الحقيقة: ليها مميزات وحدود، ولازم تعرف بتضمن إيه بالظبط.
+
+## ACID من غير الشعارات
+
+| الحرف | المعنى الحقيقي |
+| --- | --- |
+| Atomicity | مش ليها علاقة بالـ concurrency. معناها abortability: لو حصل خطأ في النص، كل اللي اتكتب يرجع. فتقدر تعمل retry من غير نص كتابة |
+| Consistency | الكلمة دي متتحمّلش. هنا معناها إن الـ invariants بتاعة الأبلكيشن تفضل صح. ده مسؤولية الأبلكيشن، والحرف اتحط عشان الاختصار يمشي |
+| Isolation | الـ transactions المتزامنة ماتدخلش في بعض. النظري serializability. عمليًا كتير بتدي أضعف عشان الأداء |
+| Durability | اللي اتعمل له commit مايضيعش (WAL أو replication). مفيش durability مطلقة: الهاردات بتموت والـ replicas ممكن تقع كلها |
+
+واللي مش ACID بيتقال عليه BASE، وده تعريف أغمض. معظم الداتابيزات بتضمن atomicity و isolation على object واحد (increment، compare-and-set). الـ multi-object لازم لما foreign keys أو denormalized data أو secondary indexes تتحدث مع بعض.
+
+<Box type="warn" title="الـ retry مش بالبساطة دي">
+
+الطلب ممكن يكون نجح والرد ضاع فيتنفذ مرتين. لو الفشل بسبب ضغط، الـ retry بيزوده، فاعمل backoff. والأخطاء الدائمة (constraint) ملهاش retry. والإيميل اللي اتبعت مش هيرجع.
+
+</Box>
+
+## مستويات العزل
+
+الـ serializable مكلف، فالداتابيزات بتقدم أضعف. والمستويات دي سببت فلوس ضايعة فعلًا.
+
+**Read committed** يمنع dirty reads (متشوفش كتابة لسه مترجعتش) و dirty writes (متكتبش فوق داتا ماتعملش commit). ده الـ default في Postgres و Oracle. القراءة من غير ما تقفل الصف: الداتابيز تفتكر القيمة القديمة لحد الـ commit.
+
+<Box type="story" title="Read skew">
+
+أليس عندها ١٠٠٠ جنيه في حسابين. وهي بتبص، اتنقل ١٠٠ من حساب للتاني. قرت الأول قبل التحويل والتاني بعده، شافت ٩٠٠. Read committed مش بيمنع ده. مش كارثة في refresh، كارثة في backup أو كويري تحليلية طويلة.
+
+</Box>
+
+**Snapshot isolation:** كل transaction تقرا من صورة ثابتة من لحظة ما بدأت. القراء مش بيعطلوا الكتاب والعكس. التنفيذ MVCC: كذا version لكل صف، و `created_by` و `deleted_by`. الصف يبان لو اللي عمله عمل commit قبل ما أنت تبدأ.
+
+<Box type="warn" title="لخبطة الأسامي">
+
+"Repeatable read" في Oracle اسمها serializable وهي snapshot. في Postgres اسمها repeatable read. المعيار نفسه غامض. اقرا دوكيومنتيشن الداتابيز بتاعتك.
+
+</Box>
+
+**Lost update:** اتنين عملوا read-modify-write على عداد أو صفحة ويكي. الحل: `UPDATE` ذري، أو `SELECT FOR UPDATE`، أو compare-and-set. متقرأ الرقم وتزوده في الأبلكيشن من غير قفل.
+
+**Write skew:** الاتنين قروا شرط ("فيه دكتور تاني في الشيفت") وبعدين كتبوا قرار بيخالف الشرط، وكل واحد لوحده كان هيبقى صح. الـ snapshot مش بيمنع ده لأنهم ماكتبوش على نفس الصف. الحل: serializable، أو materialize التعارض في صف يتقفل.
+
+**Phantoms:** كويري بمدى ("مفيش حجز في الساعة دي") وبعدين حد يدخل صف جديد في المدى. محتاج index-range locks أو SSI.
+
+## مين بيمنع إيه؟
+
+| المشكلة | Read committed | Snapshot | Serializable |
+| --- | --- | --- | --- |
+| Dirty read / write | نعم | نعم | نعم |
+| Read skew | لا | نعم (MVCC) | نعم |
+| Lost update | لا | أحيانًا | نعم |
+| Write skew و phantoms | لا | لا | نعم |
+
+ثلاث طرق للـ serializable: تنفيذ فعلي ورا بعض (serial)، أو two-phase locking (٢PL) اللي بيقفل وبيعمل blocking، أو serializable snapshot isolation (SSI) اللي بيكتشف التعارض وقت الـ commit ويعمل abort من غير ما يقفل القراء. الـ SSI مناسب للكتابات اللي مش كتير أوي؛ الـ transactions الطويلة اللي بتقرا وتكتب كتير بتتعمل لها abort كتير.
+
+<Box type="tip" title="الخلاصة">
+
+من غير transactions، الداتا المتكررة بتخرج عن السيطرة بسهولة. الـ transaction بتحوّل أخطاء كتير لـ "abort وجرّب تاني". بس لازم تعرف المستوى اللي أنت عليه بيمنع أنهي باج.
+
+</Box>
+
+<Checklist id="ddia-tx" title="Checklist الـ transactions" items={[
+  "Atomicity = تراجع، مش تزامن.",
+  "Read committed بيمنع القذر بس، مش الـ skew.",
+  "الـ snapshot (MVCC) بيمنع read skew ومش بيمنع write skew.",
+  "العدادات بتتعمل atomic أو compare-and-set.",
+  "الأسماء في الدوكيومنتيشن بتتراجع، مش بتتحفظ.",
+]} />
+
+<Quiz>
+  <Q n={1} q="اتنين قروا رصيد وخصموا في الأبلكيشن. أنهي باج؟">Lost update. الحل atomic update أو قفل الصف أو compare-and-set.</Q>
+  <Q n={2} q="دكتورين شافوا إن التاني موجود وخرجوا الاتنين. الـ snapshot يمنع ده؟">لا. ده write skew. محتاج serializable أو صف يمثّل التعارض ويتقفل.</Q>
+  <Q n={3} q="ليه backup على read committed خطر؟">لأن النسخة ممكن تاخد جزء قديم وجزء جديد من نفس التحويل. الـ snapshot يدي صورة واحدة.</Q>
+  <Q n={4} q="حرف الـ C في ACID مسؤولية مين؟">الأبلكيشن. الداتابيز مش عارفة الـ invariants بتاعتك.</Q>
+</Quiz>
