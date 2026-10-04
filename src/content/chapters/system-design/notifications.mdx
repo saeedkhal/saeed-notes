@@ -1,0 +1,69 @@
+---
+title: تصميم نظام إشعارات
+short: نظام إشعارات
+order: 10
+label: فصل ١٠
+badge: التصاميم · فصل ١٠
+en: Push · SMS · email · queues · templates
+keywords: APNs · FCM · queue · retry
+goal: تبعت إشعار على أكتر من قناة، ولو قناة وقعت الباقي يكمل.
+part: التصاميم
+color: c5
+---
+
+## أنواع الإشعارات ومين بيوصلها
+
+<Chips items={["iOS → APNs", "Android → FCM", "SMS → Twilio", "Email → SendGrid"]} />
+
+أول ما اليوزر يسطّب الأبلكيشن أو يسجّل، بنجمع device token والموبايل والإيميل ونخزنهم.
+
+## من الديزاين البسيط للمحنّك
+
+سيرفر إشعارات واحد: SPOF، صعب يكبر، وأي بطء من APNs أو غيره بيعطل كل حاجة.
+
+<Flow label="نظام الإشعارات" items={[
+  { t: "Services", c: 1 },
+  "→",
+  { t: "Notification Servers", s: "auth + validation", c: 5 },
+  "→",
+  { t: "Queue لكل نوع", c: 4 },
+  "→",
+  { t: "Workers", c: 3 },
+  "→",
+  { t: "APNs / FCM / SMS / Email", c: 2 },
+]} />
+
+الـ DB والكاش بيشيلوا بيانات اليوزر والجهاز والـ templates. الـ queues بتفصل الأنواع عن بعض: <Hl c="b">لو الـ SMS بايظ، الإيميل يكمل عادي</Hl>.
+
+## التفاصيل المهمة
+
+| الموضوع | الفكرة |
+| --- | --- |
+| Reliability | احفظ الإشعار في notification log عشان تعيد لو فشل. الـ exactly-once صعب، فاستخدم dedupe بالـ event ID |
+| Templates | قوالب جاهزة بتوحّد الشكل وتقلل الغلط |
+| Settings | اليوزر يختار يستقبل إيه وعلى أنهي قناة (opt-in) |
+| Rate limiting | متغرّقش اليوزر، وإلا هيقفل الإشعارات خالص |
+| Retry | فشل؟ يرجع للطابور. لو اتكرر الفشل، نبعت alert للمطورين |
+| Security | `appKey` و `appSecret` عشان الـ clients الموثوقين بس هم اللي يبعتوا |
+| Monitoring | راقب عدد الرسايل في الطابور (لو كبر، زوّد workers)، وتابع open rate و click rate |
+
+<Box type="story" title="تشبيه">
+
+نظام الإشعارات زي مكتب بريد في العمارة. الساعي مش بيجري لكل شقة بنفسه من غير دفتر: فيه دفتر (log)، وصناديق منفصلة للخطابات والطرود، ولو عربية الطرود عطلت الخطابات لسه بتطلع.
+
+</Box>
+
+<Checklist id="sdi-notify" title="Checklist الإشعارات" items={[
+  "كل قناة ليها طابور و workers لوحدها.",
+  "فيه notification log وإعادة إرسال مع dedupe.",
+  "اليوزر يقدر يقفل قناة (opt-in / settings).",
+  "فيه rate limit عشان منغرقهوش.",
+  "براقب طول الطابور و open rate.",
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه طابور لكل قناة مش طابور واحد؟">عشان بطء أو عطل قناة (زي SMS) مايوقفش الإيميل والـ push.</Q>
+  <Q n={2} q="exactly-once صعب. البديل العملي إيه؟">notification log + dedupe بالـ event ID عشان الإشعار ميتبعتش مرتين.</Q>
+  <Q n={3} q="ليه rate limit على الإشعارات مش بس على الـ API؟">لو غرّقت اليوزر هيقفل الإشعارات خالص، وخسرت القناة.</Q>
+  <Q n={4} q="الطابور كبر فجأة. أول حاجة تعملها؟">زوّد workers، وتابع ليه المزوّد (APNs أو Twilio) بقى بطيء.</Q>
+</Quiz>

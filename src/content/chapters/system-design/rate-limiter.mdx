@@ -1,0 +1,96 @@
+---
+title: تصميم Rate Limiter
+short: Rate Limiter
+order: 4
+label: فصل ٤
+badge: الأساسيات · فصل ٤
+en: Rate limiter · token bucket · Redis · 429
+keywords: token bucket · Redis · 429
+goal: تحط حد للريكوستات من غير ما تبوّظ اليوزر العادي، وتختار خوارزمية وتعرف تحطها فين.
+part: الأساسيات
+color: c4
+---
+
+## ليه نحط حد للريكوستات؟
+
+الـ <En>Rate Limiter</En> بيتحكم في عدد الريكوستات اللي يوزر أو IP يبعتها في فترة معينة، والزيادة بتترفض. <Hl c="y">زي البواب اللي بيدّخل عدد محدد في الدقيقة</Hl>.
+
+<Grid2>
+<Card title="بيعمل إيه" c={3}>
+
+- يحمي السيرفرات من الضغط.
+- يقلل التكلفة، خصوصًا APIs مدفوعة.
+- يمنع شكل من أشكال الـ DoS.
+
+</Card>
+<Card title="المتطلبات" c={1}>
+
+دقة في الحد، latency قليلة، ميموري قليلة، يشتغل على كذا سيرفر (distributed)، رسالة واضحة لليوزر، ولو الـ limiter وقع السيستم يكمل.
+
+</Card>
+</Grid2>
+
+## نحطه فين؟
+
+الـ client مش مضمون — أي حد يعدّل عليه. الأحسن على السيرفر، أو كـ middleware، أو جوه الـ <En>API Gateway</En> لو عندك microservices.
+
+## الخوارزميات الخمسة
+
+| الخوارزمية | الفكرة | الحكم |
+| --- | --- | --- |
+| Token Bucket | جردل فيه tokens بيتملى بمعدل ثابت. كل ريكوست بياخد token؛ مفيش؟ يترفض. عندك bucket size و refill rate | بسيط وبيسمح بـ burst. ضبط البرامترز محتاج تجربة |
+| Leaking Bucket | طابور FIFO بيخرج منه ريكوستات بمعدل ثابت. الطابور اتملى؟ رفض | خرج ثابت. الـ burst بيملاه بريكوستات قديمة |
+| Fixed Window | تقسم الوقت لشبابيك ثابتة وتعد في كل شباك | سهل. ممكن يحصل spike على حدود الشباك يعدّي ضعف الحد |
+| Sliding Window Log | تخزن timestamp كل ريكوست (مثلًا Redis sorted set) وتمسح القديم | دقيق جدًا. بياكل ميموري |
+| Sliding Window Counter | عدّاد الشباك الحالي + نسبة من الشباك اللي فات حسب التداخل | ناعم وموفر. تقريبي |
+
+<Box type="interview" title="لو اتسألت تختار أنهي؟">
+
+في أغلب الإنترفيوهات قول <En>Token Bucket</En>: سهل تشرحه، وبيسمح باندفاع قصير (اليوزر فتح الصفحة وفجأة ٥ ريكوستات) من غير ما تفتح الباب على مصراعيه.
+
+</Box>
+
+## المعمارية
+
+<Flow label="Rate limiter" items={[
+  { t: "Client", c: 1 },
+  "→",
+  { t: "Rate Limiter", s: "middleware", c: 4 },
+  "↔",
+  { t: "Redis", s: "INCR + EXPIRE", c: 2 },
+  "→",
+  { t: "API Servers", c: 3 },
+]} />
+
+العدادات في Redis لأنه سريع وفيه `INCR` و `EXPIRE`. القواعد (rules) في config files، و workers بيحملوها في الكاش.
+
+اترفض؟ رجّع `429 Too Many Requests` مع headers زي `X-Ratelimit-Remaining` و `X-Ratelimit-Limit` و `X-Ratelimit-Retry-After`. ممكن كمان تحط الريكوست في queue يتعالج بعدين.
+
+<Box type="warn" title="تحديات الـ distributed">
+
+**Race condition:** اتنين قروا نفس العداد في نفس اللحظة. الحل: Lua script على Redis، أو sorted sets.
+
+**Synchronization:** كذا limiter لازم يشوفوا نفس العدادات. Redis مركزي أحسن من sticky sessions.
+
+</Box>
+
+## في الـ wrap up
+
+- **Hard:** ممنوع تعدّي الحد. **Soft:** تعدّي شوية لفترة قصيرة.
+- ممكن تعمل limit في طبقات تانية، زي IP عن طريق `iptables`.
+- على الـ client: استخدم cache، و backoff في الـ retry عشان متعملش هجوم على نفسك.
+
+<Checklist id="sdi-rate-limiter" title="Checklist الـ Rate Limiter" items={[
+  "حاطط الـ limiter على السيرفر أو الـ gateway، مش على الـ client بس.",
+  "اخترت خوارزمية وقدرت أشرح tradeoff بتاعها.",
+  "العدادات في Redis مش في ميموري السيرفر.",
+  "الرد `429` ومعاه headers تقول لليوزر يستنى قد إيه.",
+  "لو الـ limiter وقع، السيستم لسه بيرد.",
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه متحطش الـ rate limiter على الـ client بس؟">لأن أي حد يقدر يعدّل على الأبلكيشن ويتجاوز الحد.</Q>
+  <Q n={2} q="إيه عيب الـ Fixed Window؟">على حدود الشباك، دفعة في آخر شباك ودفعة في أول الشباك اللي بعده يعدّوا ضعف الحد.</Q>
+  <Q n={3} q="ليه Redis مش ميموري السيرفر؟">عشان كل السيرفرات تشوف نفس العداد. ميموري السيرفر بتخلي كل ماكينة تعد لوحدها.</Q>
+  <Q n={4} q="اتنين طلبوا INCR في نفس اللحظة والعداد عدّى الحد. اسم المشكلة إيه؟">Race condition. بتتحل بـ Lua script أو عملية atomic على Redis.</Q>
+</Quiz>

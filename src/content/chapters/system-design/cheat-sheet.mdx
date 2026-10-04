@@ -1,0 +1,39 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 17
+label: الآخر
+badge: الآخر
+en: One-page recall for interviews
+keywords: cheatsheet · tradeoffs
+goal: صفحة واحدة ترجعلها قبل الإنترفيو — المشكلة على الشمال، والأداة اللي تفكر فيها تحتها.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["سيرفر واحد مش مستحمل", "Load Balancer + Horizontal scaling + Stateless"],
+  ["الداتابيز بطيئة في القراية", "Cache + Read replicas"],
+  ["الداتا كبيرة على داتابيز واحدة", "Sharding + Consistent hashing"],
+  ["ملفات ثابتة وتقيلة", "CDN + Blob storage"],
+  ["شغل تقيل ومش لازم فوري", "Message Queue + Workers"],
+  ["ريكوستات كتير من نفس المصدر", "Rate limiter (Token bucket / Sliding window)"],
+  ["IDs فريدة على كذا سيرفر", "Snowflake"],
+  ["Real-time في الاتجاهين", "WebSocket"],
+  ["الكلمة دي موجودة؟ بسرعة", "Bloom filter"],
+  ["بحث بالـ prefix", "Trie + top-k cache"],
+  ["Consistency مقابل Availability", "CAP + Quorum (`W + R > N`)"],
+  ["مشكلة المشاهير (hotspot)", "Hybrid fanout، أو shard مخصص"],
+  ["الكاش بيضرب لما سيرفر يتضاف", "Consistent hashing + virtual nodes"],
+  ["إشعار على أكتر من قناة", "Queue لكل قناة + workers"],
+  ["فيديو يشتغل على أي نت", "Transcoding + CDN streaming"],
+  ["تعديل صغير في ملف كبير", "Block storage + delta sync"],
+]} />
+
+<Checklist id="sdi-final" title="🏁 Checklist النهاية" items={[
+  "أقدر أرسم رحلة السيستم من سيرفر واحد لحد sharding في ٥ دقايق.",
+  "أحسب QPS و storage من غير آلة حاسبة.",
+  "أمشي على خطة الـ ٤٥ دقيقة من غير ما أقفز للحل.",
+  "أفرّق بين push و pull في الـ feed، وبين WebSocket و polling في الشات.",
+  "أقدر أشرح tradeoff واحد على الأقل في كل تصميم.",
+]} />
