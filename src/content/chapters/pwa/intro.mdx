@@ -1,0 +1,91 @@
+---
+title: يعني إيه PWA؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: Progressive Web App · installable · offline · HTTPS · manifest · service worker
+keywords: HTTPS · manifest · service worker
+goal: تعرف الـ ٣ حاجات اللي بتحوّل موقع لـ PWA، وتفهم إن الـ Service Worker proxy واقف بين الصفحة والنت.
+part: البداية
+color: c1
+---
+
+## موقع بيتصرف زي تطبيق
+
+الـ <En>Progressive Web App</En> مش framework ولا مكتبة. هو **موقع عادي** زوّدناه بحاجات بتخليه:
+
+<Chips items={["يتسطّب على الـ home screen بأيقونة", "يفتح في شباك لوحده من غير شريط المتصفح", "يشتغل من غير نت أو بنت ضعيف", "يفتح أسرع لأن الحاجات محفوظة عنده"]} />
+
+وكلمة **Progressive** معناها إن الموقع بيشتغل عادي في أي متصفح، واللي بيدعم المميزات دي بياخدها زيادة. مفيش حد بيتحرم من الموقع.
+
+## الـ ٣ مكونات
+
+<Grid2>
+<Card title="🔒 HTTPS" c={1}>
+
+الـ Service Worker بيقدر يغيّر أي رد راجع للصفحة، فالمتصفح مش بيسمح بيه غير على اتصال آمن. (`localhost` مستثنى عشان التطوير.)
+
+</Card>
+<Card title="📄 Manifest" c={2}>
+
+ملف JSON فيه اسم التطبيق وأيقوناته ولونه وبيفتح إزاي. ده اللي بيخلّيه **يتسطّب**.
+
+</Card>
+</Grid2>
+
+<Card title="⚙️ Service Worker" c={4}>
+
+ملف JavaScript بيشتغل **في الخلفية**، منفصل عن الصفحة، وبيعدّي عليه كل request الصفحة بتعمله. ده اللي بيخلّي الموقع **يشتغل offline**.
+
+</Card>
+
+## الـ Service Worker واقف في النص
+
+ده أهم سطر في المذكرة: <Hl c="p">الـ Service Worker proxy بين صفحتك والنت</Hl>. أي `fetch` أو صورة أو صفحة جديدة بتطلبها، بتعدّي عليه الأول، وهو يقرر يرد منين.
+
+<Diagram
+  title="الريكوست بيعدّي على الـ Service Worker الأول"
+  height={330}
+  mheight={470}
+  nodes={[
+    { id: "page", t: "الصفحة", s: "اللي المستخدم شايفها", c: 1, x: 86, y: 50, mx: 50, my: 8 },
+    { id: "sw", t: "Service Worker", s: "مدير الصالة", c: 4, x: 50, y: 50, mx: 50, my: 45 },
+    { id: "cache", t: "Cache Storage", s: "التلاجة: على الجهاز", c: 3, x: 13, y: 16, mx: 22, my: 90 },
+    { id: "net", t: "السيرفر", s: "المطبخ: عبر النت", c: 2, x: 13, y: 84, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "page", to: "sw", t: "fetch('/docker/')", c: 1, bend: 30, mbend: 34 },
+    { from: "sw", to: "page", t: "الرد", c: 4, bend: 30, mbend: 34 },
+    { from: "sw", to: "cache", t: "عندك؟", c: 3, bend: 24, mbend: 26 },
+    { from: "cache", to: "sw", t: "اتفضل", c: 3, dash: true, bend: 24, mbend: 26 },
+    { from: "sw", to: "net", t: "مش موجودة؟ هاتها", c: 2, bend: -24, mbend: -26 },
+    { from: "net", to: "sw", t: "رد جديد", c: 2, dash: true, bend: -24, mbend: -26 },
+  ]}
+/>
+
+النقط اللي بتتحرك على الأسهم دي الـ requests والـ responses وهي ماشية. الصفحة **مش عارفة** الرد جه من التلاجة ولا من المطبخ. هي بس طلبت وجالها رد.
+
+<Box type="warn" title="الـ Service Worker مش بيلمس الـ DOM">
+
+بيشتغل في thread لوحده زي الـ Web Worker، فمفيش `document` ولا `window` جوّاه. بيتكلم مع الصفحة بالرسايل (`postMessage`)، وبيتحكم في الـ requests بس.
+
+</Box>
+
+## Cache Storage غير HTTP cache
+
+المتصفح عنده أصلًا HTTP cache بيمشي على headers زي `Cache-Control`. الفرق:
+
+| | HTTP cache | Cache Storage |
+| --- | --- | --- |
+| مين بيتحكم؟ | المتصفح، على حسب headers السيرفر | **إنت** بالكود جوه الـ Service Worker |
+| بيتمسح إمتى؟ | المتصفح يقرر | لما إنت تمسحه (أو المساحة تخلص) |
+| offline | مش مضمون | مضمون طول ما الملف محفوظ |
+
+<Checklist id="pwa-intro" title="خلّصت الفصل لما" items={["تسمّي الـ ٣ مكونات: HTTPS و manifest و service worker", "تشرح ليه الـ Service Worker محتاج HTTPS", "ترسم الريكوست رايح من الصفحة للـ SW للكاش أو النت", "تفرّق Cache Storage عن HTTP cache"]} />
+
+<Quiz>
+<Q n={1} q="أنهي مكوّن بيخلي الموقع يتسطّب، وأنهي بيخليه يشتغل offline؟">الـ manifest للتسطيب، والـ service worker للـ offline.</Q>
+<Q n={2} q="الصفحة بتعرف إن الرد جه من الكاش؟">لأ. الـ SW بيرجّع Response عادي، والصفحة مش فارق معاها جه منين.</Q>
+<Q n={3} q="ينفع أعدّل الـ DOM من جوه الـ Service Worker؟">لأ. مفيش document هناك. ابعت رسالة للصفحة وهي تعدّل.</Q>
+</Quiz>

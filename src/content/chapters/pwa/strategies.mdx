@@ -1,0 +1,168 @@
+---
+title: استراتيجيات الكاش — الريكوست بيروح فين؟
+short: استراتيجيات الكاش
+order: 4
+label: فصل ٤
+badge: الكاش · فصل ٤
+en: cache-first · network-first · stale-while-revalidate · network-only · cache-only
+keywords: cache-first · network-first · SWR
+goal: تفهم كل استراتيجية بترتيب خطواتها، وتختار المناسبة لكل نوع ملف.
+part: الكاش
+color: c4
+---
+
+كل استراتيجية هي إجابة على سؤال واحد: **لما ييجي request، أسأل مين الأول؟** الأرقام على الأسهم هي ترتيب الخطوات.
+
+## ١. Cache First — التلاجة الأول
+
+<Diagram
+  title="Cache First"
+  height={300}
+  mheight={460}
+  nodes={[
+    { id: "page", t: "الصفحة", c: 1, x: 88, y: 50, mx: 50, my: 7 },
+    { id: "sw", t: "Service Worker", c: 4, x: 55, y: 50, mx: 50, my: 42 },
+    { id: "cache", t: "Cache", c: 3, x: 15, y: 18, mx: 22, my: 90 },
+    { id: "net", t: "النت", c: 2, x: 15, y: 82, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "page", to: "sw", t: "١ طلب", c: 1, bend: 22 },
+    { from: "sw", to: "cache", t: "٢ عندك؟", c: 3, bend: 16 },
+    { from: "cache", to: "sw", t: "٣ لقيته ✓ خلاص", c: 3, dash: true, bend: 16 },
+    { from: "sw", to: "net", t: "٤ مش موجود؟ هاته", c: 2, bend: -16 },
+    { from: "net", to: "sw", t: "٥ احفظه وابعته", c: 2, dash: true, bend: -16 },
+    { from: "sw", to: "page", t: "الرد", c: 4, bend: 22 },
+  ]}
+/>
+
+لو الملف في الكاش، **مفيش نت خالص**. أسرع حاجة ممكنة، بس لو الملف اتغير على السيرفر مش هتعرف.
+
+**مناسبة لـ:** ملفات اسمها فيه hash (`app.3f9a1c.js`)، والخطوط، والصور اللي مبتتغيرش.
+
+<File name="sw.js">
+
+```js
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) {
+    const cache = await caches.open("assets-v1");
+    cache.put(request, response.clone()); // clone: الـ body بيتقري مرة واحدة بس
+  }
+  return response;
+}
+```
+
+</File>
+
+## ٢. Network First — المطبخ الأول
+
+<Diagram
+  title="Network First"
+  height={300}
+  mheight={460}
+  nodes={[
+    { id: "page", t: "الصفحة", c: 1, x: 88, y: 50, mx: 50, my: 7 },
+    { id: "sw", t: "Service Worker", c: 4, x: 55, y: 50, mx: 50, my: 42 },
+    { id: "net", t: "النت", c: 2, x: 15, y: 18, mx: 22, my: 90 },
+    { id: "cache", t: "Cache", c: 3, x: 15, y: 82, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "page", to: "sw", t: "١ طلب", c: 1, bend: 22 },
+    { from: "sw", to: "net", t: "٢ هات الجديد", c: 2, bend: 16 },
+    { from: "net", to: "sw", t: "٣ وصل ✓ احفظه", c: 2, dash: true, bend: 16 },
+    { from: "sw", to: "cache", t: "٤ النت وقع؟", c: 3, bend: -16 },
+    { from: "cache", to: "sw", t: "٥ آخر نسخة", c: 3, dash: true, bend: -16 },
+    { from: "sw", to: "page", t: "الرد", c: 4, bend: 22 },
+  ]}
+/>
+
+دايمًا بتحاول تجيب الأحدث، والكاش احتياطي. العيب: على نت بطيء المستخدم **بيستنى** لحد ما الشبكة ترد أو تفشل. حط timeout عشان متستناش للأبد.
+
+**مناسبة لـ:** داتا لازم تبقى حديثة، زي API الرسايل أو الطلبات.
+
+## ٣. Stale-While-Revalidate — ادّيله القديم وهات الجديد
+
+<Diagram
+  title="Stale-While-Revalidate"
+  height={300}
+  mheight={460}
+  nodes={[
+    { id: "page", t: "الصفحة", c: 1, x: 88, y: 50, mx: 50, my: 7 },
+    { id: "sw", t: "Service Worker", c: 4, x: 55, y: 50, mx: 50, my: 42 },
+    { id: "cache", t: "Cache", c: 3, x: 15, y: 18, mx: 22, my: 90 },
+    { id: "net", t: "النت", c: 2, x: 15, y: 82, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "page", to: "sw", t: "١ طلب", c: 1, bend: 22 },
+    { from: "sw", to: "cache", t: "٢ هات اللي عندك", c: 3, bend: 16 },
+    { from: "cache", to: "sw", t: "٣ فورًا", c: 3, dash: true, bend: 16 },
+    { from: "sw", to: "page", t: "٤ الرد القديم ⚡", c: 4, bend: 22 },
+    { from: "sw", to: "net", t: "٥ في الخلفية: هات الجديد", c: 2, bend: -16 },
+    { from: "net", to: "cache", t: "٦ حدّث للمرة الجاية", c: 2, dash: true, bend: 30 },
+  ]}
+/>
+
+المستخدم بياخد رد **فوري** من الكاش، وفي نفس اللحظة بنحدّث الكاش من النت. يعني بيشوف الجديد **المرة الجاية**، مش دلوقتي.
+
+**مناسبة لـ:** حاجات مش مشكلة لو اتأخرت مرة: الـ avatar، فهرس البحث، الـ config.
+
+<File name="sw.js">
+
+```js
+async function staleWhileRevalidate(event, request) {
+  const cache = await caches.open("static-v1");
+  const cached = await cache.match(request);
+  const network = fetch(request).then((res) => {
+    if (res.ok) cache.put(request, res.clone());
+    return res;
+  });
+  if (cached) {
+    event.waitUntil(network.catch(() => {})); // كمّل التحديث حتى بعد ما رديت
+    return cached;
+  }
+  return network;
+}
+```
+
+</File>
+
+## ٤ و ٥. Network Only و Cache Only
+
+<Grid2>
+<Card title="🌐 Network Only" c={2}>
+
+متدخلش الكاش خالص. لـ `POST` والدفع والـ login وأي حاجة لازم تبقى لحظية. (الـ SW ممكن ميعملش `respondWith` أصلًا.)
+
+</Card>
+<Card title="🧊 Cache Only" c={3}>
+
+من الكاش بس، ولو مش موجود يبقى error. لملفات اتحفظت في `install` وإنت متأكد إنها هناك.
+
+</Card>
+</Grid2>
+
+## إزاي تختار؟
+
+| نوع الملف | الاستراتيجية | ليه |
+| --- | --- | --- |
+| JS و CSS باسم فيه hash | Cache First | الاسم بيتغير لو المحتوى اتغير |
+| صفحات HTML لمحتوى | Cache First بصلاحية، أو Network First | محتاجة تتحدث بس تفتح offline |
+| API داتا متغيرة | Network First + timeout | الأحدث أهم، والكاش احتياطي |
+| صور المستخدمين والـ config | Stale-While-Revalidate | السرعة أهم من الحداثة اللحظية |
+| POST والدفع | Network Only | ميتكاشش أبدًا |
+
+<Box type="tip" title="Workbox">
+
+مكتبة Workbox من Google فيها الاستراتيجيات دي جاهزة مع expiration و routing. كتابتها بإيدك زي هنا بتفهّمك هي بتعمل إيه، وبعدين تقرر.
+
+</Box>
+
+<Checklist id="pwa-strategies" title="خلّصت الفصل لما" items={["ترسم خطوات Cache First و Network First و SWR بالترتيب", "تعرف ليه لازم `response.clone()` قبل `cache.put`", "تعرف ليه Network First محتاج timeout", "تختار الاستراتيجية حسب نوع الملف"]} />
+
+<Quiz>
+<Q n={1} q="في SWR، المستخدم شاف النسخة الجديدة إمتى؟">المرة الجاية. دلوقتي خد اللي في الكاش، والجديد اتحفظ في الخلفية.</Q>
+<Q n={2} q="ليه Cache First خطر على ملف اسمه ثابت زي app.js؟">لو اتغير على السيرفر، المستخدم هيفضل شايف القديم للأبد.</Q>
+<Q n={3} q="ليه cache.put(request, response) من غير clone بيبوّظ الدنيا؟">الـ body stream بيتقري مرة. لو الكاش قراه، الصفحة هتاخد رد فاضي.</Q>
+</Quiz>

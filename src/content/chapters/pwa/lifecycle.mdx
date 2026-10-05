@@ -1,0 +1,139 @@
+---
+title: دورة حياة الـ Service Worker
+short: دورة الحياة
+order: 3
+label: فصل ٣
+badge: الـ SW · فصل ٣
+en: register · install · waiting · activate · fetch · skipWaiting · clients.claim · update
+keywords: install · activate · skipWaiting · update
+goal: تعرف الـ SW بيمر بإيه من التسجيل لحد ما يمسك الصفحة، وإزاي النسخة الجديدة بتاخد مكان القديمة.
+part: الـ SW
+color: c3
+---
+
+## التسجيل
+
+الصفحة هي اللي بتقول للمتصفح "في Service Worker هنا":
+
+<File name="main.js">
+
+```js
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js", { scope: "/" });
+}
+```
+
+</File>
+
+الـ `scope` هو المسارات اللي الـ SW هيمسكها. ملف في `/app/sw.js` مش هيقدر يمسك `/` إلا لو السيرفر سمح بـ header خاص، فالأسهل تحطه في جذر المسار اللي عايزه.
+
+## المراحل
+
+<Diagram
+  title="من register لحد ما يمسك الـ fetch"
+  height={380}
+  mheight={520}
+  nodes={[
+    { id: "reg", t: "register()", s: "الصفحة بتسجّله", c: 1, x: 86, y: 13, mx: 50, my: 6 },
+    { id: "inst", t: "install", s: "احفظ الملفات الأساسية", c: 2, x: 45, y: 13, mx: 50, my: 27 },
+    { id: "wait", t: "waiting", s: "في نسخة قديمة شغالة", c: 5, x: 12, y: 50, mx: 22, my: 50 },
+    { id: "act", t: "activate", s: "امسح الكاش القديم", c: 4, x: 45, y: 87, mx: 50, my: 72 },
+    { id: "fetch", t: "fetch", s: "بيرد على الـ requests", c: 3, x: 86, y: 87, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "reg", to: "inst", t: "أول مرة أو ملف اتغير", c: 1 },
+    { from: "inst", to: "wait", t: "لسه في تابات قديمة", c: 5 },
+    { from: "wait", to: "act", t: "قفلت كل التابات", c: 5 },
+    { from: "inst", to: "act", t: "skipWaiting()", c: 2, dash: true, bend: 0, mbend: -60 },
+    { from: "act", to: "fetch", t: "clients.claim()", c: 4 },
+  ]}
+/>
+
+<Grid2>
+<Card title="📥 install" c={2}>
+
+بيحصل **مرة واحدة** لكل نسخة. مكان مناسب تحفظ فيه الملفات اللي لازم تبقى موجودة، زي صفحة الـ offline.
+
+</Card>
+<Card title="🧹 activate" c={4}>
+
+النسخة دي بقت المسؤولة. مكان مناسب تمسح فيه الكاش بتاع النسخ القديمة.
+
+</Card>
+</Grid2>
+
+<File name="sw.js">
+
+```js
+const SHELL = "shell-v2";
+
+self.addEventListener("install", (event) => {
+  // waitUntil: متعتبرش الـ install خلص غير لما الـ promise يخلص
+  event.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/offline.html"])));
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k.startsWith("shell-") && k !== SHELL).map((k) => caches.delete(k))),
+    ),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  // هنا بنقرر نرد منين (الفصل الجاي)
+});
+```
+
+</File>
+
+## ليه في مرحلة waiting؟
+
+لو عندك تابة مفتوحة شغالة بالـ SW القديم، والنسخة الجديدة مسكت فجأة، ممكن الصفحة القديمة تطلب ملف مبقاش موجود في الكاش الجديد. عشان كده المتصفح بيخلّي الجديد **مستني** لحد ما كل التابات القديمة تتقفل.
+
+<Box type="story" icon="👮" title="تسليم الوردية">
+
+العسكري الجديد وصل، بس مش هياخد البوابة غير لما القديم يمشي. ولو الظابط قاله "استلم دلوقتي" (`skipWaiting`)، يستلم على طول. و `clients.claim()` معناها إنه يمسك كمان الناس اللي دخلوا قبل ما ييجي، مش اللي جايين بعده بس.
+
+</Box>
+
+<Box type="warn" title="skipWaiting مش ببلاش">
+
+لو الصفحة المفتوحة متوقعة ملفات معينة والنسخة الجديدة غيّرتها، ممكن حاجة تبوظ لحد ما المستخدم يعمل refresh. في موقع محتوى (زي ده) آمن. في تطبيق معقد، الأحسن تعرض رسالة "في تحديث، اعمل refresh" وتنادي `skipWaiting` لما المستخدم يوافق.
+
+</Box>
+
+## المتصفح بيعرف إن في نسخة جديدة إزاي؟
+
+لما تفتح صفحة في الـ scope، المتصفح بيجيب `sw.js` من السيرفر ويقارنه **بايت ببايت** باللي عنده. أي فرق، حتى حرف في تعليق، يبدأ install للنسخة الجديدة.
+
+<Diagram
+  title="الـ update check"
+  height={230}
+  mheight={400}
+  nodes={[
+    { id: "open", t: "فتحت الصفحة", c: 1, x: 88, y: 50, mx: 50, my: 8 },
+    { id: "srv", t: "sw.js على السيرفر", c: 2, x: 55, y: 50, mx: 50, my: 42 },
+    { id: "same", t: "زي ما هو", s: "مفيش حاجة", c: 5, x: 14, y: 20, mx: 24, my: 88 },
+    { id: "new", t: "اتغير", s: "install للجديد", c: 4, x: 14, y: 80, mx: 76, my: 88 },
+  ]}
+  edges={[
+    { from: "open", to: "srv", t: "هات sw.js", c: 1 },
+    { from: "srv", to: "same", t: "نفس البايتات", c: 5 },
+    { from: "srv", to: "new", t: "مختلف", c: 4 },
+  ]}
+/>
+
+<Box type="tip" title="متخليش sw.js يتكاش">
+
+لو السيرفر بيدّي `sw.js` بـ `Cache-Control` طويل، زمان كان ممكن المتصفح ميشوفش التحديث. المتصفحات الحديثة بتتجاهل الـ HTTP cache وهي بتعمل update check للـ `sw.js` نفسه (افتراضي `updateViaCache: "imports"`)، بس خليه يتخدم من غير cache طويل برضه. ولو التنقل بيحصل من غير reload (SPA)، تقدر تنادي `registration.update()` بنفسك.
+
+</Box>
+
+<Checklist id="pwa-lifecycle" title="خلّصت الفصل لما" items={["ترتب المراحل: register و install و waiting و activate و fetch", "تعرف تحفظ إيه في install وتمسح إيه في activate", "تشرح ليه في waiting وإمتى تستخدم `skipWaiting`", "تعرف إن التحديث بيتكشف بمقارنة بايتات `sw.js`"]} />
+
+<Quiz>
+<Q n={1} q="غيّرت ملف CSS بس، والـ sw.js زي ما هو. هيحصل install؟">لأ. الـ install بيحصل لما sw.js نفسه يتغير.</Q>
+<Q n={2} q="نزّلت نسخة جديدة والمستخدم فاتح تابتين. الجديدة شغالة؟">لأ، مستنية في waiting لحد ما يقفلهم، إلا لو عملت skipWaiting.</Q>
+<Q n={3} q="فين أمسح الكاش القديم؟">في activate، عشان النسخة القديمة متكونش لسه بتستخدمه.</Q>
+</Quiz>

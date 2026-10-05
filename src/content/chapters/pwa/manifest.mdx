@@ -1,0 +1,102 @@
+---
+title: الـ Manifest — بطاقة التعريف بتاعة التطبيق
+short: Manifest
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: web app manifest · icons · maskable · display standalone · install prompt
+keywords: manifest · icons · maskable · standalone
+goal: تكتب manifest صح بالأيقونات المطلوبة، وتعرف المتصفح بيقرر إمتى يعرض "Install".
+part: البداية
+color: c2
+---
+
+## الملف
+
+<File name="manifest.webmanifest">
+
+```json
+{
+  "name": "مذكرات سعيد",
+  "short_name": "مذكرات",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/saeed-notes/",
+  "scope": "/saeed-notes/",
+  "display": "standalone",
+  "background_color": "#12121f",
+  "theme_color": "#6c4bff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
+```
+
+</File>
+
+وتربطه من الـ HTML:
+
+<File name="index.html">
+
+```html
+<link rel="manifest" href="/saeed-notes/manifest.webmanifest" />
+<meta name="theme-color" content="#6c4bff" />
+<link rel="apple-touch-icon" href="/saeed-notes/icons/apple-touch-icon.png" />
+```
+
+</File>
+
+| الحقل | بيعمل إيه |
+| --- | --- |
+| `name` و `short_name` | الاسم في شاشة التسطيب، والقصير تحت الأيقونة |
+| `start_url` | بيفتح على فين لما تدوس الأيقونة |
+| `scope` | أي URL بره المسار ده بيفتح في المتصفح العادي |
+| `display` | `standalone` = شباك لوحده من غير شريط العنوان |
+| `theme_color` | لون شريط النظام فوق |
+| `background_color` | لون الـ splash screen وهو بيفتح |
+
+## الأيقونات و maskable
+
+أندرويد بيقص الأيقونة دايرة أو مربع بحواف أو شكل نقطة مية، على حسب الموبايل. لو الأيقونة العادية فيها حواف شفافة، هتطلع صغيرة جوه دايرة بيضا.
+
+<Box type="tip" title="maskable = خلفية كاملة + المهم في النص">
+
+أيقونة `maskable` خلفيتها مالية المربع كله، والمحتوى المهم جوه **الـ 80% اللي في النص** (الـ safe zone)، فأي قص يسيبه سليم. جرّب أيقونتك على موقع maskable.app.
+
+</Box>
+
+## المتصفح بيعرض "Install" إمتى؟
+
+<Diagram
+  title="من فتح الصفحة لحد الأيقونة على الشاشة"
+  height={290}
+  mheight={430}
+  nodes={[
+    { id: "html", t: "index.html", s: "فيه link rel=manifest", c: 1, x: 80, y: 20, mx: 50, my: 8 },
+    { id: "man", t: "manifest", s: "اسم + أيقونات + start_url", c: 2, x: 22, y: 20, mx: 50, my: 36 },
+    { id: "check", t: "المتصفح", s: "بيراجع الشروط", c: 4, x: 22, y: 80, mx: 50, my: 64 },
+    { id: "icon", t: "📲 الـ home screen", c: 3, x: 80, y: 80, mx: 50, my: 92 },
+  ]}
+  edges={[
+    { from: "html", to: "man", t: "بيشاور على", c: 1 },
+    { from: "man", to: "check", t: "يقرا الحقول", c: 2 },
+    { from: "check", to: "icon", t: "Install ✓", c: 3 },
+  ]}
+/>
+
+في Chrome الشروط تقريبًا: HTTPS، و manifest فيه `name` و `start_url` و `display` وأيقونة 192 و 512، والمستخدم اتفاعل مع الصفحة شوية. الشروط دي بتتغير، فراجع web.dev. على iPhone مفيش زرار تلقائي: المستخدم بيعمل **Share ← Add to Home Screen** بإيده.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إزاي أعمل زرار Install جوه الموقع؟" — في Chrome و Edge بتستنى event اسمه `beforeinstallprompt`، تحفظه، وتنادي `prompt()` لما المستخدم يدوس على زرارك. الـ event ده مش موجود في Safari و Firefox، فاعرض تعليمات يدوية هناك.
+
+</Box>
+
+<Checklist id="pwa-manifest" title="خلّصت الفصل لما" items={["تكتب manifest فيه name و start_url و scope و display", "تعمل أيقونة 192 و 512 و maskable", "تفهم الـ safe zone بتاعة maskable", "تعرف إن iPhone بيتسطّب يدوي من Share"]} />
+
+<Quiz>
+<Q n={1} q="الأيقونة طالعة صغيرة جوه دايرة بيضا على أندرويد. ليه؟">مفيش أيقونة maskable، فالنظام صغّر العادية وحط خلفية.</Q>
+<Q n={2} q="لينك لصفحة بره الـ scope بيفتح فين؟">في المتصفح العادي، مش جوه شباك التطبيق.</Q>
+</Quiz>

@@ -1,0 +1,58 @@
+---
+title: "Cheat Sheet: الـ PWA في صفحة"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: One-page recall for PWA and caching
+keywords: cheatsheet · strategies · lifecycle
+goal: تفتكر المكونات والمراحل والاستراتيجيات في نظرة واحدة.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["عايز الموقع يتسطّب", "manifest فيه name و start_url و display وأيقونة 192 و 512 + HTTPS"],
+  ["الأيقونة صغيرة جوه دايرة", "أيقونة maskable، والمهم في الـ 80% اللي في النص"],
+  ["عايز الموقع يفتح offline", "Service Worker يمسك fetch ويرد من Cache Storage"],
+  ["فين أحفظ الملفات الأساسية؟", "في install بـ `cache.addAll`"],
+  ["فين أمسح الكاش القديم؟", "في activate"],
+  ["النسخة الجديدة مستنية", "waiting لحد ما التابات تتقفل، أو `skipWaiting()`"],
+  ["الـ SW مش ماسك الصفحة الحالية", "`clients.claim()`"],
+  ["المتصفح عرف التحديث إزاي؟", "قارن sw.js بايت ببايت"],
+  ["JS و CSS باسم فيه hash", "Cache First من غير صلاحية"],
+  ["داتا لازم تبقى حديثة", "Network First + timeout"],
+  ["سرعة أهم من الحداثة اللحظية", "Stale-While-Revalidate"],
+  ["POST أو دفع", "Network Only"],
+  ["HTML ومحتوى بيتحدث", "Cache First بصلاحية + build id (زي الموقع ده)"],
+  ["صفحة مش محفوظة والنت مقطوع", "رجّع offline.html اتحفظت في install"],
+  ["الرد فاضي بعد الكاش", "`response.clone()`"],
+  ["بتختبر offline بـ Playwright", "اقفل السيرفر، setOffline مش بيأثر على الـ SW"],
+]} />
+
+<Diagram
+  title="الخريطة كلها في رسمة"
+  height={280}
+  mheight={470}
+  nodes={[
+    { id: "page", t: "الصفحة", s: "register + fetch", c: 1, x: 88, y: 50, mx: 50, my: 7 },
+    { id: "sw", t: "Service Worker", s: "install · activate · fetch", c: 4, x: 55, y: 50, mx: 50, my: 40 },
+    { id: "cache", t: "Cache Storage", s: "pages · assets · static", c: 3, x: 15, y: 20, mx: 22, my: 90 },
+    { id: "net", t: "السيرفر", s: "GitHub Pages", c: 2, x: 15, y: 80, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "page", to: "sw", t: "كل request", c: 1, bend: 26, mbend: 30 },
+    { from: "sw", to: "page", t: "Response", c: 4, bend: 26, mbend: 30 },
+    { from: "sw", to: "cache", t: "match / put", c: 3, bend: 20, mbend: 24 },
+    { from: "cache", to: "sw", t: "المحفوظ", c: 3, dash: true, bend: 20, mbend: 24 },
+    { from: "sw", to: "net", t: "fetch", c: 2, bend: -20, mbend: -24 },
+    { from: "net", to: "sw", t: "الجديد", c: 2, dash: true, bend: -20, mbend: -24 },
+  ]}
+/>
+
+<Checklist id="pwa-cheat" title="خلّصت المذكرة لما" items={["تعمل manifest وأيقونات يتسطّب بيهم الموقع", "تكتب SW فيه install و activate و fetch", "تختار استراتيجية كاش لكل نوع ملف وتبرر اختيارك", "تشرح إزاي موقعك بيعرف إن الكاش من deploy قديم"]} />
+
+<Quiz>
+<Q n={1} q="الفرق في جملة بين Cache First و SWR؟">الاتنين بيردوا من الكاش. SWR بيحدّث في الخلفية كل مرة، و Cache First مش بيلمس النت لو لقى.</Q>
+<Q n={2} q="ليه HTML محتاج build id ومش مدة بس؟">عشان التحديث يبان أول ما ينزل deploy، مش بعد ما المدة تخلص.</Q>
+</Quiz>

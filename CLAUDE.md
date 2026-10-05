@@ -47,6 +47,7 @@ public/icons/                  # PWA icons (PNG, rendered from favicon.svg)
 ## MDX components (auto-injected, no imports)
 
 `<Hl c="y|p|g|b|o|u">`, `<En>`, `<Box type="idea|warn|tip|story|interview" title icon?>`, `<Grid2><Card title c={1-5}>`, `<Flow items={[{t,s?,c?}, "→", …]} />`, `<Chips items>`, `<File name>` + fenced code, `<Tree>` + ```text fence, `<Checklist id title items>`, `<Quiz><Q n q>answer</Q></Quiz>`, `<Cheat items={[[problem, fix], …]} />`.
+- `<Diagram title? height? mheight? nodes={[{id,t,s?,c?,x,y,mx?,my?}]} edges={[{from,to,t?,c?,dash?,bend?,mbend?}]} />` draws a canvas diagram: boxes, arrows with a label on each, and animated dots. `x/y` are percentages of the canvas. `mx/my/mheight` set the layout below 560px (lay it out vertically). Paired arrows (A→B and B→A) need opposite `bend`. Leave room between boxes for the label pill, otherwise it covers them, so check screenshots at 1400px and 390px.
 
 - String props (`items`, `q`) support `` `code` `` and Checklist also supports `**bold**`. These are converted by the component, not by Markdown.
 - `Checklist` `id` must be globally unique (`<topic>-w1`…), because it is the localStorage key.

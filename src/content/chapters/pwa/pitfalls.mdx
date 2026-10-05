@@ -1,0 +1,98 @@
+---
+title: مطبات وتشخيص
+short: مطبات
+order: 6
+label: فصل ٦
+badge: بعدها · فصل ٦
+en: DevTools Application · update prompt · storage quota · persist · iOS · opaque responses
+keywords: DevTools · quota · iOS · update
+goal: تعرف تشخّص الـ Service Worker، وتتفادى أشهر الأخطاء اللي بتخلّي المستخدمين عالقين على نسخة قديمة.
+part: بعدها
+color: c1
+---
+
+## أدوات التشخيص
+
+<Grid2>
+<Card title="🛠️ Application tab" c={1}>
+
+**Service workers**: الحالة، Update، Unregister، و **Offline**. و **Bypass for network** وإنت بتطوّر عشان الكاش ميلخبطكش. و **Cache storage** تشوف وتمسح منه.
+
+</Card>
+<Card title="📡 Network tab" c={5}>
+
+الرد اللي جه من الـ SW مكتوب جنبه `(ServiceWorker)`. لو مش شايفه، يبقى الـ SW مش ماسك الصفحة.
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="لما تختبر بـ Playwright أو Puppeteer">
+
+`context.setOffline(true)` مش بيأثر على الـ fetch اللي جوه الـ Service Worker، فهتلاقي كل حاجة "شغالة" وإنت فاكر النت مقطوع. الأضمن تقفل السيرفر نفسه. (ده اللي حصل معانا وإحنا بنختبر الموقع ده.)
+
+</Box>
+
+## المطبات
+
+<Cheat items={[
+  ["المستخدمين عالقين على نسخة قديمة", "متعملش Cache First لـ HTML من غير صلاحية أو build id"],
+  ["sw.js نفسه بيتكاش", "خدمه من غير Cache-Control طويل، ومتحطوش في الكاش بتاعك"],
+  ["الصفحة فاضية بعد ما اتجابت من الكاش", "نسيت `response.clone()` قبل `cache.put`"],
+  ["خطأ redirected response في navigation", "اعمل `new Response(body)` جديد قبل ما تحفظه"],
+  ["الكاش بيكبر من غير حدود", "trim بعدد أو بتاريخ، وامسح الكاش القديم في activate"],
+  ["حفظت رد 404 أو 500", "احفظ بس لو `response.ok`"],
+  ["صورة من دومين تاني حجمها كبير في الكاش", "ده opaque response (CORS). المتصفح بيحسبه بحجم كبير، فخليه network أو اطلب بـ CORS"],
+  ["Safari مسح الكاش", "iOS بيمسح التخزين لو الموقع متفتحش فترة. اطلب `navigator.storage.persist()`"],
+  ["مش عارف فاضل مساحة قد إيه", "`navigator.storage.estimate()`"],
+  ["الـ SW مش بيمسك الصفحة أول زيارة", "طبيعي. نادِ `clients.claim()` في activate"],
+  ["عايز تقول للمستخدم في تحديث", "اسمع `updatefound` واعرض زرار، وابعت رسالة للـ SW ينادي `skipWaiting()`"],
+]} />
+
+## رسالة "في تحديث جديد"
+
+<File name="main.js">
+
+```js
+const reg = await navigator.serviceWorker.register("/sw.js");
+
+reg.addEventListener("updatefound", () => {
+  const next = reg.installing;
+  next?.addEventListener("statechange", () => {
+    // اتسطّب وفي SW قديم ماسك الصفحة = في نسخة جديدة مستنية
+    if (next.state === "installed" && navigator.serviceWorker.controller) {
+      showToast("في نسخة جديدة", () => next.postMessage("SKIP_WAITING"));
+    }
+  });
+});
+
+// لما الجديد يمسك، اعمل reload مرة واحدة
+let reloaded = false;
+navigator.serviceWorker.addEventListener("controllerchange", () => {
+  if (!reloaded) { reloaded = true; location.reload(); }
+});
+```
+
+</File>
+
+<File name="sw.js">
+
+```js
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
+});
+```
+
+</File>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إزاي تعمل unregister لـ Service Worker بايظ عند كل المستخدمين؟" — انشر `sw.js` جديد بيمسح الكاش وينادي `self.registration.unregister()` في activate. مينفعش تمسح الملف بس، لأن الـ SW القديم ممكن يفضل يخدم من الكاش. عشان كده **الـ SW لازم يتصمم من الأول إنه يتحدث**.
+
+</Box>
+
+<Checklist id="pwa-pitfalls" title="خلّصت الفصل لما" items={["تستخدم Application tab تشوف الحالة والكاش وتجرب Offline", "تعرف ليه `setOffline` في Playwright مش كفاية", "تتفادى clone و redirected و opaque", "تعمل رسالة تحديث بـ `updatefound` و `skipWaiting`", "تعرف `storage.persist()` و `storage.estimate()`"]} />
+
+<Quiz>
+<Q n={1} q="المستخدم بيشوف النسخة القديمة رغم إنك نزّلت تعديل. أول حاجة تشيّك عليها؟">هل الـ HTML Cache First من غير صلاحية، وهل sw.js نفسه اتغير واتكاش.</Q>
+<Q n={2} q="ليه opaque responses مشكلة في الكاش؟">المتصفح مش عارف حجمها ولا حالتها، فبيحسبها بحجم كبير وممكن تكون error.</Q>
+</Quiz>

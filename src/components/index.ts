@@ -12,5 +12,6 @@ import Quiz from "./Quiz.astro";
 import Q from "./Q.astro";
 import Checklist from "./Checklist.astro";
 import Cheat from "./Cheat.astro";
+import Diagram from "./Diagram.astro";
 
-export const mdxComponents = { Box, Hl, En, Flow, Grid2, Card, Chips, File, Tree, Quiz, Q, Checklist, Cheat };
+export const mdxComponents = { Box, Hl, En, Flow, Grid2, Card, Chips, File, Tree, Quiz, Q, Checklist, Cheat, Diagram };

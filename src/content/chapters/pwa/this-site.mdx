@@ -1,0 +1,141 @@
+---
+title: "مثال حقيقي: الكاش في مذكرات سعيد"
+short: مثال الموقع ده
+order: 5
+label: فصل ٥
+badge: الكاش · فصل ٥
+en: build id · cache stamp · freshness · deploy flow · offline fallback
+keywords: BUILD_ID · x-sw-build · offline.html
+goal: تفهم الـ Service Worker اللي شغال على الموقع ده، وإزاي بيعرف إن الصفحة المحفوظة من deploy قديم.
+part: الكاش
+color: c5
+---
+
+الموقع اللي إنت بتقرا عليه دلوقتي PWA. الكود في `src/pwa/sw.js`، والإعدادات في `src/lib/pwa.ts`. هنفكّكه هنا.
+
+## ٣ أنواع ملفات، ٣ قرارات
+
+| النوع | الاستراتيجية | الصلاحية |
+| --- | --- | --- |
+| صفحات المذكرات (HTML) | Cache First **بصلاحية** | لحد أول deploy جديد، وبحد أقصى ٧ أيام |
+| `_astro/` (CSS و JS والخطوط) | Cache First | مفيش، لأن الاسم فيه hash. وحد أقصى ٢٠٠ ملف |
+| فهرس البحث والأيقونات | Stale-While-Revalidate | مفيش، بيتحدث في الخلفية كل مرة |
+
+## الصفحات: Cache First بس "طازة"
+
+<Diagram
+  title="قرار الـ SW لما تفتح صفحة مذكرة"
+  height={360}
+  mheight={680}
+  nodes={[
+    { id: "open", t: "فتحت صفحة", c: 1, x: 90, y: 14, mx: 30, my: 5 },
+    { id: "q1", t: "في الكاش؟", c: 4, x: 63, y: 14, mx: 30, my: 22 },
+    { id: "q2", t: "طازة؟", s: "نفس الـ deploy و أقل من ٧ أيام", c: 5, x: 63, y: 56, mx: 40, my: 49 },
+    { id: "fast", t: "⚡ اعرضها فورًا", c: 3, x: 90, y: 56, mx: 16, my: 64 },
+    { id: "net", t: "النت", s: "مهلة ٤ ثواني", c: 2, x: 30, y: 56, mx: 72, my: 66 },
+    { id: "offline", t: "📴 صفحة offline", c: 1, x: 30, y: 14, mx: 76, my: 34 },
+    { id: "old", t: "النسخة القديمة", c: 4, x: 30, y: 90, mx: 28, my: 92 },
+    { id: "new", t: "الجديدة + احفظها", c: 3, x: 63, y: 90, mx: 74, my: 92 },
+  ]}
+  edges={[
+    { from: "open", to: "q1", c: 1 },
+    { from: "q1", to: "q2", t: "أيوه", c: 4 },
+    { from: "q1", to: "offline", t: "لأ + مفيش نت", c: 1 },
+    { from: "q2", to: "fast", t: "أيوه", c: 3 },
+    { from: "q2", to: "net", t: "لأ", c: 5 },
+    { from: "net", to: "new", t: "رد", c: 3 },
+    { from: "net", to: "old", t: "فشل أو اتأخر", c: 4, dash: true },
+  ]}
+/>
+
+لو الصفحة **مش موجودة** والنت شغال، بتتجاب من النت وتتحفظ عادي. الرسمة بتوضح الحالة الصعبة بس.
+
+<Box type="tip" title="المدة مش بتمسح حاجة">
+
+الصلاحية بتقرر **إمتى نجرّب نحدّث** بس. النسخة القديمة بتفضل محفوظة، فالصفحة اللي فتحتها مرة هتفتح offline دايمًا.
+
+</Box>
+
+## إزاي بيعرف إن الصفحة من deploy قديم؟
+
+فكرة من ٣ حتت: <Hl c="y">رقم لكل build، مكتوب في sw.js، ومختوم على كل صفحة</Hl>.
+
+<Diagram
+  title="من git push لحد ما الصفحة تتحدث"
+  height={400}
+  mheight={600}
+  nodes={[
+    { id: "push", t: "git push", c: 1, x: 82, y: 12, mx: 50, my: 5 },
+    { id: "ci", t: "GitHub Actions", s: "BUILD = commit hash", c: 2, x: 22, y: 12, mx: 50, my: 22 },
+    { id: "sw", t: "sw.js جديد", s: "const BUILD = \"bbb\"", c: 4, x: 22, y: 50, mx: 50, my: 39 },
+    { id: "browser", t: "المتصفح", s: "قارن sw.js بايت ببايت", c: 5, x: 82, y: 50, mx: 50, my: 57 },
+    { id: "cache", t: "صفحة محفوظة", s: "x-sw-build: aaa", c: 3, x: 82, y: 88, mx: 50, my: 75 },
+    { id: "fresh", t: "تتجاب من النت", s: "وتتختم bbb", c: 1, x: 22, y: 88, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "push", to: "ci", t: "build", c: 1 },
+    { from: "ci", to: "sw", t: "يكتب الرقم جوّاه", c: 2 },
+    { from: "sw", to: "browser", t: "اتغير؟ يعمل install", c: 4 },
+    { from: "browser", to: "cache", t: "SW جديد يقارن", c: 5 },
+    { from: "cache", to: "fresh", t: "الختم قديم: تتحدث", c: 3 },
+  ]}
+/>
+
+<File name="src/lib/pwa.ts">
+
+```ts
+// على GitHub Actions = الـ commit hash، وعلى جهازك = الوقت
+export const BUILD_ID = process.env.GITHUB_SHA?.slice(0, 12) ?? Date.now().toString(36);
+```
+
+</File>
+
+وقت الـ build، `src/pages/sw.js.ts` بيبدّل `__BUILD__` في الكود بالرقم ده. فكل deploy بيطلّع `sw.js` مختلف، والمتصفح بيلاحظ. وكل صفحة بتتحفظ بختم:
+
+<File name="src/pwa/sw.js">
+
+```js
+async function stamp(res) {
+  const headers = new Headers(res.headers);
+  headers.set("x-sw-cached-at", String(Date.now()));
+  headers.set("x-sw-build", BUILD);
+  return new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers });
+}
+
+function isFresh(res) {
+  if (res.headers.get("x-sw-build") !== BUILD) return false; // من deploy قديم
+  return Date.now() - Number(res.headers.get("x-sw-cached-at")) < PAGE_MAX_AGE;
+}
+```
+
+</File>
+
+<Box type="story" icon="🥛" title="ختم الزبادي">
+
+كل علبة في التلاجة عليها رقم التشغيلة. المحل عارف رقم آخر تشغيلة. لو رقم العلبة أقدم، يجيب جديدة لو المصنع فاتح، ولو قافل يديك القديمة أحسن من مفيش.
+
+</Box>
+
+<Box type="warn" title="أول صفحة بعد الـ deploy لسه قديمة">
+
+الـ SW الجديد بيتسطّب **في الخلفية** وإنت فاتح الصفحة الأولى، فالصفحة دي بتيجي من الكاش القديم. التحديث بيبان من الصفحة اللي بعدها. والموقع بيستخدم `ClientRouter` بتاع Astro (تنقل من غير reload)، فالمتصفح بيلاحظ `sw.js` الجديد لما تفتح الموقع أو تعمل refresh.
+
+</Box>
+
+## ليه `stamp` بيعمل Response جديد؟
+
+لو السيرفر عمل redirect (مثلًا `/docker` ← `/docker/`)، الرد بيبقى `redirected: true`. المتصفح **بيرفض** يستخدم رد redirected كرد على navigation جاي من Service Worker. نسخ الـ body في `new Response(...)` بيعمل رد جديد نضيف، ومعاه بنحط الختم.
+
+## 🧪 Lab: شوفه بعينك
+
+1. افتح الموقع، وبعدين DevTools ← **Application** ← **Cache storage**. هتلاقي `pages-v1` و `assets-v1` و `static-v1` و `shell-...`.
+2. افتح أي صفحة في `pages-v1`، وبص على الـ headers: هتلاقي `x-sw-build` و `x-sw-cached-at`.
+3. في **Service workers** علّم على **Offline**، وافتح صفحة زرتها قبل كده: هتفتح. وافتح صفحة جديدة: هتلاقي صفحة "النت مقطوع" وفيها لستة اللي محفوظ عندك.
+
+<Checklist id="pwa-site" title="خلّصت الفصل لما" items={["تشرح الـ ٣ أنواع والاستراتيجية بتاعة كل واحد", "تشرح إزاي BUILD_ID بيوصل لـ sw.js", "تعرف `x-sw-build` بيتقارن بإيه", "تعرف ليه أول صفحة بعد الـ deploy لسه قديمة", "تشوف الكاش والختم من DevTools"]} />
+
+<Quiz>
+<Q n={1} q="نزّلت deploy جديد. الصفحات المحفوظة اتمسحت؟">لأ. بقت قديمة بس، فبتتحدث لما تفتحها والنت شغال. offline بتفضل تفتح.</Q>
+<Q n={2} q="ليه ملفات _astro مالهاش صلاحية؟">الاسم فيه hash من المحتوى. أي تعديل بيطلّع اسم جديد، فالقديم عمره ما بيتغير.</Q>
+<Q n={3} q="ليه فهرس البحث SWR مش Cache First؟">اسمه ثابت ومحتواه بيتغير مع كل مذكرة. SWR بيدّيك سرعة ويحدّث في الخلفية.</Q>
+</Quiz>
