@@ -1,7 +1,7 @@
 ---
 title: "Cheat Sheet: لو المشكلة… فكّر في…"
 short: Cheat Sheet
-order: 15
+order: 19
 label: الآخر
 badge: الآخر
 en: commands · when to use what · one page
@@ -48,8 +48,15 @@ color: dark
   ["البحث هيملى الـ context الرئيسي", "subagents. Explore للبحث، والخلاصة بس ترجع"],
   ["صلاحية admin", "على السيرفر. إخفاء اللينك مش حماية"],
   ["`CLAUDE.md` بيوصف التطبيق القديم", "حدّثه بعد كل feature، وامسح اللي مبقاش صح"],
-  ["عايز تبني كذا feature في نفس الوقت", "git worktrees"],
-  ["حاجة لازم تحصل أوتوماتيك كل مرة", "hooks"],
+  ["عايز تبني كذا feature في نفس الوقت", "`git worktree add` لكل feature، و Claude في كل فولدر"],
+  ["worktree جديد مش شغال", "`pnpm install`، وانسخ `.env.local`، وغيّر الـ port"],
+  ["Claude محتاج داتا أو أكشن من خدمة برا", "MCP server. `claude mcp add`، وبعدين `/mcp`"],
+  ["الفريق كله محتاج نفس الـ MCP", "`--scope project`، فيتكتب في `.mcp.json`"],
+  ["MCP servers كتير بتاكل الـ context", "اقفل اللي مش مستخدمه من `/mcp`"],
+  ["حاجة لازم تحصل كل مرة من غير ما تفكّر Claude", "hook. مثلًا `PostToolUse` يعمل format"],
+  ["عايز تمنع action قبل ما يحصل", "hook على `PreToolUse` يخرج بـ `exit 2`"],
+  ["مراجعة بعين فاضية بعد كل feature", "subagent في `.claude/agents/` بأدوات قراية بس"],
+  ["عايز Claude يشتغل في CI", "`claude -p` جوه GitHub Actions"],
 ]} />
 
 ## الامتحان

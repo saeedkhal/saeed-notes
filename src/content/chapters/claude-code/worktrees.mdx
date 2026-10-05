@@ -1,0 +1,103 @@
+---
+title: Git worktrees
+short: Worktrees
+order: 15
+label: فصل ١٥
+badge: المستوى الجاي · فصل ١٥
+en: git worktree · parallel features · one branch per agent
+keywords: worktree · parallel · branch · merge
+goal: تشغّل كذا Claude في نفس الوقت، كل واحد على feature، من غير ما يبوّظوا شغل بعض.
+part: المستوى الجاي
+color: c5
+---
+
+الـ subagents في فصل ١٣ كانوا بيدوّروا ويقروا بس. طب لو عايز اتنين Claude **يكتبوا كود** في نفس الوقت؟ واحد يبني الـ admin، والتاني يبني الـ wishlist؟
+
+لو الاتنين شغالين في نفس الفولدر، هيعدّلوا نفس الملفات ويبوّظوا شغل بعض. واحد يغيّر `schema.ts` والتاني يكتب فوقه، أو واحد يعمل `git checkout` لـ branch تاني والتاني شغال.
+
+<Hl c="b">الـ worktree فولدر تاني على نفس الـ repo، وعليه branch لوحده. كل Claude بيشتغل في فولدر، فمحدش بيلمس ملفات التاني</Hl>.
+
+<Box type="story" icon="🍳" title="المطبخ والترابيزات">
+
+مطبخ مطعم فيه طباخين. لو الاتنين بيقطّعوا على نفس الترابيزة، هيتخانقوا على السكينة والطبق. الحل إن كل واحد ياخد ترابيزة لوحده، والمخزن (الـ repo) واحد. في الآخر الشيف (إنت) بيدوق كل طبق قبل ما يطلع.
+
+</Box>
+
+## الفرق بين subagent و worktree
+
+<Grid2>
+<Card title="Subagent" c={5}>
+
+بيفصل الـ **context**. شغال على نفس الملفات، وغالبًا بيقرا وبس ويرجعلك بخلاصة.
+
+</Card>
+<Card title="Worktree" c={1}>
+
+بيفصل **الملفات والـ branch**. كل agent بيكتب كود في نسخة لوحده، وفي الآخر بتعمل merge.
+
+</Card>
+</Grid2>
+
+## إزاي تعمله
+
+من جوه المشروع:
+
+```bash
+# فولدر جديد جنب المشروع، وعليه branch جديد
+git worktree add ../atelier-admin -b feature/admin
+git worktree add ../atelier-wishlist -b feature/wishlist
+
+# تشوف كل الـ worktrees
+git worktree list
+```
+
+وبعدين تفتح terminal لكل واحد، وتشغّل Claude جواه:
+
+```bash
+cd ../atelier-admin && claude
+# وفي terminal تاني
+cd ../atelier-wishlist && claude
+```
+
+كل Claude شايف فولدره بس، وبيعمل commits على الـ branch بتاعه. والإصدارات الجديدة من Claude Code فيها flag بيعمل الـ worktree ويفتح الجلسة فيه في خطوة واحدة، راجع الـ docs لاسمه.
+
+## حاجات هتقابلك
+
+الـ worktree فيه الملفات اللي في Git بس، فـ:
+
+- **الـ dependencies مش موجودة**: شغّل `pnpm install` في كل worktree.
+- **ملف `.env.local` مش موجود**: لأنه برا Git. انسخه بنفسك. ومتخليش Claude يقراه، الـ deny rule شغالة هنا كمان لو `.claude/settings.json` متعمله commit.
+- **الـ dev server**: لو الاتنين شغّلوا `pnpm dev` على port 3000 هيتخانقوا. ادّي كل واحد port، زي `pnpm dev --port 3001`.
+- **الداتابيز واحدة**: لو الاتنين بيعملوا migrations على نفس الداتابيز، هيلخبطوا بعض. اعمل الـ migrations في feature واحدة بس في الوقت ده، أو استخدم branch داتابيز لكل worktree لو الـ provider بيدعم ده (Neon مثلًا فيه branches).
+
+## اختار features مستقلة
+
+<Box type="warn" title="الـ worktree مش بيحل التعارض، بيأجّله">
+
+لو الـ feature الاتنين بيعدّلوا نفس الملفات، هتقابل conflicts وقت الـ merge. اختار حاجات مستقلة عن بعض: صفحة admin وصفحة wishlist مثلًا، مش اتنين بيغيّروا الـ cart.
+
+</Box>
+
+## في الآخر: راجع و merge واحدة واحدة
+
+```bash
+# بعد ما تراجع شغل الـ admin
+git checkout main
+git merge feature/admin
+
+# امسح الـ worktree بعد ما خلصت
+git worktree remove ../atelier-admin
+git branch -d feature/admin
+```
+
+راجع كل branch لوحده زي ما بتراجع أي شغل: `git diff main...feature/admin`، وشغّل التستات، وافتح الصفحة بعينك. اعمل merge لواحدة، وبعدين التانية. ولو حصل conflict، تقدر تطلب من Claude يحلّه، بس راجع الحل.
+
+ابدأ باتنين بس. كل agent زيادة معناه مراجعة زيادة عليك إنت، وإنت اللي في الآخر بتقرر إيه يدخل `main`.
+
+<Checklist id="claude-code-worktrees" title="خلّصت الفصل لما" items={["تفرق بين الـ subagent اللي بيفصل الـ context والـ worktree اللي بيفصل الملفات", "تعمل worktree بـ `git worktree add` وتشغّل Claude جواه", "تعمل `pnpm install` وتنسخ `.env.local` وتغيّر الـ port في كل worktree", "تختار features مستقلة عشان تقلل الـ conflicts", "تراجع وتعمل merge لكل branch لوحده"]} />
+
+<Quiz>
+<Q n={1} q="ليه منشغّلش اتنين Claude في نفس الفولدر يكتبوا كود؟">لأنهم هيعدّلوا نفس الملفات ونفس الـ branch، ويبوّظوا شغل بعض.</Q>
+<Q n={2} q="عملت worktree جديد و pnpm dev مش شغال. أول حاجة تبص عليها؟">الـ dependencies والـ .env.local، لأنهم مش في Git. وبعدين الـ port لو فيه سيرفر تاني شغال.</Q>
+<Q n={3} q="الاتنين features بيعدّلوا الـ cart. ينفع worktrees؟">ينفع، بس هتقابل conflicts. الأحسن تعملهم ورا بعض، أو تقسّم الشغل بحيث كل واحد يلمس ملفات مختلفة.</Q>
+</Quiz>

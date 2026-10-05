@@ -1,0 +1,133 @@
+---
+title: Hooks
+short: Hooks
+order: 17
+label: فصل ١٧
+badge: المستوى الجاي · فصل ١٧
+en: PreToolUse · PostToolUse · Stop · matcher · exit 2
+keywords: hooks · PreToolUse · PostToolUse · exit 2
+goal: تخلي حاجات معينة تحصل كل مرة أوتوماتيك، من غير ما تعتمد إن Claude يفتكر.
+part: المستوى الجاي
+color: c2
+---
+
+في `CLAUDE.md` كتبنا "شغّل prettier بعد ما تعدّل" و "متعدّلش ملفات الـ migration بإيدك". Claude غالبًا هيلتزم، بس "غالبًا" مش كفاية لحاجات لازم تحصل كل مرة.
+
+<Hl c="p">الـ hook أمر إنت كاتبه، و Claude Code بيشغّله بنفسه كل مرة يحصل event معين. ده مش طلب من الموديل، ده كود بيتنفذ</Hl>.
+
+<Box type="story" icon="🚪" title="البواب">
+
+`CLAUDE.md` زي إنك تقول للسكان "اقفلوا باب العمارة ورا كل واحد". ساعات حد بينسى. الـ hook زي باب بيقفل لوحده بـ spring. مش محتاج حد يفتكر.
+
+</Box>
+
+## أهم الـ events
+
+- **PreToolUse**: قبل ما Claude يستخدم أداة. تقدر هنا تمنع الأداة.
+- **PostToolUse**: بعد ما الأداة تخلص. مناسب للـ format أو الـ lint بعد كل تعديل.
+- **UserPromptSubmit**: لما تبعت رسالة، قبل ما Claude يشتغل عليها.
+- **Stop**: لما Claude يخلص رده.
+- **SessionStart**: أول ما الجلسة تبدأ.
+- **Notification**: لما Claude يكون مستني موافقتك.
+
+فيه events تانية، والقايمة بتزيد. راجع الـ docs.
+
+## مثال ١: format بعد كل تعديل
+
+الـ hooks بتتكتب في `.claude/settings.json`، جنب الـ permissions:
+
+<File name=".claude/settings.json">
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+</File>
+
+الـ `matcher` بيقول الـ hook ده لأنهي أدوات. هنا: بعد أي `Edit` أو `Write`. و Claude Code بيبعت للـ script تفاصيل اللي حصل كـ JSON على الـ stdin، ومنها مسار الملف:
+
+<File name=".claude/hooks/format.sh">
+
+```bash
+#!/usr/bin/env bash
+# بنقرا مسار الملف اللي اتعدّل من الـ JSON
+file=$(jq -r '.tool_input.file_path // empty')
+[ -z "$file" ] && exit 0
+
+pnpm exec prettier --write "$file" >/dev/null 2>&1
+exit 0
+```
+
+</File>
+
+متنساش `chmod +x .claude/hooks/format.sh`.
+
+## مثال ٢: امنع تعديل ملفات الـ migration
+
+هنا بنستخدم `PreToolUse`، عشان نوقف التعديل قبل ما يحصل:
+
+<File name=".claude/hooks/protect-migrations.sh">
+
+```bash
+#!/usr/bin/env bash
+file=$(jq -r '.tool_input.file_path // empty')
+
+if [[ "$file" == *"/drizzle/"* ]]; then
+  # الكلام اللي على stderr بيرجع لـ Claude فيفهم ليه اتمنع
+  echo "ممنوع تعدّل ملفات الـ migration بإيدك. عدّل الـ schema وشغّل pnpm db:generate" >&2
+  exit 2
+fi
+exit 0
+```
+
+</File>
+
+وتسجّله في نفس الملف تحت `"PreToolUse"` بـ `"matcher": "Edit|Write"`.
+
+<Box type="idea" title="الـ exit code هو اللي بيقرر">
+
+`exit 0` معناها كمّل عادي. `exit 2` معناها امنع، والكلام اللي على الـ stderr بيرجع لـ Claude عشان يفهم ويصلّح طريقته. أي exit code تاني بيتعرض كإيرور بس الشغل بيكمّل. وفيه كمان طريقة إن الـ hook يرجّع JSON فيه قرار أدق، راجع الـ docs.
+
+</Box>
+
+لاحظ الفرق: الـ deny rule بتمنع أداة على مسار. الـ hook يقدر يعمل منطق أعقد، ويقول لـ Claude يعمل إيه بدل كده.
+
+## أفكار تانية للمتجر
+
+- **Stop**: شغّل `pnpm typecheck` لما Claude يخلص، ولو فيه أخطاء خلّيه يكمّل يصلّحها.
+- **Notification**: إشعار على الديسكتوب لما Claude يستناك، عشان متقعدش تبص على الشاشة.
+- **SessionStart**: اطبع `git status` وآخر commits عشان Claude يبدأ عارف الوضع.
+- **PreToolUse على Bash**: امنع أوامر خطيرة زي `rm -rf` أو `git push --force`.
+
+`/hooks` جوه Claude بيوريك الـ hooks المتسجلة.
+
+## خلّي بالك
+
+<Box type="warn" title="الـ hook بيشتغل بصلاحياتك إنت">
+
+الـ hook بيتنفذ على جهازك أوتوماتيك، من غير ما يسألك، وبنفس صلاحيات اليوزر بتاعك. فـ:
+
+- اقرا أي hook قبل ما تشغّله، خصوصًا لو جاي في repo أو plugin من حد تاني.
+- خلّيه سريع. hook بياخد 10 ثواني بعد كل تعديل هيبطّأ كل حاجة.
+- جرّبه لوحده الأول: ابعتله JSON بإيدك وشوف بيعمل إيه.
+
+</Box>
+
+<Checklist id="claude-code-hooks" title="خلّصت الفصل لما" items={["تفرق بين تعليمات في `CLAUDE.md` و hook بيتنفذ كل مرة", "تعرف امتى `PreToolUse` وامتى `PostToolUse` وامتى `Stop`", "تكتب hook بـ `matcher` يقرا مسار الملف من الـ stdin", "تمنع action بـ `exit 2` ورسالة على الـ stderr", "تقرا أي hook جاي من برا قبل ما تشغّله"]} />
+
+<Quiz>
+<Q n={1} q="عايز format بعد كل تعديل ملف. أنهي event؟">PostToolUse بـ matcher على Edit و Write.</Q>
+<Q n={2} q="الـ hook عايز يمنع التعديل ويقول لـ Claude السبب. يعمل إيه؟">يكتب السبب على الـ stderr ويخرج بـ exit 2.</Q>
+<Q n={3} q="ليه الـ hook أقوى من سطر في CLAUDE.md؟">لأن Claude Code بيشغّله كل مرة كـ كود، مش طلب من الموديل ممكن ينساه.</Q>
+</Quiz>

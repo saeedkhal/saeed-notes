@@ -1,0 +1,102 @@
+---
+title: MCP servers
+short: MCP
+order: 16
+label: فصل ١٦
+badge: المستوى الجاي · فصل ١٦
+en: claude mcp add · scopes · .mcp.json · /mcp · skill vs MCP
+keywords: MCP · .mcp.json · /mcp · scope
+goal: توصّل Claude بخدمات برا المشروع، وتعرف امتى MCP وامتى skill.
+part: المستوى الجاي
+color: c1
+---
+
+لحد دلوقتي Claude شايف الملفات اللي في المشروع، والترمينال، والويب. بس إيه رأيك لو عايزه يشوف الـ tables في Neon، أو آخر إيرور في Sentry، أو الـ issue في GitHub، أو يفتح المتجر في متصفح ويجرّب الـ checkout؟
+
+<Hl c="g">MCP طريقة موحدة توصّل بيها Claude بأي خدمة برا المشروع. كل خدمة بتعمل MCP server، و Claude بيستخدم الأدوات اللي الـ server بيعرضها</Hl>.
+
+الـ Stripe plugin في فصل ١٢ كان في الحقيقة MCP server ملفوف في plugin. هنا هنضيف MCP server بنفسنا.
+
+## MCP ولا skill؟
+
+<Grid2>
+<Card title="Skill" c={1}>
+
+**معرفة وخطوات**. بتقول لـ Claude يعمل الحاجة إزاي. مش بتديله وصول لحاجة جديدة.
+
+</Card>
+<Card title="MCP server" c={2}>
+
+**وصول**. بيدّي Claude أدوات يقرا بيها داتا حقيقية أو يعمل actions في خدمة برا، زي يقرا الـ issues أو يعمل query على الداتابيز.
+
+</Card>
+</Grid2>
+
+وكتير بيشتغلوا مع بعض: MCP server بيدّي الوصول، و skill بتقول الطريقة الصح لاستخدامه.
+
+## تضيف MCP server إزاي
+
+فيه نوعين مشهورين:
+
+```bash
+# server ريموت على الإنترنت (HTTP)
+claude mcp add --transport http <name> <url>
+
+# server بيشتغل على جهازك كـ process (stdio)
+# مثلًا Playwright عشان Claude يفتح متصفح ويجرّب الصفحات
+claude mcp add playwright -- npx @playwright/mcp@latest
+
+# تشوف اللي متضاف
+claude mcp list
+```
+
+وجوه Claude، `/mcp` بيوريك الـ servers شغالة ولا لأ، ومنه بتعمل login للـ servers اللي محتاجة OAuth.
+
+الـ URL والأمر بتاع كل خدمة موجودين في الـ docs بتاعتها. والـ flags نفسها بتتغير، فراجع docs بتاعة Claude Code.
+
+## متضاف لمين؟ الـ scope
+
+- **local** (الافتراضي): ليك إنت بس، على المشروع ده.
+- **project**: بيتكتب في ملف `.mcp.json` في الـ root، وبيتعمله commit، فكل الفريق بياخده. بتضيفه بـ `--scope project`.
+- **user**: ليك إنت في كل مشاريعك.
+
+<File name=".mcp.json">
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
+```
+
+</File>
+
+ومتحطش أي token أو API key جوه `.mcp.json` لأنه بيتعمله commit. الـ OAuth بيتعمل من `/mcp`، والمفاتيح بتتقرا من الـ environment variables. راجع الـ docs لطريقة كتابتها.
+
+## مثال من المتجر
+
+مع Playwright MCP تقدر تقول: "افتح localhost:3000، ضيف الشنطة للـ cart، كمّل لحد الـ checkout، وقولي فيه حاجة شكلها غلط على موبايل 390px". Claude بيفتح المتصفح فعلًا، ويدوس، ويعمل screenshots، ويرجعلك باللي لقاه. ده بيخلي خطوة "اتأكد من شغلك" حقيقية في الـ UI، مش بس `pnpm build`.
+
+## خلّي بالك
+
+<Box type="warn" title="الـ MCP server بياكل context وبيفتح باب">
+
+- **الـ context**: كل server بيعرض أدوات، وأسامي الأدوات ووصفها بياخدوا من الـ context. خمس servers ملهمش لازمة بيزحموا الجلسة. اقفل اللي مش مستخدمه من `/mcp`.
+- **الأمان**: الـ server بيعمل actions حقيقية بالصلاحيات اللي إديتهاله. سطّب من مصدر تثق فيه. ولو هيلمس داتابيز production، اديله صلاحية قراية بس لو ينفع.
+- **الـ permissions شغالة عليه**: أدوات الـ MCP بتظهر في الـ permissions زي باقي الأدوات، فتقدر تعمل allow أو ask أو deny لأداة معينة. راجع الـ docs لشكل الاسم.
+
+</Box>
+
+لو عايز تفهم البروتوكول نفسه من جوه، أو تبني MCP server بإيدك، فيه موضوع MCP كامل في المذكرات.
+
+<Checklist id="claude-code-mcp" title="خلّصت الفصل لما" items={["تفرق بين الـ skill (طريقة) والـ MCP server (وصول)", "تضيف server بـ `claude mcp add` وتشوفه من `/mcp`", "تعرف الفرق بين scope الـ local والـ project والـ user", "متحطش tokens في `.mcp.json`", "تقفل الـ servers اللي مش مستخدمها عشان الـ context"]} />
+
+<Quiz>
+<Q n={1} q="عايز Claude يعرف الطريقة الصح لكتابة صفحة. MCP ولا skill؟">skill، لأنها معرفة وخطوات. الـ MCP لما يحتاج وصول لخدمة برا.</Q>
+<Q n={2} q="عايز كل الفريق ياخد نفس الـ MCP server. تعمل إيه؟">تضيفه بـ --scope project، فيتكتب في .mcp.json ويتعمله commit.</Q>
+<Q n={3} q="ليه متضيفش كل MCP server تلاقيه؟">لأن أدوات كل server بتاكل من الـ context، وكل server بيعمل actions حقيقية فلازم تثق في مصدره.</Q>
+</Quiz>

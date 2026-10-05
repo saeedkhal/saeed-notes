@@ -1,0 +1,94 @@
+---
+title: Multi-agent workflows
+short: Multi-agent
+order: 18
+label: فصل ١٨
+badge: المستوى الجاي · فصل ١٨
+en: custom subagents · writer/reviewer · orchestrator · CI
+keywords: .claude/agents · reviewer · orchestrator · CI
+goal: تجمّع كل اللي فات في نظام فيه كذا agent، كل واحد ليه دور، وإنت بتراجع.
+part: المستوى الجاي
+color: c3
+---
+
+كل فصل لحد دلوقتي كان حتة: الـ subagents بتدوّر، والـ worktrees بتفصل الشغل، والـ MCP بيوصّل بخدمات، والـ hooks بتضمن إن حاجات تحصل. الـ multi-agent workflow هو إنك تركّب الحتت دي مع بعض.
+
+<Hl c="y">مش agent واحد بيعمل كل حاجة. كل agent ليه دور واضح، و context لوحده، وأدوات على قد دوره</Hl>.
+
+## اعمل subagent بتاعك
+
+في فصل ١٣ استخدمنا الـ subagents الجاهزة. تقدر تعمل subagent بتاعك في `.claude/agents/`، أو من `/agents` جوه Claude:
+
+<File name=".claude/agents/reviewer.md">
+
+```md
+---
+name: reviewer
+description: >
+  يراجع التعديلات بعد ما أي feature تخلص وقبل الـ commit.
+  استخدمه لما الكود يبقى جاهز للمراجعة.
+tools: Read, Grep, Glob, Bash
+---
+
+إنت بتراجع كود مكتوب لمتجر Next.js بـ Drizzle و Better Auth.
+
+1. شغّل git diff وافهم إيه اللي اتغير.
+2. دوّر على: صلاحيات بتتأكد على الـ client بس، و raw SQL،
+   وأسرار في الكود، وأي حاجة بتكسر الـ design system.
+3. شغّل pnpm typecheck و pnpm test.
+4. رجّع قايمة: مشكلة، والملف، وخطورتها، واقتراح.
+   متعدّلش أي ملف.
+```
+
+</File>
+
+زي الـ skill بالظبط: الـ `description` هو اللي بيخلي Claude يعرف امتى يستخدمه. والفرق إن الـ subagent بيشتغل في context لوحده. وسطر `tools` بيحدد أدواته: هنا مفيش `Edit` ولا `Write`، فهو مش هيقدر يعدّل حتى لو حاول. وتقدر كمان تختار له موديل مختلف، راجع الـ docs.
+
+لاحظ إن مفيش لقب "Senior Reviewer". الدور واضح من المهمة والأدوات، مش من الاسم.
+
+## ٣ طرق مشهورة
+
+### ١. واحد يكتب وواحد يراجع
+
+الـ agent اللي كتب الكود عنده context مليان بقراراته، فصعب يشوف غلطه. الـ reviewer بيبدأ بـ context فاضي، وبيشوف الـ diff بس. ده نفس فكرة فصل الأمان: عين تانية، بس جوه Claude Code.
+
+<Flow items={[{t: "Claude", s: "يبني الـ feature", c: 3}, "→", {t: "reviewer", s: "context فاضي", c: 1}, "→", {t: "Claude", s: "يصلّح", c: 3}, "→", {t: "إنت", s: "تراجع وتعمل merge", c: 5}]} />
+
+### ٢. واحد بينسّق، وكذا واحد بينفذ
+
+agent رئيسي بيقسم الـ feature الكبيرة لحتت مستقلة، وكل حتة بتتعمل في worktree لوحدها، وبعدين بيجمع النتايج. ده اللي بيتسمى orchestrator. الإصدارات الجديدة من Claude Code فيها طرق مدمجة للشغل ده، زي فرق agents بتكلم بعض، وأغلبها لسه بيتغير، فراجع الـ docs.
+
+### ٣. Claude في الـ CI
+
+`claude -p` من فصل ٣ بيشتغل من غير حد قاعد قدامه، فينفع جوه GitHub Actions: يراجع كل pull request، أو يصلّح تست واقع، أو يرد على issue. فيه GitHub Action رسمية لـ Claude Code، وأمر بيساعدك تعملها، راجع الـ docs. وفي الحالة دي الـ permissions مهمة جدًا، لأن مفيش حد بيوافق.
+
+## إزاي بتتركّب مع بعض
+
+<Flow items={[{t: "Scope", s: "هنبني إيه", c: 5}, "→", {t: "Plan mode", s: "ننفذ إزاي", c: 1}, "→", {t: "Worktrees", s: "بناء بالتوازي", c: 2}, "→", {t: "Hooks + reviewer", s: "تأكد ومراجعة", c: 3}, "→", {t: "إنت", s: "merge", c: 4}]} />
+
+- **`CLAUDE.md`** بيدّي كل agent نفس قواعد المشروع.
+- **الـ permissions** بتحدد كل واحد مسموحله بإيه.
+- **الـ skills** بتدّيهم نفس الطريقة في الشغل.
+- **الـ MCP** بيدّيهم وصول لخدمات زي المتصفح والداتابيز.
+- **الـ hooks** بتضمن إن الـ format والـ typecheck بيحصلوا كل مرة.
+- **وإنت** بتراجع وبتقرر إيه يدخل `main`.
+
+## متكبّرهاش من الأول
+
+<Box type="warn" title="agents أكتر = مراجعة أكتر عليك">
+
+كل agent زيادة معناه tokens أكتر، وتنسيق أكتر، وشغل أكتر محتاج يتراجع. خمس agents بيكتبوا كود في نفس الوقت محدش هيقدر يراجعهم كويس.
+
+ابدأ بحاجة واحدة: subagent بيراجع بعد كل feature. لما تتعود عليه وتلاقي نفسك مستني، ضيف worktree تاني. ودايمًا اسأل: المشكلة اللي قدامي محتاجة ده فعلًا؟
+
+</Box>
+
+ده نفس الأساس اللي المذكرة كلها ماشية عليه: context كويس، ومهام صغيرة، ومراجعة، وكل ميزة بتيجي لما المشكلة بتاعتها تظهر.
+
+<Checklist id="claude-code-multi-agent" title="خلّصت الفصل لما" items={["تعمل subagent في `.claude/agents/` بـ description واضح", "تحدد أدوات الـ subagent على قد دوره، زي reviewer من غير Edit", "تفهم ليه الـ reviewer بـ context فاضي بيشوف أحسن", "تعرف إن `claude -p` ينفع في الـ CI والـ permissions هناك أهم", "تبدأ بـ agent واحد زيادة وتكبّر بالتدريج"]} />
+
+<Quiz>
+<Q n={1} q="ليه الـ agent اللي كتب الكود مش أحسن واحد يراجعه؟">لأن الـ context بتاعه مليان بقراراته وافتراضاته. الـ reviewer بيبدأ فاضي وبيشوف الـ diff بس.</Q>
+<Q n={2} q="إزاي تضمن إن الـ reviewer ميعدّلش أي ملف؟">تشيل Edit و Write من سطر tools في الملف بتاعه.</Q>
+<Q n={3} q="عندك 3 features. تشغّل 3 agents في نفس الوقت من أول يوم؟">الأحسن تبدأ بواحد أو اتنين، لأن كل agent زيادة معناه مراجعة زيادة عليك.</Q>
+</Quiz>
