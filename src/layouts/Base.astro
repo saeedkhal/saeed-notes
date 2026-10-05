@@ -13,6 +13,7 @@ import "../styles/global.css";
 import "../styles/layout.css";
 import { ClientRouter } from "astro:transitions";
 import { getChapters, getTopics, url } from "../lib/content";
+import { THEME_COLOR } from "../lib/pwa";
 
 interface Props {
   title: string;
@@ -41,6 +42,9 @@ const progressHref = chaptersByTopic[topicId] ? url(`${topicId}/`) : undefined;
     <title>{title === siteName ? title : `${title} · ${siteName}`}</title>
     <meta name="description" content={description} />
     <link rel="icon" href={url("favicon.svg")} type="image/svg+xml" />
+    <link rel="manifest" href={url("manifest.webmanifest")} />
+    <link rel="apple-touch-icon" href={url("icons/apple-touch-icon.png")} />
+    <meta name="theme-color" content={THEME_COLOR} />
     <script is:inline>
       try {
         const t = localStorage.getItem("masry-notes:theme");
@@ -447,6 +451,13 @@ const progressHref = chaptersByTopic[topicId] ? url(`${topicId}/`) : undefined;
       };
       boot();
       document.addEventListener("astro:page-load", boot);
+    </script>
+    <script>
+      // PWA: الصفحات اللي بتفتحها بتتحفظ وتشتغل من غير نت (src/pwa/sw.js)
+      if (import.meta.env.PROD && "serviceWorker" in navigator) {
+        const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+        navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {});
+      }
     </script>
   </body>
 </html>

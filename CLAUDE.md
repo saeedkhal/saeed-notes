@@ -24,6 +24,10 @@ src/styles/global.css          # design tokens (light/dark), prose, boxes, marke
 src/styles/layout.css          # header, sidebar, toc, banner, cover, home
 src/lib/content.ts             # getTopics/getChapters, url() (respects BASE_URL), splitId
 src/lib/rehype-wrap-tables.mjs # wraps <table> in .table-wrap for mobile scroll
+src/pwa/sw.js                  # service worker source; src/pages/sw.js.ts fills in base path + build id
+src/lib/pwa.ts                 # PWA settings: page cache max age, network timeout, asset limit
+src/pages/manifest.webmanifest.ts, offline.html.ts  # PWA manifest + offline fallback (inline CSS)
+public/icons/                  # PWA icons (PNG, rendered from favicon.svg)
 ```
 
 ## Adding content
@@ -60,3 +64,11 @@ src/lib/rehype-wrap-tables.mjs # wraps <table> in .table-wrap for mobile scroll
 ## Verifying UI changes
 
 Build, run `pnpm preview`, then screenshot desktop (1400px), dark mode, and mobile (390px) with Playwright. Check that `document.documentElement.scrollWidth - innerWidth === 0`, meaning no horizontal page scroll. Long inline code must wrap (`overflow-wrap: anywhere`).
+
+## Offline / PWA
+
+- Pages are cache-first. A cached page is served while it is from the current build and less than `PAGE_MAX_AGE_DAYS` old. Otherwise the network is tried (`NETWORK_TIMEOUT_MS`) and the stale copy is the fallback. An uncached page while offline gets `offline.html`.
+- `_astro/*` files are hashed, so they are cached forever (trimmed to `MAX_ASSETS`). Everything else (search index, icons, manifest) is stale-while-revalidate.
+- Every build gets a new `BUILD_ID`, so `sw.js` changes and each deploy marks cached pages stale. Don't hardcode the base path in the SW, because it reads it from its scope.
+- The SW only registers in production builds. Test offline with `pnpm preview` and then stop the server, because Playwright's `setOffline` doesn't affect service worker fetches.
+
