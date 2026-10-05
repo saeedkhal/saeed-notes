@@ -1,0 +1,108 @@
+---
+title: CSRF و Clickjacking — حد بيستخدم جلستك من غير ما تحس
+short: CSRF و Clickjacking
+order: 3
+label: فصل ٣
+badge: المتصفح · فصل ٣
+en: CSRF · SameSite cookies · anti-CSRF token · Clickjacking · frame-ancestors · X-Frame-Options
+keywords: SameSite · CSRF token · frame-ancestors
+goal: تفهم إزاي موقع تاني يقدر يبعت request باسمك أو يخليك تدوس على زرار مخفي، وتقفل الاتنين بالـ cookies والـ headers الصح.
+part: المتصفح
+color: c3
+---
+
+الهجمتين دول مش محتاجين يسرقوا أي حاجة. هما بيستغلوا إن المتصفح بتاعك **عامل login فعلًا** على موقعك.
+
+## CSRF: موقع تاني بيبعت باسمك
+
+<Flow items={[{"t": "Other Site", "c": 1, "s": "صفحة شريرة إنت فتحتها"}, "→", {"t": "Your Cookie", "c": 3, "s": "المتصفح بيبعتها لوحده"}, "→", {"t": "Your Bank", "c": 2, "s": "فاكر إنك إنت اللي طلبت"}]} />
+
+المتصفح تاريخيًا بيبعت الـ cookies مع أي request رايح لموقعك، حتى لو الـ request ده طالع من صفحة موقع تاني. فصفحة شريرة ممكن يبقى فيها فورم مخفي بيعمل submit لوحده على `POST /transfer` في موقع البنك، والبنك يشوف cookie الجلسة سليمة.
+
+<Box type="story" icon="🧾" title="الكارنيه في جيبك">
+
+إنت داخل المول ومعاك كارنيه VIP بيفتح أي باب. واحد بيديك ورقة ويقولك "ادّي دي للأمن". الأمن شاف الكارنيه في إيدك فنفّذ اللي في الورقة. إنت مكنتش تعرف إن الورقة مكتوب فيها "افتحوا المخزن".
+
+</Box>
+
+### الحل الأول: SameSite cookies
+
+<File name="session.js">
+
+```js
+res.cookie("sid", sessionId, {
+  httpOnly: true,   // الـ JS ميقدرش يقراها (حماية من XSS)
+  secure: true,     // HTTPS بس
+  sameSite: "lax",  // متتبعتش مع POST جاي من موقع تاني
+  path: "/",
+});
+```
+
+</File>
+
+| القيمة | بتتبعت مع requests من مواقع تانية؟ |
+| --- | --- |
+| `Strict` | لأ خالص، حتى لو داس على لينك لموقعك |
+| `Lax` | مع التنقل العادي بـ GET بس (لينك)، مش مع POST ولا fetch |
+| `None` | أيوه دايمًا، ولازم معاها `Secure` |
+
+<Box type="warn" title="Lax لوحده مش كفاية في كل الحالات">
+
+لو عندك endpoint بيغيّر داتا عن طريق `GET` (زي `/logout` أو `/delete?id=`)، `Lax` مش هيحميه. **أي تغيير يبقى POST/PUT/DELETE**. ولو التطبيق محتاج `SameSite=None` (مثلًا الـ frontend على domain مختلف)، يبقى لازم token.
+
+</Box>
+
+### الحل التاني: anti-CSRF token
+
+السيرفر بيدي كل جلسة قيمة عشوائية سرية، والفورم أو الـ fetch لازم يبعتها في header أو field. الموقع التاني ميقدرش يقرا القيمة دي، فميقدرش يبعتها.
+
+<File name="api.ts">
+
+```ts
+// الـ frontend بيقرا الـ token (من meta tag أو endpoint) ويبعته مع كل تغيير
+await fetch("/api/transfer", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+  body: JSON.stringify({ to, amount }),
+});
+```
+
+</File>
+
+السيرفر يقارن الـ header بالقيمة المتخزنة في الجلسة، ولو مختلفين يرجّع `403`. أغلب الـ frameworks فيها middleware جاهز للنقطة دي، راجع الـ docs بتاع الـ framework بتاعك.
+
+<Box type="tip" title="لو بتستخدم Bearer token في header">
+
+لو الـ auth بـ `Authorization: Bearer ...` اللي الـ JS بيضيفه بإيده (مش cookie)، المتصفح مش بيبعته لوحده، فـ CSRF بالشكل ده مش بيأثر. بس ساعتها الـ token في متناول الـ JS، فالـ XSS بقى هو الخطر الأكبر.
+
+</Box>
+
+## Clickjacking: زرار مخفي تحت إيدك
+
+<Flow items={[{"t": "Hidden Frame", "c": 1, "s": "موقعك جوه iframe شفاف"}, "→", {"t": "Your Click", "c": 3, "s": "فاكر إنك بتدوس على \"اربح جايزة\""}, "→", {"t": "Real Button", "c": 2, "s": "\"احذف الحساب\" في موقعك"}]} />
+
+الموقع الشرير بيحط موقعك في `iframe` شفاف فوق زرار مغري. إنت بتدوس على اللي شايفه، والضغطة بتروح للزرار الحقيقي اللي تحته، وإنت عامل login.
+
+### الحل: امنع موقعك يتحط في frame
+
+<File name="server.js">
+
+```js
+// الحديث: CSP
+res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+// القديم: للمتصفحات اللي مش بتفهم frame-ancestors
+res.setHeader("X-Frame-Options", "DENY");
+```
+
+</File>
+
+لو موقعك محتاج يتعرض في iframe من domain معيّن بتاعك، استخدم `frame-ancestors 'self' https://app.example.com` بدل `'none'`. الـ `helmet` في Express بيحط `X-Frame-Options` افتراضي.
+
+<Checklist id="webatk-csrf" title="خلّصت الفصل لما" items={["تشرح ليه المتصفح بيبعت الـ cookie مع request من موقع تاني", "تحط `HttpOnly` و `Secure` و `SameSite` على cookie الجلسة", "تعرف إن أي تغيير لازم يبقى POST مش GET", "تعرف إمتى محتاج anti-CSRF token", "تمنع الـ framing بـ `frame-ancestors` و `X-Frame-Options`"]} />
+
+<Quiz>
+<Q n={1} q="عندك GET /account/delete والـ cookie SameSite=Lax. أمان؟">لأ. Lax بيسمح بالـ GET من التنقل العادي. خليه DELETE أو POST مع token.</Q>
+<Q n={2} q="الـ CORS بيمنع CSRF؟">مش لوحده. الـ CORS بيمنع الموقع التاني يقرا الرد، بس الفورم العادي ممكن يتبعت ويتنفذ.</Q>
+<Q n={3} q="إزاي تمنع موقعك يتعرض في iframe خالص؟">`frame-ancestors 'none'` في CSP، ومعاه `X-Frame-Options: DENY`.</Q>
+</Quiz>

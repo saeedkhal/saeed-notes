@@ -1,0 +1,125 @@
+---
+title: XSS — سكريبت غريب جوه صفحتك
+short: XSS
+order: 2
+label: فصل ٢
+badge: الـ Input · فصل ٢
+en: Stored / Reflected / DOM XSS · output encoding · dangerouslySetInnerHTML · CSP
+keywords: XSS · escape · sanitize · CSP
+goal: تعرف أنواع الـ XSS، وليه React بيحميك في أغلب الوقت، والأماكن اللي بيسيبك فيها، وتضيف CSP كطبقة تانية.
+part: الـ Input
+color: c2
+---
+
+## الفكرة في سطر
+
+<Flow items={[{"t": "Script", "c": 1, "s": "المهاجم كتبه في كومنت أو URL"}, "→", {"t": "Your Page", "c": 3, "s": "عرضته كـ HTML"}, "→", {"t": "Visitor", "c": 2, "s": "المتصفح بتاعه نفّذه"}]} />
+
+الـ <En>Cross-Site Scripting</En> معناه إن JavaScript مش بتاعك بيشتغل جوه صفحتك، **بصلاحيات موقعك**: يقرا الصفحة، يبعت requests باسم المستخدم، يسرق tokens متخزنة في `localStorage`، أو يغيّر الفورم.
+
+<Box type="story" icon="📌" title="لوحة الإعلانات في العمارة">
+
+السكان بيعلّقوا ورق على لوحة في المدخل. واحد علّق ورقة مكتوب عليها "اللي يقرا دي يسيب مفتاحه مع البوّاب". المشكلة مش في الورقة، المشكلة إن اللوحة بتتعامل مع أي ورقة كأنها **تعليمات رسمية من الإدارة**.
+
+</Box>
+
+## التلات أنواع
+
+| النوع | الـ payload بيتخزن فين؟ | مثال |
+| --- | --- | --- |
+| Stored | في الـ database | كومنت أو bio بيتعرض لكل الزوار |
+| Reflected | في الـ request نفسه | بحث بيعرض `?q=` في الصفحة من غير encoding |
+| DOM-based | في الـ frontend بس | JS بياخد `location.hash` ويحطه في `innerHTML` |
+
+## React بيحميك… لحد نقطة
+
+React بيعمل **escape** لأي نص بتحطه بين `{}`. يعني لو الكومنت فيه tag، هيظهر كنص مش كـ HTML. الثغرات بتيجي من الأبواب الخلفية:
+
+<File name="Comment.jsx">
+
+```jsx
+// ✅ آمن: React بيعمل escape
+<p>{comment.body}</p>
+
+// ❌ HTML خام من المستخدم
+<p dangerouslySetInnerHTML={{ __html: comment.body }} />
+
+// ❌ لينك المستخدم كتبه: ممكن يبدأ بـ javascript:
+<a href={user.website}>الموقع</a>
+```
+
+</File>
+
+<Box type="warn" title="لو لازم تعرض HTML">
+
+زي محرر نصوص غني: اعمل **sanitize** بمكتبة معروفة زي `DOMPurify` قبل العرض، متكتبش regex بإيدك. وللينكات، اتأكد إن الـ URL بيبدأ بـ `https:` أو `http:` بس.
+
+</Box>
+
+<File name="SafeHtml.jsx">
+
+```jsx
+import DOMPurify from "dompurify";
+
+export function SafeHtml({ html }) {
+  const clean = DOMPurify.sanitize(html);
+  return <div dangerouslySetInnerHTML={{ __html: clean }} />;
+}
+
+export function safeUrl(url) {
+  try {
+    const u = new URL(url);
+    return ["https:", "http:"].includes(u.protocol) ? u.href : "#";
+  } catch {
+    return "#";
+  }
+}
+```
+
+</File>
+
+بره React نفس القاعدة: `textContent` بدل `innerHTML`، والـ template engines على السيرفر (EJS و Handlebars) استخدم الصيغة اللي بتعمل escape، مش الـ raw.
+
+## الطبقة التانية: Content-Security-Policy
+
+الـ <En>CSP</En> header بيقول للمتصفح: "السكريبتات المسموحة جاية من هنا بس". لو حد نجح يحقن tag، المتصفح يرفض ينفذه.
+
+<File name="server.js">
+
+```js
+import helmet from "helmet";
+
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],          // من غير 'unsafe-inline'
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],     // هنرجعله في Clickjacking
+    },
+  }),
+);
+```
+
+</File>
+
+<Box type="tip" title="ابدأ بـ Report-Only">
+
+CSP صارم ممكن يكسر سكريبتات analytics أو inline styles. شغّله الأول بـ `Content-Security-Policy-Report-Only` وشوف إيه اللي هيتمنع، وبعدين فعّله. وللسكريبتات الـ inline اللي لازم تفضل، استخدم nonce أو hash، راجع الـ docs.
+
+</Box>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"نخزن الـ access token في localStorage ولا cookie؟" — أي XSS يقدر يقرا `localStorage`. الـ cookie بـ `HttpOnly` الـ JS ميقدرش يقراها، بس ساعتها لازم تحمي نفسك من CSRF (الفصل الجاي). مفيش حل من غير trade-off، بس `HttpOnly` + `SameSite` هو الاختيار الشائع.
+
+</Box>
+
+<Checklist id="webatk-xss" title="خلّصت الفصل لما" items={["تفرّق Stored و Reflected و DOM XSS", "تعرف إن React بيعمل escape للـ text بس", "تعمل sanitize بـ DOMPurify قبل `dangerouslySetInnerHTML`", "تمنع `javascript:` في اللينكات", "تضيف CSP وتجربه بـ Report-Only الأول"]} />
+
+<Quiz>
+<Q n={1} q="بتعرض اسم المستخدم بين أقواس JSX. محتاج sanitize؟">لأ، React بيعمل escape للنص لوحده.</Q>
+<Q n={2} q="CSP بيغني عن الـ escaping؟">لأ. هو طبقة دفاع تانية لو الأولى فشلت.</Q>
+<Q n={3} q="ليه لينك المستخدم ممكن يبقى خطر في React؟">لأن href ممكن يبقى `javascript:` ويتنفذ لما حد يدوس.</Q>
+</Quiz>

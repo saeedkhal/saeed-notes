@@ -1,0 +1,41 @@
+---
+title: "Cheat Sheet: الهجمة… والسطر اللي بيقفلها"
+short: Cheat Sheet
+order: 8
+label: الآخر
+badge: الآخر
+en: One-page recall for 10 web attacks
+keywords: cheatsheet · OWASP · fixes
+goal: تفتكر كل هجمة وحلها في سطر قبل الـ code review أو الإنترفيو.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["SQL Injection: الـ input اتلزق في الـ query", "parameterized queries (`$1`). والـ input داتا عمره ما يبقى نص SQL"],
+  ["ORDER BY أو اسم عمود من المستخدم", "allow-list لقيم ثابتة"],
+  ["XSS: سكريبت بيشتغل في صفحتك", "escape لكل output، و DOMPurify قبل أي HTML خام"],
+  ["لينك من المستخدم في href", "اسمح بـ `https:` و `http:` بس"],
+  ["عايز طبقة تانية ضد XSS", "Content-Security-Policy من غير `unsafe-inline`"],
+  ["CSRF: موقع تاني بيبعت بالـ cookie بتاعتك", "`SameSite` cookies + anti-CSRF token على كل تغيير"],
+  ["GET بيغيّر داتا", "خليه POST أو PUT أو DELETE"],
+  ["SSRF: السيرفر بيعمل fetch لأي URL", "allow-list للـ hosts، بلوك للـ IPs الداخلية، ومن غير redirects"],
+  ["metadata الـ cloud", "IMDSv2 وبلوك 169.254.169.254"],
+  ["IDOR: غيّر الـ ID شوف داتا غيرك", "شرط الملكية جوه كل query، و 404 لو مش بتاعه"],
+  ["userId أو role جاي في الـ body", "خده من الجلسة، و allow-list للحقول"],
+  ["Path Traversal: `../` في اسم الملف", "`path.resolve` واتأكد إنه جوه الـ ROOT، أو IDs بدل أسماء"],
+  ["Weak Login: تخمين وباسوردات مسربة", "MFA + rate limit لكل IP ولكل حساب + argon2"],
+  ["رسالة الـ login بتقول الإيميل مش موجود", "رسالة واحدة للحالتين"],
+  ["Clickjacking: موقعك في iframe شفاف", "`frame-ancestors 'none'` و `X-Frame-Options: DENY`"],
+  ["Open Redirect: `?next=` لأي دومين", "relative paths بس (يبدأ بـ / ومش //) أو allow-list"],
+  ["Leaked Secrets: مفتاح في ريبو عام", "rotate فورًا، وبعدين scanning و push protection"],
+  ["سر في `VITE_` أو `NEXT_PUBLIC_`", "انقله للـ backend. الـ bundle عام"],
+]} />
+
+<Checklist id="webatk-cheat" title="خلّصت المذكرة لما" items={["تقدر تسمّي الـ 10 هجمات وحل كل واحدة في سطر", "تراجع PR وتمسك concatenation في SQL و `dangerouslySetInnerHTML`", "تتأكد إن كل endpoint فيه authorization على الـ record", "تضيف headers: CSP و frame-ancestors و cookies آمنة"]} />
+
+<Quiz>
+<Q n={1} q="إيه القاعدة اللي بتجمع Injection و XSS و Path Traversal؟">الـ input داتا، عمره ما يتفسر كأوامر أو كود أو مسار من غير فحص.</Q>
+<Q n={2} q="إيه اللي بيجمع CSRF و Clickjacking؟">الاتنين بيستغلوا إن المتصفح عامل login، والحل في الـ cookies والـ headers.</Q>
+<Q n={3} q="أنهي واحدة رقم ١ في OWASP Top 10؟">Broken Access Control، و IDOR أشهر شكل منها.</Q>
+</Quiz>

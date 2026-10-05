@@ -1,0 +1,119 @@
+---
+title: Weak Login و Open Redirect — الباب الأمامي واللينك المزيّف
+short: Login و Redirect
+order: 6
+label: فصل ٦
+badge: الهوية · فصل ٦
+en: credential stuffing · brute force · rate limiting · lockout · MFA · Open Redirect · ?next=
+keywords: MFA · rate limit · ?next= · relative paths
+goal: تحمي الـ login من التخمين وقوايم الباسوردات المسربة، وتمنع إن لينك على الدومين بتاعك يودّي لموقع مزيّف.
+part: الهوية
+color: c1
+---
+
+## Weak Login: خمّن لحد ما تزبط
+
+<Flow items={[{"t": "Password List", "c": 1, "s": "باسوردات مسربة من مواقع تانية"}, "→", {"t": "Login Form", "c": 3, "s": "آلاف المحاولات"}, "→", {"t": "Account", "c": 2, "s": "حد كان مستخدم نفس الباسورد"}]} />
+
+المهاجم مش لازم يخمّن عشوائي. الناس بتكرر نفس الباسورد في مواقع كتير، وقوايم الباسوردات المسربة متاحة. فبيجرب الإيميل + الباسورد المسرب على موقعك (اسمها **credential stuffing**)، أو يجرب أشهر الباسوردات على حسابات كتير.
+
+<Box type="story" icon="🔐" title="الكالون">
+
+لو الباب عليه كالون بـ ٣ أرقام، وحد واقف يجرب من ٠٠٠ لـ ٩٩٩ ومحدش بيمنعه، هيفتح. الحل: بعد كام محاولة غلط يبقى لازم يستنى، والأهم: يبقى في **مفتاح تاني** مع الرقم (MFA).
+
+</Box>
+
+### الحل: طبقات
+
+<Grid2>
+<Card title="⏱️ Rate limit" c={1}>
+
+حد للمحاولات لكل IP **ولكل حساب**. الاتنين مهمين: IP واحد بيجرب على حسابات كتير، أو IPs كتير على حساب واحد.
+
+</Card>
+<Card title="📱 MFA" c={4}>
+
+TOTP (تطبيق authenticator) أو passkeys. الباسورد المسرب لوحده مبقاش كفاية.
+
+</Card>
+</Grid2>
+
+<File name="login.js">
+
+```js
+import rateLimit from "express-rate-limit";
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,                 // 10 محاولات لكل IP كل ربع ساعة
+  standardHeaders: true,
+});
+
+app.post("/login", loginLimiter, async (req, res) => {
+  const user = await findUserByEmail(req.body.email);
+  const ok = user && (await argon2.verify(user.passwordHash, req.body.password));
+  if (!ok) {
+    await recordFailedAttempt(req.body.email);   // عدّاد لكل حساب + تأخير متزايد
+    return res.status(401).json({ error: "الإيميل أو الباسورد غلط" });
+  }
+  // ...
+});
+```
+
+</File>
+
+<Box type="warn" title="تفاصيل بتفرق">
+
+- **رسالة واحدة** للإيميل الغلط والباسورد الغلط، عشان المهاجم ميعرفش أنهي إيميلات متسجلة.
+- خزّن الباسورد بـ `argon2` أو `bcrypt`، عمرك ما تخزنه نص أو بـ `sha256` لوحده.
+- الـ lockout الكامل ممكن يستخدمه المهاجم يقفل حسابات الناس. التأخير المتزايد أو CAPTCHA بعد كام محاولة أحسن غالبًا.
+- نفس الحماية على **كل** endpoint بيقبل باسورد أو كود: reset password، الـ OTP، والـ API القديمة.
+
+</Box>
+
+## Open Redirect: لينك بدومينك يودّي لموقع مزيّف
+
+<Flow items={[{"t": "Your Domain", "c": 2, "s": "المستخدم شايف اسم موقعك"}, "→", {"t": "next Param", "c": 3, "s": "اللي المهاجم حطه"}, "→", {"t": "Fake Site", "c": 1, "s": "صفحة login مزيفة"}]} />
+
+بعد الـ login بنرجّع المستخدم للصفحة اللي كان فيها: `/login?next=/dashboard`. لو السيرفر بيعمل redirect لأي قيمة، المهاجم يبعت لينك زي `yoursite.com/login?next=https://evil.example`. الإيميل فيه **دومين حقيقي**، المستخدم يعمل login، ويتحوّل لصفحة شبه موقعك تطلب منه الباسورد تاني.
+
+<File name="login.js">
+
+```js
+// ❌ أي قيمة
+res.redirect(req.query.next);
+```
+
+</File>
+
+### الحل: relative paths بس، أو allow-list
+
+<File name="safeRedirect.js">
+
+```js
+export function safeNext(next) {
+  // لازم يبدأ بـ / ومينفعش // أو /\ (دول بيتفهموا كدومين تاني)
+  if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return "/";
+  }
+  return next;
+}
+
+res.redirect(safeNext(req.query.next));
+```
+
+</File>
+
+<Box type="tip" title="في الـ frontend كمان">
+
+نفس الثغرة بتحصل في React لو عملت `window.location.href = params.get("next")` أو `navigate(next)` من غير فحص. وفي OAuth، الـ `redirect_uri` لازم يبقى متسجل بالظبط في الـ provider، مش prefix.
+
+</Box>
+
+<Checklist id="webatk-login" title="خلّصت الفصل لما" items={["تفرّق brute force عن credential stuffing", "تحط rate limit لكل IP ولكل حساب", "تفعّل MFA وتخزن الباسورد بـ argon2 أو bcrypt", "ترجّع نفس الرسالة للإيميل والباسورد الغلط", "تسمح بـ `next` يبدأ بـ / بس ومش //"]} />
+
+<Quiz>
+<Q n={1} q="عملت rate limit لكل IP بس. إيه اللي فاتك؟">هجوم من IPs كتير (botnet) على نفس الحساب. لازم حد لكل حساب كمان.</Q>
+<Q n={2} q="ليه open redirect خطر مع إنه مش بيسرق حاجة لوحده؟">عشان اللينك بدومينك الحقيقي، فالمستخدم بيثق فيه ويروح لصفحة phishing.</Q>
+<Q n={3} q="القيمة //evil.example بتبدأ بـ / . آمنة؟">لأ. المتصفح بيفهم // كـ URL لدومين تاني. ارفضها.</Q>
+</Quiz>

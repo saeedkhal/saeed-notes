@@ -1,0 +1,131 @@
+---
+title: SQL Injection — لما الـ input يبقى كود
+short: SQL Injection
+order: 1
+label: فصل ١
+badge: الـ Input · فصل ١
+en: SQL Injection · parameterized queries · prepared statements · ORM raw queries
+keywords: SQLi · parameterized · Prisma raw
+goal: تفهم إزاي string concatenation بيحوّل الـ input لجزء من الـ query، وتقفلها بالـ parameterized queries في كل مكان.
+part: الـ Input
+color: c1
+---
+
+## الفكرة في سطر
+
+<Flow items={[{"t": "User Input", "c": 1, "s": "نص من الفورم أو الـ URL"}, "→", {"t": "SQL Query", "c": 3, "s": "اتلزق جوه الـ string"}, "→", {"t": "Database", "c": 2, "s": "بتنفذه كأوامر"}]} />
+
+الـ database مش بتعرف أنهي جزء من الـ query إنت كاتبه وأنهي جزء المستخدم كاتبه. لو لزقت الـ input جوه الـ string، المستخدم يقدر يكتب **SQL** مش اسم.
+
+<Box type="story" icon="📝" title="ورقة الطلب عند الجرسون">
+
+الجرسون بيقرا الورقة بصوت عالي للمطبخ: "طلب ترابيزة رقم ___". زبون كتب في الخانة: **"٥، وكمان هاتوا الخزنة"**. الجرسون مش بيفكّر، بيقرا اللي مكتوب، والمطبخ بينفذ.
+
+</Box>
+
+## الكود اللي فيه الثغرة
+
+<File name="users.js">
+
+```js
+// ❌ الـ input اتلزق في الـ query
+app.get("/users", async (req, res) => {
+  const name = req.query.name;
+  const sql = `SELECT * FROM users WHERE name = '${name}'`;
+  const { rows } = await pool.query(sql);
+  res.json(rows);
+});
+```
+
+</File>
+
+لو `name` قيمته `' OR '1'='1`، الـ query بتبقى:
+
+```sql
+SELECT * FROM users WHERE name = '' OR '1'='1'
+```
+
+الشرط بقى صح دايمًا، فرجعت **كل** المستخدمين. ونفس الفكرة ممكن تتمد لقراية جداول تانية أو تعديل داتا، على حسب صلاحيات الـ database user.
+
+## الحل: parameterized queries
+
+<Hl c="y">الـ input داتا، عمره ما يبقى جزء من نص الـ SQL</Hl>. بتبعت الـ query بـ placeholders، والقيم لوحدها، والـ database نفسها هي اللي بتفصل بينهم.
+
+<File name="users.js">
+
+```js
+app.get("/users", async (req, res) => {
+  // @diff -
+  const sql = `SELECT * FROM users WHERE name = '${req.query.name}'`;
+  // @diff +
+  const sql = "SELECT * FROM users WHERE name = $1";
+  // @diff +
+  const { rows } = await pool.query(sql, [req.query.name]);
+  res.json(rows);
+});
+```
+
+</File>
+
+دلوقتي لو حد بعت `' OR '1'='1`، الـ database هتدوّر على مستخدم **اسمه حرفيًا** كده، ومش هتلاقي.
+
+## الـ ORM مش بيحميك في كل حتة
+
+Prisma و TypeORM و Sequelize بيعملوا parameters لوحدهم في الـ API العادي. المشكلة في الـ **raw queries**:
+
+<File name="prisma.ts">
+
+```ts
+// ✅ tagged template: Prisma بيحوّل ${} لـ parameters
+await prisma.$queryRaw`SELECT * FROM "User" WHERE email = ${email}`;
+
+// ❌ Unsafe: إنت اللي بتبني الـ string
+await prisma.$queryRawUnsafe(`SELECT * FROM "User" WHERE email = '${email}'`);
+```
+
+</File>
+
+<Box type="warn" title="الأماكن اللي الـ parameters متنفعش فيها">
+
+أسماء الأعمدة والجداول و `ORDER BY` و `ASC/DESC` مينفعش يبقوا placeholders. لو المستخدم بيختار الترتيب، اعمل **allow-list**: خريطة من القيم المسموحة للنص الثابت، وأي حاجة بره الخريطة ترفضها.
+
+</Box>
+
+<File name="sort.js">
+
+```js
+const SORTS = { newest: "created_at DESC", name: "name ASC" };
+const orderBy = SORTS[req.query.sort] ?? SORTS.newest;
+const sql = `SELECT * FROM jobs ORDER BY ${orderBy} LIMIT $1`;
+```
+
+</File>
+
+## طبقات زيادة
+
+<Grid2>
+<Card title="🔐 أقل صلاحيات" c={2}>
+
+الـ database user بتاع التطبيق ميبقاش owner ولا superuser. يقرا ويكتب في الجداول اللي محتاجها بس.
+
+</Card>
+<Card title="✅ Validation" c={4}>
+
+`zod` أو `class-validator` على كل input: نوعه وطوله وشكله. مش بديل عن الـ parameters، بس بيقلل السطح.
+
+</Card>
+</Grid2>
+
+<Box type="tip" title="نفس العيلة">
+
+نفس الثغرة ليها أشكال تانية: **NoSQL injection** (لما object زي `$ne` يوصل لـ Mongo query)، و **command injection** (لما input يدخل في `exec`). الحل هو هو: متخليش الـ input يتفسر كأوامر. في Node استخدم `execFile` بـ array بدل `exec` بـ string.
+
+</Box>
+
+<Checklist id="webatk-sqli" title="خلّصت الفصل لما" items={["تشرح ليه string concatenation بيعمل الثغرة", "تكتب query بـ `$1` والقيم في array", "تعرف إن `$queryRawUnsafe` خطر و `$queryRaw` بالـ template آمن", "تعمل allow-list لـ ORDER BY", "تفرّق الـ validation عن الـ parameterization"]} />
+
+<Quiz>
+<Q n={1} q="عملت escape للـ single quotes بإيدك. كده أمان؟">مش مضمون. الـ escaping اليدوي بيفوّت حالات. الـ parameterized query هي الحل الأساسي.</Q>
+<Q n={2} q="ليه الـ ORM مش ضمان كامل؟">عشان الـ raw queries ومكان زي ORDER BY ممكن ترجّع الـ concatenation تاني.</Q>
+<Q n={3} q="المستخدم بيختار اسم العمود اللي يرتب بيه. تعمل إيه؟">allow-list: الاسم يتحوّل لقيمة ثابتة من خريطة، وأي حاجة تانية ترفضها.</Q>
+</Quiz>

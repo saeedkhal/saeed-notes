@@ -1,0 +1,134 @@
+---
+title: SSRF و Path Traversal — لما السيرفر يثق في URL أو مسار
+short: SSRF و Path
+order: 4
+label: فصل ٤
+badge: السيرفر · فصل ٤
+en: Server-Side Request Forgery · allow-list · metadata endpoint · Path Traversal · path.resolve
+keywords: SSRF · allow-list · ../ · path.resolve
+goal: تمنع السيرفر إنه يروح لأي عنوان المستخدم بيقوله عليه، وتمنع أي مسار ملف يخرج بره الفولدر المسموح.
+part: السيرفر
+color: c4
+---
+
+الهجمتين دول نفس الفكرة: المستخدم بيبعت **عنوان** (URL أو اسم ملف)، والسيرفر بيروح عليه بصلاحياته هو، مش بصلاحيات المستخدم.
+
+## SSRF: السيرفر بيجيب حاجة من جوه
+
+<Flow items={[{"t": "URL Param", "c": 1, "s": "الـ url اللي المستخدم بعته"}, "→", {"t": "Server", "c": 3, "s": "بيعمل fetch"}, "→", {"t": "Internal API", "c": 2, "s": "حاجة مش مكشوفة للنت"}]} />
+
+ميزة زي "اعمل preview للينك" أو "ارفع صورة من URL". السيرفر بيعمل `fetch` للعنوان. بس السيرفر قاعد **جوه الشبكة**: يقدر يوصل لـ `localhost:6379` (Redis)، لـ admin panel داخلي، أو لـ metadata endpoint بتاع الـ cloud اللي ممكن يدّي credentials.
+
+<Box type="story" icon="🛵" title="الطيار بتاع المحل">
+
+إنت بتقول لطيار الدليفري "روح هات الطلب من العنوان ده". هو معاه مفتاح المخزن وكارنيه الشركة. لو كتبتله عنوان **مخزن الشركة نفسها**، هيدخل عادي ويجيبلك اللي جوه.
+
+</Box>
+
+<File name="preview.js">
+
+```js
+// ❌ أي URL يتجاب
+app.get("/preview", async (req, res) => {
+  const r = await fetch(req.query.url);
+  res.send(await r.text());
+});
+```
+
+</File>
+
+### الحل: allow-list للخارج، وبلوك للداخل
+
+<File name="preview.js">
+
+```js
+import { lookup } from "node:dns/promises";
+import net from "node:net";
+
+const ALLOWED_HOSTS = new Set(["images.example-cdn.com", "api.github.com"]);
+
+function isPrivate(ip) {
+  if (net.isIPv6(ip)) return ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80");
+  const [a, b] = ip.split(".").map(Number);
+  return a === 10 || a === 127 || a === 0 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254);           // cloud metadata
+}
+
+app.get("/preview", async (req, res) => {
+  const url = new URL(req.query.url);
+  if (url.protocol !== "https:") return res.sendStatus(400);
+  if (!ALLOWED_HOSTS.has(url.hostname)) return res.sendStatus(403);
+
+  const { address } = await lookup(url.hostname);
+  if (isPrivate(address)) return res.sendStatus(403);
+
+  const r = await fetch(url, { redirect: "error" });   // متتبعش redirect لعنوان تاني
+  res.send(await r.text());
+});
+```
+
+</File>
+
+<Box type="warn" title="الحاجات اللي بتفوت">
+
+- **Redirects**: الـ host المسموح ممكن يعمل redirect لـ `127.0.0.1`. اقفل الـ redirect أو افحص كل خطوة.
+- **DNS rebinding**: الاسم ممكن يرجّع IP عادي وقت الفحص وIP داخلي وقت الـ fetch. الحل الأقوى إنك توصل للـ IP اللي فحصته بنفسه، أو تحط egress proxy/firewall.
+- الـ allow-list أقوى بكتير من block-list. لو مقدرتش تعمل allow-list، يبقى لازم بلوك للشبكات الداخلية على مستوى الشبكة كمان.
+
+</Box>
+
+<Box type="tip" title="على الـ cloud">
+
+على AWS فعّل **IMDSv2** (اللي محتاج token) بدل v1، عشان SSRF بسيط ميقدرش يقرا الـ credentials من الـ metadata endpoint.
+
+</Box>
+
+## Path Traversal: `../` لحد ما يخرج بره
+
+<Flow items={[{"t": "\u200E../ in Path", "c": 1, "s": "file=../../.env"}, "→", {"t": "File API", "c": 3, "s": "fs.readFile"}, "→", {"t": "Secret File", "c": 2, "s": "ملف بره الفولدر"}]} />
+
+<File name="download.js">
+
+```js
+// ❌ ../../.env هيطلع من فولدر uploads
+app.get("/download", (req, res) => {
+  res.sendFile(path.join(__dirname, "uploads", req.query.file));
+});
+```
+
+</File>
+
+`path.join` بيحل الـ `../` عادي، فالمسار النهائي ممكن يبقى في أي حتة على السيرفر.
+
+### الحل: resolve وبعدين اتأكد إنه لسه جوه
+
+<File name="download.js">
+
+```js
+const ROOT = path.resolve(__dirname, "uploads");
+
+app.get("/download", (req, res) => {
+  const target = path.resolve(ROOT, String(req.query.file));
+  // لازم يبدأ بالـ ROOT + فاصل، عشان uploads-old ميعديش
+  if (!target.startsWith(ROOT + path.sep)) return res.sendStatus(403);
+  res.sendFile(target);
+});
+```
+
+</File>
+
+<Box type="idea" title="الأحسن: متاخدش مسار من المستخدم أصلًا">
+
+خزّن الملفات بـ ID (UUID) والاسم الحقيقي في الـ database. المستخدم يطلب `/files/3f9a…`، وإنت تجيب المسار من الـ database. كده مفيش input بيتحول لمسار خالص. و`express.static` أو `res.sendFile` مع option الـ `root` بيعملوا الفحص ده لوحدهم، راجع الـ docs.
+
+</Box>
+
+<Checklist id="webatk-ssrf" title="خلّصت الفصل لما" items={["تشرح ليه SSRF خطير مع إن المستخدم مش شايف الشبكة الداخلية", "تعمل allow-list للـ hosts وتبلوك الـ IPs الداخلية", "تقفل الـ redirects في الـ fetch", "تعمل `path.resolve` وتتأكد إن المسار جوه الـ ROOT", "تفضّل IDs بدل أسماء ملفات من المستخدم"]} />
+
+<Quiz>
+<Q n={1} q="ليه 169.254.169.254 مهم في SSRF؟">ده metadata endpoint بتاع الـ cloud، وممكن يدّي credentials للسيرفر.</Q>
+<Q n={2} q="عملت فحص إن الـ host مسموح، بس الـ fetch بيتبع redirects. المشكلة؟">الـ host المسموح ممكن يعمل redirect لعنوان داخلي. اقفل الـ redirect أو افحص كل خطوة.</Q>
+<Q n={3} q="ليه startsWith(ROOT) لوحدها ممكن تغلط؟">`/app/uploads-old` بيبدأ بـ `/app/uploads`. لازم تضيف الفاصل `path.sep`.</Q>
+</Quiz>

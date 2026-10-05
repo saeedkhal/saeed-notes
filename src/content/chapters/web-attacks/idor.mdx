@@ -1,0 +1,101 @@
+---
+title: IDOR — غيّر الرقم في الـ URL تشوف داتا غيرك
+short: IDOR
+order: 5
+label: فصل ٥
+badge: الهوية · فصل ٥
+en: Insecure Direct Object Reference · broken access control · ownership check · scoped queries
+keywords: IDOR · ownership · authorization
+goal: تفرّق الـ authentication عن الـ authorization، وتتأكد من ملكية كل record على السيرفر في كل request.
+part: الهوية
+color: c5
+---
+
+## الفكرة في سطر
+
+<Flow items={[{"t": "Change the ID", "c": 1, "s": "رقم 1042 بقى 1043"}, "→", {"t": "no ownership check", "c": 3, "s": "السيرفر شاف إنه logged in وخلاص"}, "→", {"t": "Someone's Data", "c": 2, "s": "فاتورة عميل تاني"}]} />
+
+الـ <En>IDOR</En> هو أشهر شكل من <Hl c="o">Broken Access Control</Hl>، وده رقم ١ في قايمة OWASP Top 10. والسبب بسيط: الكود بيسأل "إنت مين؟" وبينسى يسأل "وده بتاعك؟".
+
+<Grid2>
+<Card title="🪪 Authentication" c={1}>
+
+**إنت مين؟** login و session و JWT. بيتعمل مرة في الـ middleware.
+
+</Card>
+<Card title="🔑 Authorization" c={3}>
+
+**مسموحلك بإيه؟** لازم يتعمل مع **كل record** بتقراه أو بتعدّله.
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🔑" title="مفتاح الشقة">
+
+البوّاب اتأكد إنك ساكن في العمارة (authentication). بس لو اديته رقم شقة ٧ وقلتله "افتحهالي" وفتحها من غير ما يتأكد إنها شقتك، تبقى دي IDOR.
+
+</Box>
+
+## الكود اللي فيه الثغرة
+
+<File name="invoices.ts">
+
+```ts
+// ❌ أي user عامل login يقرا أي فاتورة
+app.get("/invoices/:id", requireAuth, async (req, res) => {
+  const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+  res.json(invoice);
+});
+```
+
+</File>
+
+## الحل: اربط الـ query بصاحبها
+
+<File name="invoices.ts">
+
+```ts
+app.get("/invoices/:id", requireAuth, async (req, res) => {
+  // @diff -
+  const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+  // @diff +
+  const invoice = await prisma.invoice.findFirst({
+    // @diff +
+    where: { id: req.params.id, ownerId: req.user.id },
+  // @diff +
+  });
+  if (!invoice) return res.sendStatus(404);   // 404 مش 403: متأكدش إن الـ ID موجود
+  res.json(invoice);
+});
+```
+
+</File>
+
+<Hl c="y">الـ query نفسها هي اللي فيها الفلتر</Hl>، مش `if` بعدها ممكن يتنسي. نفس الكلام مع `update` و `delete`: استخدم `updateMany` أو `deleteMany` بنفس شرط الـ `ownerId` واتأكد إن العدد مش صفر.
+
+<Box type="warn" title="الـ UUID مش حماية">
+
+الـ UUID بيصعّب تخمين الـ IDs، وده كويس. بس الـ IDs بتتسرب في اللينكات والـ logs والـ screenshots. **الفحص على السيرفر هو الحماية**، والـ UUID طبقة زيادة بس.
+
+</Box>
+
+## أماكن بتتنسي
+
+- **الـ body مش الـ URL بس**: `PATCH /profile` وفيه `{ "userId": 5, "role": "admin" }`. متاخدش الـ `userId` من الـ body، خده من الجلسة. وحدد الحقول المسموح تتعدل (allow-list) عشان `role` ميعديش. ده اسمه **mass assignment**.
+- **الـ nested resources**: `/teams/1/members/99` اتأكد إن العضو 99 تبع team 1، وإن الـ user عضو في team 1.
+- **الـ frontend مش حماية**: إخفاء زرار "حذف" في React مش authorization. أي حد يقدر يبعت الـ request من Postman.
+- **الـ multi-tenant**: كل query لازم فيها `tenantId`. فكّر في Row-Level Security في Postgres كطبقة أخيرة.
+
+<Box type="tip" title="اكتبله test">
+
+لكل endpoint: اعمل user A وuser B، و A يطلب record بتاع B. المتوقع `404`. التيست ده بيمسك IDOR قبل الـ production.
+
+</Box>
+
+<Checklist id="webatk-idor" title="خلّصت الفصل لما" items={["تفرّق authentication عن authorization", "تكتب الـ query بشرط الملكية جوّاها", "ترجّع 404 لـ record مش بتاعك", "تاخد `userId` من الجلسة مش من الـ body", "تكتب test بين مستخدمين A و B"]} />
+
+<Quiz>
+<Q n={1} q="الـ IDs عندنا UUID، يبقى مفيش IDOR؟">لأ. الـ UUID بيصعّب التخمين بس. الفحص على السيرفر هو الحماية.</Q>
+<Q n={2} q="خبّيت زرار الحذف عن غير الـ admin. كده محمي؟">لأ. الـ API لازم تتحقق من الصلاحية، الـ UI مش حماية.</Q>
+<Q n={3} q="ليه 404 أحسن من 403 هنا؟">عشان متأكدش للمهاجم إن الـ record ده موجود أصلًا.</Q>
+</Quiz>
