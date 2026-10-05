@@ -1,0 +1,115 @@
+---
+title: الـ worktree
+short: Worktree
+order: 8
+label: فصل ٨
+badge: بالتوازي · فصل ٨
+en: git worktree add · list · remove · prune · one branch per folder
+keywords: worktree · parallel · hotfix · AI agents
+goal: تشتغل على كذا branch في نفس الوقت، كل واحد في فولدر، من غير stash ولا switch.
+part: بالتوازي
+color: c3
+---
+
+ارجع لمشكلة الفصل اللي فات: إنت في نص feature، وجالك bug لازم يتصلح حالًا. الـ stash حل، بس:
+
+- لازم تشيل شغلك وترجعه.
+- لو الـ dev server شغال، كل `switch` بيغيّر الملفات تحته.
+- ولو الـ feature محتاجة `pnpm install` مختلف، هتعيده كل مرة.
+
+<Hl c="b">الـ worktree بيدّيك فولدر تاني على نفس الـ repo، وعليه branch تاني. الاتنين شغالين في نفس الوقت، وكل واحد ملفاته لوحده</Hl>.
+
+## إزاي بيشتغل
+
+الـ repo العادي فيه فولدر شغل واحد (working tree)، وفولدر `.git` فيه التاريخ. الـ worktree بيضيف فولدر شغل تاني **بيشارك نفس الـ `.git`**. يعني نفس الـ commits، ونفس الـ branches، ونفس الـ remote، من غير ما تعمل clone تاني.
+
+<Tree>
+
+```text
+~/code/
+├── atelier/              # الـ worktree الأساسي، على feature/cart
+│   └── .git/             # التاريخ كله هنا
+└── atelier-hotfix/       # worktree تاني، على hotfix/price
+    └── .git              # ملف صغير بيشاور على atelier/.git
+```
+
+</Tree>
+
+<Box type="story" icon="🏢" title="شقتين في نفس العمارة">
+
+الـ clone التاني زي إنك تبني عمارة جديدة عشان تاخد أوضة زيادة. الـ worktree زي إنك تاخد شقة تانية في نفس العمارة: نفس البواب، ونفس السلم، ونفس العداد (الـ `.git`)، بس كل شقة عفشها لوحده.
+
+</Box>
+
+## الأوامر
+
+```bash
+# فولدر جديد على branch جديد من main
+git worktree add -b hotfix/price ../atelier-hotfix main
+
+# فولدر جديد على branch موجود
+git worktree add ../atelier-review feature/admin
+
+# كل الـ worktrees
+git worktree list
+# /home/me/code/atelier          a3f9c21 [feature/cart]
+# /home/me/code/atelier-hotfix   7b2e014 [hotfix/price]
+
+# خلصت؟ امسحه
+git worktree remove ../atelier-hotfix
+
+# لو مسحت الفولدر بإيدك، نضّف السجل
+git worktree prune
+```
+
+سيناريو الـ hotfix كله:
+
+```bash
+git worktree add -b hotfix/price ../atelier-hotfix main
+cd ../atelier-hotfix
+pnpm install
+# صلّح، واعمل commit، و push، وافتح pull request
+cd ../atelier
+git worktree remove ../atelier-hotfix
+```
+
+وفي الوقت ده كله، الـ feature بتاعتك في `atelier` زي ما هي، والـ dev server بتاعها لسه شغال.
+
+## قاعدة: branch واحد في worktree واحد بس
+
+Git مش هيرضى تفتح نفس الـ branch في اتنين worktrees. لو `feature/cart` مفتوح في `atelier`، مش هتقدر تعمل `git switch feature/cart` في `atelier-hotfix`. ده عشان الاتنين ميعملوش commits على نفس الـ branch في نفس الوقت ويبوّظوا بعض.
+
+## حاجات هتقابلك
+
+- **الملفات اللي برا Git مش بتتنسخ**: `node_modules`، و `.env.local`، والـ build. لازم `pnpm install` وتنسخ ملف الـ env بنفسك.
+- **الـ ports**: لو الاتنين شغّلوا dev server، ادّي كل واحد port مختلف.
+- **الداتابيز المحلية**: لو الاتنين بيعملوا migrations على نفس الداتابيز، هيلخبطوا بعض.
+- **pnpm بيساعد**: الـ store بتاعه مشترك على الجهاز، فالـ `install` في worktree جديد سريع وبياخد مساحة قليلة.
+
+## إمتى تستخدمه؟
+
+- **hotfix** وإنت في نص feature.
+- **مراجعة pull request**: افتحه في worktree، وشغّله، وجرّبه، من غير ما تلمس شغلك.
+- **تقارن نسختين**: الـ branch القديم والجديد شغالين جنب بعض.
+- **AI agents**: لو بتشغّل كذا agent زي Claude Code في نفس الوقت، كل واحد في worktree على branch، فميعدّلوش نفس الملفات. ده متشرح بالتفصيل في موضوع Claude Code.
+
+<Grid2>
+<Card title="stash" c={3}>
+
+لشغل هترجعله كمان شوية، وفي نفس الفولدر. سريع، بس لازم تشيل وترجّع.
+
+</Card>
+<Card title="worktree" c={5}>
+
+لما محتاج branch تاني **شغال في نفس الوقت**، أو لفترة أطول. مفيش شيل ولا رجوع.
+
+</Card>
+</Grid2>
+
+<Checklist id="git-worktree" title="خلّصت الفصل لما" items={["تشرح إن الـ worktree فولدر شغل تاني على نفس الـ `.git`", "تعمل worktree بـ `git worktree add -b` وتمسحه بـ `remove`", "تعرف إن نفس الـ branch مينفعش يتفتح في اتنين worktrees", "تعمل `pnpm install` وتنسخ `.env.local` في الـ worktree الجديد", "تختار بين stash و worktree حسب الحالة"]} />
+
+<Quiz>
+<Q n={1} q="إيه الفرق بين worktree و clone تاني؟">الـ worktree بيشارك نفس الـ .git، فالـ commits والـ branches واحدة. الـ clone repo منفصل محتاج fetch و push عشان يتكلموا.</Q>
+<Q n={2} q="حاولت تفتح feature/cart في worktree تاني و Git رفض. ليه؟">لأنه مفتوح في worktree تاني. Git بيمنع نفس الـ branch في اتنين worktrees عشان الـ commits متتلخبطش.</Q>
+<Q n={3} q="عملت worktree جديد و pnpm dev فشل. ليه غالبًا؟">node_modules و .env.local مش في Git، فمش موجودين في الفولدر الجديد.</Q>
+</Quiz>

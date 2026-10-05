@@ -1,0 +1,24 @@
+---
+title: مفاهيم Git المهمة
+highlight: Git
+subtitle: commits · branches · merge vs rebase · undo · worktree
+description: Git من جوه بشكل بسيط. الـ commit والـ branch بيبقوا إيه، والفرق بين merge و rebase، وإزاي ترجع في أي غلطة، وإزاي تشتغل على كذا branch في نفس الوقت بـ worktree.
+emoji: 🌿
+order: 11
+tags: [devops]
+note: شرح بأسلوبي لمفاهيم Git الأساسية، مش ترجمة لكتاب أو docs. الأوامر هنا شغالة على Git 2.23 وأحدث (عشان switch و restore). راجع git help لأي flag.
+---
+
+المذكرة دي <Hl c="y">٨ فصول + شيت</Hl>. الأول هنفهم Git بيفكر إزاي: الـ commit والـ branch والـ remote. بعدين أهم سؤال بيتسأل في أي فريق: merge ولا rebase؟ وبعدين إزاي تحل الـ conflicts وترجع في أي غلطة. وآخر حاجة الـ stash والـ cherry-pick والـ worktree.
+
+<Box type="story" icon="📸" title="ألبوم الصور">
+
+Git مش بيحفظ "التعديلات" وبس. كل commit زي صورة كاملة للمشروع في لحظة معينة، ومكتوب وراها مين صوّرها وإمتى، وإيه الصورة اللي قبلها. الـ branch مش نسخة من المشروع، هو ورقة صغيرة لازقها على آخر صورة في سلسلة.
+
+</Box>
+
+<Box type="idea" title="تبدأ منين؟">
+
+لو بتستخدم Git بأوامر محفوظة ومش فاهم بتعمل إيه، ابدأ من الفصل الأول ومتسيبش فصل الـ branches. لو فريقك بيتخانق على merge و rebase، روح لفصل ٤ على طول. ولو عملت مصيبة ومحتاج ترجع، فصل ٦، وأهم أمر فيه `git reflog`.
+
+</Box>

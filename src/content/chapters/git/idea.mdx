@@ -1,0 +1,80 @@
+---
+title: Git بيفكر إزاي؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: snapshots · commit · hash · working tree · staging area
+keywords: snapshot · commit · hash · staging
+goal: تفهم الـ commit بيبقى إيه، والتلات أماكن اللي الملف بيعدّي عليهم.
+part: البداية
+color: c1
+---
+
+ناس كتير بتفتكر إن Git بيحفظ الفرق بين كل نسخة والتانية. الحقيقة أبسط من كده:
+
+<Hl c="y">كل commit صورة كاملة للمشروع في لحظة معينة، ومعاها ورقة فيها مين عمله، وإمتى، وليه، وإيه الـ commit اللي قبله</Hl>.
+
+Git ذكي في التخزين، فالملف اللي متغيرش مش بيتخزن مرتين. بس في دماغك، فكّر فيه كصورة كاملة.
+
+## الـ commit جواه إيه؟
+
+- **snapshot** للملفات كلها.
+- **الكاتب** والتاريخ.
+- **الرسالة** اللي إنت كتبتها.
+- **الـ parent**: الـ commit اللي قبله. ده اللي بيربط الـ commits في سلسلة.
+
+ومن كل ده، Git بيطلّع **hash**، رقم طويل زي `a3f9c21...`. ده اسم الـ commit. لو أي حاجة جواه اتغيرت، حتى حرف في الرسالة، الـ hash بيتغير. وده هيفرق جدًا لما نتكلم عن الـ rebase.
+
+```bash
+git log --oneline
+# a3f9c21 Add cart page
+# 7b2e014 Add product page
+# 1c0d9aa Init project
+```
+
+## التلات أماكن
+
+الملف بيعدّي على تلات أماكن قبل ما يبقى في commit:
+
+<Flow items={[{t: "Working tree", s: "الملفات اللي بتعدّلها", c: 1}, "→", {t: "Staging area", s: "اللي هيدخل الـ commit الجاي", c: 3}, "→", {t: "Repository", s: "الـ commits المتسجلة", c: 5}]} />
+
+```bash
+git status            # إيه اللي اتغير، وإيه اللي في الـ staging
+git add cart.tsx      # حط الملف ده في الـ staging
+git commit -m "Add cart page"   # صوّر اللي في الـ staging
+```
+
+<Box type="story" icon="🛍️" title="شنطة السفر">
+
+الـ working tree هو أوضتك، فيها كل الهدوم. الـ staging area هي الشنطة: بتحط فيها اللي هتاخده في الرحلة دي بس. والـ commit إنك تقفل الشنطة وتكتب عليها اسم الرحلة.
+
+</Box>
+
+## ليه الـ staging مهم؟
+
+عشان تعمل commits صغيرة ومفهومة. لو عدّلت في الـ cart وصلّحت typo في الـ footer، متحطهمش في commit واحد:
+
+```bash
+git add src/cart/
+git commit -m "Add quantity limit to cart"
+
+git add src/footer.tsx
+git commit -m "Fix footer typo"
+```
+
+وتقدر تحط **جزء** من ملف بس بـ `git add -p`، بيسألك على كل حتة اتغيرت: تحطها ولا لأ.
+
+<Box type="tip" title="commit صغير = رجوع سهل">
+
+كل commit يبقى فيه فكرة واحدة. لو حاجة باظت بعدين، هتعرف ترجع فيها لوحدها من غير ما ترجع في حاجات تانية سليمة.
+
+</Box>
+
+<Checklist id="git-idea" title="خلّصت الفصل لما" items={["تشرح إن الـ commit صورة كاملة مش بس فرق", "تعرف إن الـ hash بيتغير لو أي حاجة في الـ commit اتغيرت", "تفرق بين الـ working tree والـ staging والـ repository", "تعمل commit لجزء من ملف بـ `git add -p`"]} />
+
+<Quiz>
+<Q n={1} q="إيه اللي بيربط الـ commits ببعض في سلسلة؟">الـ parent. كل commit فيه hash الـ commit اللي قبله.</Q>
+<Q n={2} q="غيّرت رسالة commit قديم. الـ hash بتاعه هيفضل زي ما هو؟">لا. أي تغيير في الـ commit بيطلّع hash جديد، يعني commit جديد.</Q>
+<Q n={3} q="ليه الـ staging area موجودة أصلًا؟">عشان تختار إيه بالظبط يدخل الـ commit، فتعمل commits صغيرة كل واحد فيه فكرة واحدة.</Q>
+</Quiz>

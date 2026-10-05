@@ -1,0 +1,166 @@
+---
+title: merge ولا rebase؟
+short: Merge vs Rebase
+order: 4
+label: فصل ٤
+badge: الدمج · فصل ٤
+en: fast-forward · merge commit · rebase · new hashes · golden rule · squash
+keywords: merge · rebase · fast-forward · force-with-lease
+goal: تفهم الاتنين بيعملوا إيه في التاريخ بالظبط، وتعرف تختار بينهم.
+part: الدمج
+color: c4
+---
+
+عندك branch اسمه `feature/cart`، وفي نفس الوقت زمايلك رفعوا commits جديدة على `main`. عايز تجمع الشغلتين. Git بيدّيك طريقتين، والاتنين **بيوصلوا لنفس الكود في الآخر**. الفرق كله في **شكل التاريخ**.
+
+<Hl c="o">merge بيحافظ على التاريخ زي ما حصل، ويضيف commit بيربط الطريقين. rebase بيعيد كتابة الـ commits بتاعتك كأنك بدأت شغلك من آخر main</Hl>.
+
+## نقطة البداية
+
+```text
+A ← B ← C ← D        ← main
+     ↖
+       E ← F         ← feature/cart
+```
+
+إنت بدأت من `B` وعملت `E` و `F`. وفي نفس الوقت `main` اتحرك لـ `C` و `D`.
+
+## الـ merge
+
+```bash
+git switch feature/cart
+git merge main
+```
+
+```text
+A ← B ← C ← D ←─────── M   ← feature/cart
+     ↖                 ╱
+       E ← F ─────────
+```
+
+Git عمل commit جديد اسمه `M` (merge commit)، وليه **اتنين parents**: `D` و `F`. الـ commits بتاعتك `E` و `F` زي ما هي، بنفس الـ hashes.
+
+<Grid2>
+<Card title="مميزات" c={3}>
+
+- مش بيغيّر أي commit موجود، فآمن على أي branch حتى لو مشترك.
+- التاريخ بيقول الحقيقة: الشغل ده اتعمل بالتوازي واتدمج هنا.
+- لو فيه conflicts بتحلها مرة واحدة.
+
+</Card>
+<Card title="عيوب" c={4}>
+
+- لو بتعمل merge من main كل يوم، التاريخ بيتملي merge commits ملهاش معنى.
+- الـ `git log` بيبقى شكله زي شبكة، وصعب تقراه.
+
+</Card>
+</Grid2>
+
+### الـ fast-forward
+
+لو `main` **متحركش** من ساعة ما بدأت، مفيش طريقين أصلًا:
+
+```text
+A ← B                ← main
+     ↖
+       E ← F         ← feature/cart
+```
+
+`git switch main && git merge feature/cart` هنا مش بيعمل merge commit. بيزق `main` لقدام لحد `F` وخلاص. ده اسمه **fast-forward**. ولو عايز merge commit حتى في الحالة دي، عشان يفضل باين إن ده كان feature لوحده، استخدم `git merge --no-ff`.
+
+## الـ rebase
+
+```bash
+git switch feature/cart
+git rebase main
+```
+
+```text
+A ← B ← C ← D        ← main
+              ↖
+                E' ← F'   ← feature/cart
+```
+
+Git شال `E` و `F`، وعمل commits جديدة `E'` و `F'` **فوق `D`**، فيها نفس التعديلات. كأنك بدأت شغلك النهارده من آخر `main`.
+
+<Box type="warn" title="E' مش E">
+
+`E'` فيه نفس التعديل، بس الـ parent بتاعه اتغير (بقى `D` بدل `B`)، فالـ hash اتغير. فاكر من فصل ١؟ أي تغيير في الـ commit يعني commit جديد. يعني الـ rebase **بيعيد كتابة التاريخ**.
+
+</Box>
+
+<Grid2>
+<Card title="مميزات" c={3}>
+
+- التاريخ خط واحد مستقيم، سهل تقراه.
+- مفيش merge commits ملهاش معنى.
+- لما تعمل merge لـ main بعد كده، بيبقى fast-forward.
+
+</Card>
+<Card title="عيوب" c={4}>
+
+- بيغيّر الـ hashes، فخطر على أي branch حد تاني شغال عليه.
+- لو عندك commits كتير، ممكن تحل نفس الـ conflict أكتر من مرة، مرة لكل commit.
+- التاريخ مبقاش بيقول اللي حصل بالظبط.
+
+</Card>
+</Grid2>
+
+## القاعدة الذهبية
+
+<Box type="warn" title="متعملش rebase لـ commits حد تاني عنده">
+
+لو الـ branch اترفع وحد تاني سحبه وبنى عليه، وإنت عملت rebase، الـ commits اللي عنده (`E` و `F`) مبقتش موجودة عندك (بقت `E'` و `F'`). لما يعمل pull، Git هيشوفهم commits مختلفة، والتاريخ هيتلخبط عنده وممكن التعديلات تتكرر.
+
+يعني: **rebase على commits لسه عندك إنت بس. merge على أي حاجة مشتركة**.
+
+</Box>
+
+### طب لو عملت rebase لـ branch أنا رفعته؟
+
+لو الـ branch بتاعك لوحدك (زي feature branch محدش شغال عليه غيرك)، عادي. بس الـ push العادي هيترفض، لأن التاريخ اللي على GitHub مختلف عن بتاعك. هنا محتاج force:
+
+```bash
+git push --force-with-lease
+```
+
+`--force-with-lease` أأمن من `--force`. بيرفض الـ push لو حد رفع حاجة جديدة على الـ branch من آخر مرة عملت fetch. يعني مش هتمسح شغل حد من غير ما تاخد بالك.
+
+## `git pull` بيستخدم أنهي واحد؟
+
+`git pull` = `fetch` + دمج. لو عندك commits محلية ومحدش رفع حاجة، الدمج بيبقى fast-forward. لو الاتنين اتحركوا، بيعمل merge commit، وده سبب commits زي "Merge branch 'main' of github.com/..." اللي بتملى التاريخ.
+
+لو عايز `pull` يعمل rebase بدل كده:
+
+```bash
+git pull --rebase
+# أو خليه الافتراضي
+git config --global pull.rebase true
+```
+
+ده آمن، لأنه بيعمل rebase للـ commits المحلية بتاعتك بس، اللي لسه مترفعتش.
+
+## الـ squash merge
+
+في GitHub، لما تدوس "Squash and merge" على pull request، كل الـ commits بتاعة الـ feature بتتجمع في commit واحد على `main`. كده `main` بيفضل نضيف، commit لكل feature، حتى لو جوه الـ branch كان فيه 20 commit زي "fix typo" و "wip".
+
+## تختار إزاي؟
+
+<Box type="tip" title="الطريقة الشائعة في الفرق">
+
+- وإنت شغال على الـ feature branch بتاعك لوحدك: `git pull --rebase` أو `git rebase main` عشان تفضل فوق آخر `main`.
+- لما الـ feature تخلص: pull request، وتدخل `main` بـ merge أو squash، حسب اللي الفريق متفق عليه.
+- على `main` أو أي branch مشترك: **ممنوع rebase**.
+
+أهم حاجة إن الفريق كله يمشي على نفس الطريقة.
+
+</Box>
+
+<Checklist id="git-merge-rebase" title="خلّصت الفصل لما" items={["تعرف إن merge و rebase بيوصلوا لنفس الكود بتاريخ مختلف", "تشرح الـ merge commit وإن ليه اتنين parents", "تعرف يعني إيه fast-forward", "تشرح ليه الـ rebase بيغيّر الـ hashes", "متعملش rebase على branch مشترك", "تستخدم `--force-with-lease` مش `--force`"]} />
+
+<Quiz>
+<Q n={1} q="بعد merge وبعد rebase، الكود في الآخر مختلف؟">لا، نفس الكود. اللي بيختلف هو شكل التاريخ.</Q>
+<Q n={2} q="ليه الـ rebase خطر على branch زمايلك سحبوه؟">لأنه بيعمل commits جديدة بـ hashes جديدة، والـ commits القديمة اللي عندهم مبقتش موجودة عندك، فالتاريخ بيتلخبط.</Q>
+<Q n={3} q="امتى merge مش بيعمل merge commit؟">لما يبقى fast-forward، يعني الـ branch التاني متحركش من ساعة ما بدأت.</Q>
+<Q n={4} q="عملت rebase لـ feature branch بتاعك ورفعته قبل كده. ترفعه تاني إزاي؟">git push --force-with-lease.</Q>
+</Quiz>

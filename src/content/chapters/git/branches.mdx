@@ -1,0 +1,79 @@
+---
+title: الـ branches والـ HEAD
+short: Branches
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: branch = pointer · HEAD · switch · detached HEAD
+keywords: branch · HEAD · switch · detached
+goal: تفهم إن الـ branch مجرد اسم على commit، و HEAD بيقول إنت واقف فين.
+part: البداية
+color: c2
+---
+
+<Hl c="p">الـ branch مش نسخة من المشروع. هو اسم لازق على commit واحد، وبيتحرك لقدام لوحده كل ما تعمل commit جديد</Hl>.
+
+عشان كده عمل branch في Git سريع جدًا ومش بياخد مساحة: Git بيكتب hash في ملف صغير، وخلاص.
+
+## شكلها عامل إزاي
+
+```text
+A ← B ← C        ← main
+         ↖
+           D ← E ← feature/cart
+```
+
+`main` لازق على `C`، و `feature/cart` لازق على `E`. الاتنين بيشاركوا نفس التاريخ لحد `C`، وبعد كده كل واحد مشي في طريق.
+
+## الـ HEAD
+
+الـ HEAD هو "إنت واقف فين دلوقتي". غالبًا بيشاور على branch، والـ branch بيشاور على commit.
+
+```bash
+git switch -c feature/cart   # اعمل branch جديد وروحله
+git switch main              # ارجع لـ main
+git branch                   # كل الـ branches، والنجمة جنب اللي إنت عليه
+```
+
+لما تعمل commit، الـ branch اللي الـ HEAD بيشاور عليه هو اللي بيتحرك للـ commit الجديد. الـ branches التانية مبتتحركش.
+
+<Box type="story" icon="🔖" title="الفواصل في الكتاب">
+
+الكتاب هو التاريخ كله. الـ branch فاصل بتحطه على صفحة. الـ HEAD هو إيدك: الفاصل اللي إنت ماسكه دلوقتي. لما تكتب صفحة جديدة، الفاصل اللي في إيدك بس هو اللي بيتنقل عليها.
+
+</Box>
+
+## `switch` ولا `checkout`؟
+
+`git checkout` قديم وبيعمل حاجات كتير: يغيّر branch، ويرجّع ملف، ويروح لـ commit. عشان كده اتقسم في Git 2.23 لأمرين أوضح:
+
+- `git switch`: تغيّر الـ branch.
+- `git restore`: ترجّع ملف (فصل ٦).
+
+`checkout` لسه شغال، وهتلاقيه في كل حتة على الإنترنت، بس الجداد أوضح.
+
+## الـ detached HEAD
+
+لو عملت `git switch --detach a3f9c21` أو `git checkout a3f9c21`، الـ HEAD بيشاور على commit مباشرة، مش على branch. ده اسمه **detached HEAD**.
+
+ده مفيد عشان تبص على الكود القديم. بس لو عملت commits وإنت كده، مفيش branch بيتحرك معاك. ولو رحت لـ branch تاني، الـ commits دي ملهاش اسم، وممكن تتوه.
+
+<Box type="warn" title="عملت commits وإنت detached؟">
+
+قبل ما تمشي، ادّيها اسم:
+
+```bash
+git switch -c fix/old-bug
+```
+
+ولو مشيت خلاص ونسيت، متقلقش. `git reflog` (فصل ٦) هيلاقيها.
+
+</Box>
+
+<Checklist id="git-branches" title="خلّصت الفصل لما" items={["تشرح إن الـ branch اسم على commit مش نسخة", "تعرف إن الـ HEAD بيقول إنت واقف فين", "تعمل branch وتروحله بـ `git switch -c`", "تعرف يعني إيه detached HEAD وتدّي الـ commits اسم قبل ما تمشي"]} />
+
+<Quiz>
+<Q n={1} q="ليه عمل branch جديد سريع جدًا في Git؟">لأنه مجرد ملف صغير فيه hash commit، مش نسخة من الملفات.</Q>
+<Q n={2} q="إنت على feature/cart وعملت commit. main بيتحرك؟">لا. الـ branch اللي الـ HEAD بيشاور عليه بس هو اللي بيتحرك.</Q>
+<Q n={3} q="يعني إيه detached HEAD؟">الـ HEAD بيشاور على commit مباشرة مش على branch، فالـ commits الجديدة ملهاش اسم.</Q>
+</Quiz>

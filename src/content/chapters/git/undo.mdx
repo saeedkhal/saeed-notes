@@ -1,0 +1,126 @@
+---
+title: ترجع في أي غلطة
+short: الرجوع
+order: 6
+label: فصل ٦
+badge: التصليح · فصل ٦
+en: restore · amend · reset soft/mixed/hard · revert · reflog
+keywords: restore · reset · revert · reflog
+goal: تختار الأمر الصح للرجوع حسب الغلطة حصلت فين، ومتخافش من Git.
+part: التصليح
+color: c1
+---
+
+السؤال الأول دايمًا: **الغلطة فين؟** في ملف لسه متعملوش commit؟ في آخر commit؟ في commit اترفع وزمايلك سحبوه؟ كل حالة ليها أمر.
+
+<Hl c="g">قبل الـ push، تقدر تعيد كتابة التاريخ براحتك. بعد الـ push على branch مشترك، متمسحش، اعمل commit بيعكس الغلطة</Hl>.
+
+## ملف لسه متعملوش commit
+
+```bash
+git restore cart.tsx            # ارمي التعديلات اللي في الملف وارجع لآخر commit
+git restore --staged cart.tsx   # طلّعه من الـ staging، والتعديلات تفضل في الملف
+```
+
+<Box type="warn" title="git restore من غير --staged مفيهوش رجوع">
+
+التعديلات اللي متعملهاش commit ولا add مش متسجلة في أي حتة. لو رميتها، راحت. حتى `reflog` مش هيلاقيها.
+
+</Box>
+
+## آخر commit فيه غلطة صغيرة
+
+نسيت ملف، أو الرسالة غلط:
+
+```bash
+git add forgotten-file.ts
+git commit --amend              # ضيف للـ commit الأخير، وعدّل الرسالة لو عايز
+git commit --amend --no-edit    # ضيف من غير ما تغيّر الرسالة
+```
+
+الـ amend بيعمل commit جديد بـ hash جديد مكان الأخير. فقبل الـ push بس.
+
+## `git reset`: رجّع الـ branch لورا
+
+`reset` بيرجّع الـ branch لـ commit قديم. السؤال هو: التعديلات اللي كانت في الـ commits اللي اتشالت تروح فين؟
+
+```bash
+git reset --soft HEAD~1    # شيل آخر commit، والتعديلات تفضل في الـ staging
+git reset HEAD~1           # (--mixed، الافتراضي) والتعديلات تفضل في الملفات بس
+git reset --hard HEAD~1    # شيل آخر commit، وارمي التعديلات خالص
+```
+
+`HEAD~1` يعني commit واحد قبل الـ HEAD. `HEAD~3` يعني تلاتة.
+
+<Grid2>
+<Card title="--soft و --mixed" c={1}>
+
+آمنين. الشغل مش بيروح، بس بيرجع مش متسجل في commit. مفيد لو عايز تقسّم commit كبير لـ commits أصغر.
+
+</Card>
+<Card title="--hard" c={4}>
+
+بيرمي الشغل اللي في الملفات. الـ commits اللي اتشالت تقدر ترجعها بـ `reflog`، لكن التعديلات اللي مكانتش في commit راحت.
+
+</Card>
+</Grid2>
+
+## `git revert`: لـ commit اترفع خلاص
+
+لو الـ commit الغلط اترفع على `main` وزمايلك سحبوه، متعملش reset، لأن ده بيعيد كتابة التاريخ زي الـ rebase بالظبط. اعمل revert:
+
+```bash
+git revert a3f9c21
+```
+
+ده بيعمل **commit جديد** بيعكس تعديلات `a3f9c21`. التاريخ مبيتمسحش منه حاجة، والكل يقدر يعمل pull عادي.
+
+<Box type="story" icon="🧾" title="الفاتورة الغلط">
+
+لو الكاشير طبع فاتورة غلط ولسه مسلّمهاش، يقطعها ويطبع غيرها. ده reset. لو الزبون خدها ومشي، مينفعش يرجع يقطعها من إيده. يطبع فاتورة مرتجع. ده revert.
+
+</Box>
+
+## `git reflog`: شبكة الأمان
+
+Git بيسجل كل مرة الـ HEAD اتحرك فيها: كل commit، و switch، و reset، و rebase. حتى الـ commits اللي "ضاعت" بعد reset أو rebase بتفضل موجودة فترة (الافتراضي حوالي 90 يوم).
+
+```bash
+git reflog
+# a3f9c21 HEAD@{0}: reset: moving to HEAD~3
+# 9e8d7c6 HEAD@{1}: commit: Add quantity limit
+# 5f4e3d2 HEAD@{2}: commit: Add cart page
+```
+
+عملت `reset --hard` غلط؟ ارجع للنقطة اللي قبله:
+
+```bash
+git reset --hard 9e8d7c6
+# أو اعمل branch عليها تبص عليها الأول
+git switch -c rescue 9e8d7c6
+```
+
+<Box type="tip" title="لو عملته commit، غالبًا مضاعش">
+
+أي حاجة اتعملها commit تقريبًا مستحيل تضيع فورًا، حتى بعد reset أو rebase بايظ. `reflog` هيلاقيها. اللي بيضيع بجد هو الشغل اللي معملتلوش commit أصلًا. فاعمل commits كتير.
+
+</Box>
+
+## أي أمر أستخدم؟
+
+| الحالة | الأمر |
+|---|---|
+| ملف متعملوش add وعايز ترميه | `git restore file` |
+| ملف في الـ staging وعايز تطلّعه | `git restore --staged file` |
+| نسيت حاجة في آخر commit (لسه متعملوش push) | `git commit --amend` |
+| عايز تفك آخر commit وتحتفظ بالشغل | `git reset HEAD~1` |
+| commit اترفع على branch مشترك | `git revert <hash>` |
+| ضيعت commits بعد reset أو rebase | `git reflog` |
+
+<Checklist id="git-undo" title="خلّصت الفصل لما" items={["تسأل الأول: الغلطة قبل الـ commit ولا بعده، قبل الـ push ولا بعده؟", "تفرق بين reset بـ soft و mixed و hard", "تستخدم revert مش reset على commit اترفع على branch مشترك", "ترجع commits ضايعة بـ `git reflog`", "تعرف إن الشغل اللي متعملوش commit هو اللي ممكن يضيع بجد"]} />
+
+<Quiz>
+<Q n={1} q="commit غلط اترفع على main وزمايلك سحبوه. reset ولا revert؟">revert، لأنه بيعمل commit جديد ومش بيعيد كتابة التاريخ.</Q>
+<Q n={2} q="عايز تقسّم آخر commit لاتنين. تعمل إيه؟">git reset HEAD~1، فالتعديلات ترجع للملفات، وبعدين تعمل add و commit مرتين.</Q>
+<Q n={3} q="عملت reset --hard ورجعت 3 commits بالغلط. ضاعوا؟">لا. git reflog هيوريك الـ hash اللي كنت عليه، وترجعله بـ reset --hard أو تعمل عليه branch.</Q>
+</Quiz>

@@ -1,0 +1,73 @@
+---
+title: الـ stash والـ cherry-pick
+short: Stash و Cherry-pick
+order: 7
+label: فصل ٧
+badge: التصليح · فصل ٧
+en: stash push · stash pop · stash list · cherry-pick
+keywords: stash · pop · cherry-pick
+goal: تشيل شغلك على جنب لما تتقاطع، وتنقل commit واحد من branch لـ branch.
+part: التصليح
+color: c2
+---
+
+## الـ stash: شيل الشغل على جنب
+
+إنت في نص feature والملفات مليانة تعديلات، وفجأة لازم تصلّح bug على `main` حالًا. مينفعش تعمل commit لشغل لسه نص نص، ومش عايز ترميه.
+
+<Hl c="y">الـ stash بيشيل التعديلات اللي متعملهاش commit في درج على جنب، ويرجّع الملفات نضيفة. ولما تخلص، بترجعها تاني</Hl>.
+
+```bash
+git stash push -m "cart: نص شغل الـ quantity"   # شيل التعديلات
+git switch main                                  # روح صلّح الـ bug
+# ... صلّح واعمل commit ...
+git switch feature/cart
+git stash pop                                    # رجّع التعديلات
+```
+
+```bash
+git stash list           # كل الحاجات اللي في الدرج
+git stash show -p        # شوف أول واحدة فيها إيه
+git stash apply          # رجّعها بس سيبها في الدرج
+git stash drop           # امسح أول واحدة
+git stash push -u        # شيل كمان الملفات الجديدة اللي Git مش متابعها
+```
+
+<Box type="warn" title="الـ stash مش مكان تخزين">
+
+سهل تعمل stash وتنساه أسبوع. وبعد كده `stash list` يبقى فيه 7 حاجات مش فاكر فيهم إيه. الـ stash لشغل هترجعله كمان ساعة. لو أطول من كده، اعمل commit على branch، حتى لو رسالته "wip". وفيه بديل أحسن للحالة دي بالذات: الـ worktree في الفصل الجاي.
+
+</Box>
+
+## الـ cherry-pick: هات commit واحد بس
+
+عملت fix مهم على `feature/cart`، ومحتاجه على `main` دلوقتي، من غير ما تدمج الـ feature كلها لأنها لسه مخلصتش.
+
+```bash
+git switch main
+git cherry-pick 4d5e6f
+```
+
+Git بياخد التعديلات اللي في `4d5e6f` ويعمل بيها **commit جديد** على `main`. نفس التعديل، بس hash مختلف، لأن الـ parent مختلف.
+
+<Box type="story" icon="🍒" title="من الطبق">
+
+الـ merge إنك تاخد الطبق كله. الـ cherry-pick إنك تاخد كرزة واحدة بس منه وتحطها في طبقك.
+
+</Box>
+
+<Box type="tip" title="استخدمه بقلة">
+
+الـ cherry-pick مفيد للـ hotfixes، أو لما تنقل تصليح لـ release branch قديم. بس لو بتعمله كتير بين نفس الـ branches، هيبقى عندك نفس التعديل في commits مختلفة، والـ merge بعد كده ممكن يعمل conflicts غريبة. الأحسن غالبًا إنك تعمل الـ fix على branch لوحده وتدمجه في الاتنين.
+
+</Box>
+
+لو حصل conflict، نفس الخطوات: حل، و `git add`، و `git cherry-pick --continue`. أو `--abort`.
+
+<Checklist id="git-stash-cherry" title="خلّصت الفصل لما" items={["تشيل الشغل بـ `git stash push -m` وترجّعه بـ `pop`", "تفرق بين `pop` و `apply`", "تعرف إن الـ stash للشغل القصير مش للتخزين", "تنقل commit واحد بـ `cherry-pick` وتعرف إنه بيطلع بـ hash جديد"]} />
+
+<Quiz>
+<Q n={1} q="إيه الفرق بين stash pop و stash apply؟">الاتنين بيرجّعوا التعديلات. pop بيمسحها من الدرج، apply بيسيبها.</Q>
+<Q n={2} q="عملت stash والملف الجديد اللي عملته لسه موجود. ليه؟">لأن الـ stash العادي مش بيشيل الملفات اللي Git مش متابعها. استخدم -u.</Q>
+<Q n={3} q="الـ commit اللي جه بـ cherry-pick نفس الـ hash؟">لا. نفس التعديل، بس commit جديد بـ parent مختلف، فالـ hash مختلف.</Q>
+</Quiz>

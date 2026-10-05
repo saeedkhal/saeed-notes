@@ -1,0 +1,128 @@
+---
+title: الـ conflicts والـ interactive rebase
+short: Conflicts
+order: 5
+label: فصل ٥
+badge: الدمج · فصل ٥
+en: conflict markers · --abort · --continue · rebase -i · squash · fixup
+keywords: conflict · abort · rebase -i · squash
+goal: تحل أي conflict من غير خوف، وتنضّف الـ commits بتاعتك قبل الـ pull request.
+part: الدمج
+color: c5
+---
+
+الـ conflict مش غلط ولا مصيبة. هو Git بيقولك: "إنت وزميلك عدّلتوا نفس السطر بطريقتين، ومش هقدر أختار بدالكم".
+
+<Hl c="b">Git بيدمج لوحده أي تعديلات في أماكن مختلفة. الـ conflict بيحصل بس لما الاتنين يعدّلوا نفس المكان</Hl>.
+
+## شكل الـ conflict
+
+```text
+<<<<<<< HEAD
+const MAX_QTY = 5;
+=======
+const MAX_QTY = product.stock;
+>>>>>>> feature/cart
+```
+
+- اللي بين `<<<<<<<` و `=======` هو الموجود عندك (الـ HEAD).
+- اللي بين `=======` و `>>>>>>>` هو اللي جاي من الـ branch التاني.
+
+إنت بتقرر: تاخد واحد منهم، أو تجمعهم، أو تكتب حاجة جديدة خالص. وتمسح العلامات.
+
+```ts
+const MAX_QTY = Math.min(5, product.stock);
+```
+
+## الخطوات
+
+```bash
+git status                 # الملفات اللي فيها conflict مكتوب جنبها "both modified"
+# افتح كل ملف، وحل، وامسح العلامات
+git add src/cart/limits.ts # كده بتقول لـ Git إن الملف ده اتحل
+
+# لو كنت في merge
+git commit
+# لو كنت في rebase
+git rebase --continue
+```
+
+ولو حسيت إنك اتلخبطت، ارجع كأن مفيش حاجة حصلت:
+
+```bash
+git merge --abort
+git rebase --abort
+```
+
+<Box type="tip" title="قبل ما تعمل add، شغّل التستات">
+
+إن العلامات اتمسحت مش معناه إن الكود صح. الكود الجديد اللي جمعته ممكن ميشتغلش. شغّل التستات أو افتح الصفحة قبل ما تكمّل.
+
+</Box>
+
+## ازاي تقلل الـ conflicts
+
+- خلّي الـ feature branch قصير العمر. يوم أو اتنين أحسن من أسبوعين.
+- اعمل `git pull --rebase` من `main` كل شوية، فتحل conflicts صغيرة بدل واحدة كبيرة في الآخر.
+- commits صغيرة، كل واحد في حاجة واحدة.
+
+## الـ interactive rebase: نضّف قبل ما ترفع
+
+وإنت شغال، بتعمل commits زي "wip" و "fix typo" و "oops". قبل ما تفتح pull request، تقدر تنضّفهم:
+
+```bash
+git rebase -i main
+```
+
+هيفتحلك قايمة بالـ commits بتاعتك اللي مش في `main`:
+
+```text
+pick 1a2b3c Add cart page
+pick 4d5e6f wip
+pick 7a8b9c fix typo in cart
+pick 0c1d2e Add quantity limit
+```
+
+وتغيّر الكلمة اللي في الأول:
+
+- **pick**: سيبه زي ما هو.
+- **reword**: سيبه بس غيّر الرسالة.
+- **squash**: ادمجه في اللي قبله، واكتب رسالة جديدة للاتنين.
+- **fixup**: ادمجه في اللي قبله، وارمي رسالته.
+- **drop**: امسحه.
+
+وتقدر كمان تغيّر ترتيب السطور عشان تغيّر ترتيب الـ commits.
+
+```text
+pick 1a2b3c Add cart page
+fixup 4d5e6f wip
+fixup 7a8b9c fix typo in cart
+pick 0c1d2e Add quantity limit
+```
+
+كده بقوا 2 commits نضاف.
+
+<Box type="warn" title="ده rebase برضه">
+
+الـ interactive rebase بيغيّر الـ hashes. نفس القاعدة الذهبية: اعمله على commits لسه بتاعتك إنت بس. ولو كنت رفعتهم على feature branch لوحدك، هتحتاج `git push --force-with-lease`.
+
+</Box>
+
+### commit صغير يتصلح بعدين
+
+لو لقيت غلطة في commit قديم، اعمل commit للتصليح وقول لـ Git هو تبع مين:
+
+```bash
+git commit --fixup 1a2b3c
+git rebase -i --autosquash main
+```
+
+الـ `--autosquash` بيحط الـ fixup تحت الـ commit بتاعه لوحده.
+
+<Checklist id="git-conflicts" title="خلّصت الفصل لما" items={["تقرا علامات الـ conflict وتعرف كل جزء جاي منين", "تحل وتعمل `add` وبعدين `commit` أو `rebase --continue`", "ترجع بـ `--abort` لو اتلخبطت", "تنضّف الـ commits بـ `git rebase -i` قبل الـ pull request", "تفرق بين squash و fixup"]} />
+
+<Quiz>
+<Q n={1} q="إمتى بيحصل conflict؟">لما الاتنين يعدّلوا نفس السطور. التعديلات في أماكن مختلفة Git بيدمجها لوحده.</Q>
+<Q n={2} q="حليت الـ conflict وإنت في rebase. الخطوة الجاية؟">git add للملف، وبعدين git rebase --continue.</Q>
+<Q n={3} q="إيه الفرق بين squash و fixup؟">الاتنين بيدمجوا الـ commit في اللي قبله. squash بيخليك تكتب رسالة جديدة، fixup بيرمي رسالة الـ commit ده.</Q>
+</Quiz>

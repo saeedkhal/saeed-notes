@@ -1,0 +1,65 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 9
+label: الآخر
+badge: الآخر
+en: one page recall for Git
+keywords: cheatsheet · quiz
+goal: تلم مفاهيم Git كلها في صفحة واحدة، وتختبر نفسك.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["عايز تعرف إيه اللي اتغير", "`git status`، و `git diff`، و `git diff --staged`"],
+  ["عايز تحط جزء من ملف بس في الـ commit", "`git add -p`"],
+  ["عايز تشتغل على حاجة جديدة", "`git switch -c feature/name`"],
+  ["عملت commits وإنت detached HEAD", "`git switch -c name` قبل ما تمشي"],
+  ["عايز تعرف الجديد على GitHub من غير ما تلمس شغلك", "`git fetch`، وبعدين `git log main..origin/main`"],
+  ["أول push لـ branch جديد", "`git push -u origin name`"],
+  ["الـ push اترفض", "`git pull` وبعدين `git push`. مش `--force`"],
+  ["عايز تجيب آخر main في الـ feature بتاعك", "`git rebase main` لو الـ branch لوحدك، أو `git merge main`"],
+  ["الـ pull بيعمل merge commits كتير", "`git pull --rebase`، أو `pull.rebase true`"],
+  ["branch مشترك مع حد", "merge بس. ممنوع rebase"],
+  ["عملت rebase لـ branch بتاعك واترفع قبل كده", "`git push --force-with-lease`"],
+  ["عايز merge commit حتى لو ينفع fast-forward", "`git merge --no-ff`"],
+  ["conflict", "حل، وامسح العلامات، و `git add`، وبعدين `commit` أو `--continue`"],
+  ["اتلخبطت في نص merge أو rebase", "`git merge --abort` أو `git rebase --abort`"],
+  ["commits كتير زي wip و typo قبل الـ PR", "`git rebase -i main` بـ squash و fixup"],
+  ["تصليح لـ commit قديم", "`git commit --fixup <hash>` و `rebase -i --autosquash`"],
+  ["عايز ترمي تعديلات ملف", "`git restore file`، ومفيهوش رجوع"],
+  ["عايز تطلّع ملف من الـ staging", "`git restore --staged file`"],
+  ["نسيت حاجة في آخر commit", "`git commit --amend`، قبل الـ push"],
+  ["عايز تفك آخر commit وتحتفظ بالشغل", "`git reset HEAD~1`"],
+  ["commit غلط اترفع على main", "`git revert <hash>`"],
+  ["ضيعت commits بعد reset أو rebase", "`git reflog`"],
+  ["لازم تسيب شغلك ساعة", "`git stash push -m`، وبعدين `git stash pop`"],
+  ["محتاج commit واحد بس من branch تاني", "`git cherry-pick <hash>`"],
+  ["hotfix وإنت في نص feature", "`git worktree add -b hotfix/x ../folder main`"],
+  ["تراجع PR من غير ما تلمس شغلك", "worktree على الـ branch بتاعه"],
+  ["كذا AI agent شغالين في نفس الوقت", "worktree لكل agent"],
+]} />
+
+## الامتحان
+
+<Quiz>
+<Q n={1} q="الـ commit بيخزن إيه؟">snapshot كامل للمشروع، والكاتب، والتاريخ، والرسالة، والـ parent.</Q>
+<Q n={2} q="الـ branch بياخد مساحة قد إيه؟">تقريبًا ولا حاجة. هو ملف صغير فيه hash commit.</Q>
+<Q n={3} q="git status قال up to date. يبقى زي GitHub؟">مش شرط. بيقارن بـ origin/main من آخر fetch.</Q>
+<Q n={4} q="إيه اللي بيختلف بين merge و rebase؟">شكل التاريخ بس. الكود في الآخر واحد.</Q>
+<Q n={5} q="ليه الـ rebase بيغيّر الـ hashes؟">لأنه بيعمل commits جديدة بـ parent جديد.</Q>
+<Q n={6} q="إيه القاعدة الذهبية للـ rebase؟">متعملش rebase لـ commits حد تاني عنده.</Q>
+<Q n={7} q="--force-with-lease أأمن من --force ليه؟">بيرفض الـ push لو حد رفع حاجة جديدة من آخر fetch عندك.</Q>
+<Q n={8} q="reset ولا revert لـ commit على main المشترك؟">revert.</Q>
+<Q n={9} q="إيه الحاجة اللي reflog مش هيقدر يرجعها؟">التعديلات اللي متعملهاش commit أصلًا.</Q>
+<Q n={10} q="الفرق بين stash و worktree؟">الـ stash بيشيل الشغل في نفس الفولدر. الـ worktree فولدر تاني على branch تاني شغال في نفس الوقت.</Q>
+</Quiz>
+
+<Box type="tip" title="كلمة أخيرة">
+
+Git مش محتاج تحفظ مية أمر. محتاج تفهم إن الـ commit صورة، والـ branch اسم عليها، وأي أمر بيعيد كتابة الـ commits (rebase و amend و reset) يتعمل قبل الـ push بس. ولو عملت commit، غالبًا مفيش حاجة هتضيع.
+
+</Box>
+
+<Checklist id="git-cheat" title="خلّصت المذكرة لما" items={["تحل الامتحان من غير ما تبص على الجدول", "تشرح merge و rebase لزميل برسمة", "ترجع commit ضايع بـ reflog مرة على repo تجربة", "تعمل hotfix في worktree من غير ما تلمس الـ feature بتاعك"]} />

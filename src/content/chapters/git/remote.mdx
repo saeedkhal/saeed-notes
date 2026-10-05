@@ -1,0 +1,88 @@
+---
+title: "الـ remote: fetch و pull و push"
+short: Remote
+order: 3
+label: فصل ٣
+badge: البداية · فصل ٣
+en: origin · origin/main · fetch · pull · push · upstream
+keywords: origin · fetch · pull · push
+goal: تفهم الفرق بين النسخة اللي عندك والنسخة اللي على GitHub، وإيه اللي بيحصل في fetch و pull.
+part: البداية
+color: c3
+---
+
+الـ repo اللي على جهازك repo كامل لوحده، فيه التاريخ كله. GitHub مجرد repo تاني، بنسميه **remote**، واسمه غالبًا `origin`.
+
+<Hl c="g">Git مش بيكلم GitHub غير لما إنت تقوله. أي حاجة غير fetch و pull و push بتحصل على جهازك بس</Hl>.
+
+## `origin/main` مش `main`
+
+عندك نوعين branches:
+
+- **`main`**: الـ branch بتاعك إنت، بتعمل عليه commits.
+- **`origin/main`**: صورة من `main` اللي على GitHub، **من آخر مرة كلّمت فيها GitHub**. مبتتحدثش لوحدها.
+
+عشان كده `git status` ممكن يقولك "Your branch is up to date with origin/main" وفي الحقيقة فيه commits جديدة على GitHub. هو بيقارن بآخر صورة عنده.
+
+## fetch و pull و push
+
+<Grid2>
+<Card title="git fetch" c={3}>
+
+بيجيب الجديد من GitHub ويحدّث `origin/main`. **مش بيلمس** الـ branch بتاعك ولا ملفاتك. آمن تعمله في أي وقت.
+
+</Card>
+<Card title="git pull" c={4}>
+
+`fetch` وبعدها على طول دمج `origin/main` في الـ branch بتاعك. الدمج ده يا merge يا rebase، حسب الإعدادات (فصل ٤).
+
+</Card>
+</Grid2>
+
+`git push` العكس: بيبعت الـ commits بتاعتك لـ GitHub ويحرّك الـ branch اللي هناك.
+
+```bash
+git fetch                    # شوف إيه الجديد من غير ما تلمس حاجة
+git log main..origin/main    # الـ commits اللي على GitHub ومش عندك
+git pull                     # هات الجديد وادمجه
+git push                     # ابعت شغلك
+```
+
+## الـ upstream
+
+أول مرة ترفع branch جديد:
+
+```bash
+git push -u origin feature/cart
+```
+
+الـ `-u` بيربط الـ branch بتاعك بالـ branch اللي على GitHub. بعد كده `git push` و `git pull` لوحدهم بيعرفوا يروحوا فين، و `git status` بيقولك إنت قدامه ولا وراه بكام commit.
+
+## الـ push اترفض؟
+
+لو حد رفع commits قبلك، GitHub هيرفض الـ push بتاعك، لأن الـ commits بتاعته مش موجودة عندك، والـ push كان هيمسحها.
+
+```text
+! [rejected]   main -> main (fetch first)
+```
+
+الحل إنك تجيب شغله الأول وتدمجه، وبعدين ترفع:
+
+```bash
+git pull
+git push
+```
+
+<Box type="warn" title="متحلهاش بـ --force">
+
+`git push --force` بيمسح الـ commits اللي على GitHub ويحط بتاعتك مكانها. يعني شغل زميلك يروح. لو محتاج force بجد (بعد rebase على branch بتاعك لوحدك)، استخدم `--force-with-lease`، وده هنشرحه في فصل ٤.
+
+</Box>
+
+<Checklist id="git-remote" title="خلّصت الفصل لما" items={["تفرق بين `main` و `origin/main`", "تعرف إن `fetch` آمن ومش بيلمس شغلك", "تعرف إن `pull` هو `fetch` + دمج", "تربط branch جديد بـ `git push -u`", "تحل الـ push المرفوض بـ pull مش بـ force"]} />
+
+<Quiz>
+<Q n={1} q="git status بيقول up to date. يبقى مفيش جديد على GitHub؟">مش شرط. هو بيقارن بـ origin/main من آخر fetch. اعمل git fetch الأول.</Q>
+<Q n={2} q="إيه الفرق بين fetch و pull؟">fetch بيجيب الجديد بس. pull بيجيب ويدمج في الـ branch بتاعك.</Q>
+<Q n={3} q="الـ push اترفض عشان فيه commits جديدة على GitHub. تعمل إيه؟">pull عشان تجيبهم وتدمجهم، وبعدين push. مش --force.</Q>
+</Quiz>
