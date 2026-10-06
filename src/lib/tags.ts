@@ -1,4 +1,4 @@
-export const topicTagIds = ["frontend", "backend", "devops", "testing", "ai"] as const;
+export const topicTagIds = ["frontend", "backend", "devops", "testing", "ai", "cybersecurity"] as const;
 
 export type TopicTagId = (typeof topicTagIds)[number];
 
@@ -8,4 +8,5 @@ export const topicTagLabel: Record<TopicTagId, string> = {
   devops: "DevOps",
   testing: "Testing",
   ai: "AI",
+  cybersecurity: "Cybersecurity",
 };
