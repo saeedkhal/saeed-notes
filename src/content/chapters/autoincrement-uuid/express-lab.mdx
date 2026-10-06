@@ -1,0 +1,159 @@
+---
+title: "Lab: اللينك بـ UUIDv7 والجداول بـ bigint"
+short: Lab بـ Express
+order: 6
+label: "فصل ٦"
+badge: "التطبيق · فصل ٦"
+en: "Express · Postgres identity · public uuidv7"
+keywords: "express · returning · unique · 404"
+goal: "تنفّذ إنشاء مستخدم وقراءته من اللينك العام، من غير ما الرقم الداخلي يطلع بره."
+part: "التطبيق"
+color: "c1"
+---
+
+## الشكل
+
+<Tree>
+
+```text
+users-api/
+├── package.json
+└── src/
+    ├── uuidv7.js      # نفس مولّد الفصل السابق
+    ├── db.js
+    └── server.js
+```
+
+</Tree>
+
+<File name="package.json">
+
+```json
+{
+  "name": "users-api",
+  "type": "module",
+  "scripts": { "start": "node src/server.js" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}
+```
+
+</File>
+
+الجدول من فصل المفتاحين. `DATABASE_URL` بيشير لـ Postgres. Express 4 مش بيلم رفض الـ async لوحده، فكل route فيه `try/catch`.
+
+<File name="src/db.js">
+
+```js
+import pg from "pg";
+
+export const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+</File>
+
+## الإنشاء والقراءة
+
+<File name="src/server.js">
+
+```js
+import express from "express";
+import { pool } from "./db.js";
+import { uuidv7 } from "./uuidv7.js";
+
+const app = express();
+app.use(express.json());
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+app.post("/users", async (req, res, next) => {
+  try {
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) return res.status(400).json({ error: "name_required" });
+
+    const publicId = uuidv7();
+    const { rows } = await pool.query(
+      `INSERT INTO users (public_id, name)
+       VALUES ($1, $2)
+       RETURNING public_id`,
+      [publicId, name],
+    );
+    res.status(201).json({ id: rows[0].public_id, name });
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "conflict" });
+    next(err);
+  }
+});
+
+app.get("/users/:publicId", async (req, res, next) => {
+  try {
+    const publicId = req.params.publicId;
+    if (!UUID_RE.test(publicId)) return res.status(400).json({ error: "bad_id" });
+
+    const { rows } = await pool.query(
+      "SELECT public_id, name FROM users WHERE public_id = $1",
+      [publicId],
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: "not_found" });
+
+    // لو المورد خاص: افحص الجلسة هنا. صعوبة الـ UUID مش الفحص.
+    res.json({ id: user.public_id, name: user.name });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: "internal" });
+});
+
+app.listen(3000, () => console.log("users api on :3000"));
+```
+
+</File>
+
+`RETURNING` بيرجع المعرّف العام بس. الـ `id` الداخلي موجود في الصف ومش في الرد. `23505` تصادم الـ unique، نادر، والرد ٤٠٩ أحسن من ٥٠٠. فحص شكل الـ UUID قبل الكويري عشان نص عشوائي مايبقاش خطأ من الدرايفر.
+
+<Box type="warn" title="المعمل مش نظام دخول">
+
+مفيش جلسة في الكود ده. البروفايل هنا عام. لو الصفحة خاصة، حط الفحص بعد ما تجيب الصف، ومتاخدش هوية اليوزر من هيدر هو اللي كاتبه. ومتبعتش `id` الـ bigint في JSON "عشان الفرونت محتاجه في اللوج".
+
+</Box>
+
+<Box type="tip" title="لو عايز Postgres يولّد v7">
+
+في PostgreSQL 18 تقدر تخلي الافتراضي `uuidv7()` وتسيب التطبيق من غير مولّد. لسه `INSERT ... RETURNING` عشان تعرف الرقم. قبل ١٨، الدالة دي مش مضمونة. راجع الإصدار.
+
+</Box>
+
+## 🧪 Lab
+
+شغّل الجدول، وبعدين:
+
+```bash
+curl -s localhost:3000/users -H 'content-type: application/json' -d '{"name":"منى"}'
+curl -s localhost:3000/users/PASTE-THE-PUBLIC-ID
+curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/users/123456789
+```
+
+الأول يرد `id` طويل مش رقم صغير. التاني نفس المعرّف. التالت ٤٠٠ لأن الشكل مش UUID، مش ٥٠٠ من Postgres. في الداتابيز، `SELECT id, public_id FROM users` يوريك الرقمين، والـ API مش شايف غير واحد.
+
+<Checklist id="ids-lab" title="✅ الخلاصة — Checklist" items={[
+  "الإنشاء يولّد UUIDv7 في التطبيق ويخزنه في public_id، والـ bigint يطلع لوحده.",
+  "الرد واللينك يستخدموا public_id. الكويري متدورش على id الداخلي من بره.",
+  "شكل UUID غلط يبقى 400. التصادم على unique يبقى 409.",
+  "الصلاحية لسه خطوة ناقصة لو المورد مش عام."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه RETURNING public_id مش RETURNING id؟">عشان الرقم اللي هيتحط في اللينك هو العام. الداخلي مش بيطلع.</Q>
+  <Q n={2} q="ليه نفحص الشكل قبل الكويري؟">عشان قيمة مش UUID مترجع 400 من عندنا، مش خطأ نوع من الدرايفر.</Q>
+  <Q n={3} q="كود 23505 معناه إيه هنا؟">إن public_id اتكرر على القيد الفريد. نادر، ومش خطأ غامض.</Q>
+</Quiz>
