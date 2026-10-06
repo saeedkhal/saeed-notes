@@ -1,0 +1,147 @@
+---
+title: "الغلط الإملائي والفلاتر"
+short: Fuzzy والفلاتر
+order: 5
+label: "فصل ٥"
+badge: "تجربة اليوزر · فصل ٥"
+en: "Fuzziness · query context · filter context"
+keywords: "fuzzy · Levenshtein · bool · filter cache"
+goal: "تسمح بغلط إملائي محدود من غير ما تفتح البحث على أي كلمة، وتفصل درجة الصلة عن شرط نعم أو لأ."
+part: "تجربة اليوزر"
+color: "c5"
+---
+
+## `ifone` غير جملة تانية خالص
+
+اليوزر كتب `ifone` وهو قاصد `iphone`: حرف ناقص. ده typo، و <En>fuzzy search</En> معمول عشانه. المسافة بين الكلمتين هي <En>Levenshtein distance</En>: كام إضافة أو حذف أو تبديل يخلّصوا الكلمة للتانية. هنا المسافة ١.
+
+جملة زي "if no way" بدل iPhone مش typo في كلمة. دي كلمات تانية. الـ fuzzy مش هيحوّلها، ولو زوّدت المسافة المسموحة عشان تلحقها هترجع نتائج ملهاش علاقة. المرادفات والبحث الصوتي أدوات تانية، وسهلة تبوّظ الدقة.
+
+<Box type="idea" title="الغلطة المسموحة ليها سقف">
+
+`fuzziness: "AUTO"` قاعدة عملية: الكلمات القصيرة أوي من غير سماح، وبعدين مسافة ١، والكلمات الأطول مسافة ٢. راجع الجدول في الـ docs لو هتعتمد الرقم. حط `prefix_length: 1` لو عايز أول حرف يفضل ثابت، عشان التوسع يبقى أرخص.
+
+</Box>
+
+## الكويري وفيها سماحية الغلط
+
+<File name="src/search-text.js">
+
+```js
+export function textQuery(q) {
+  return {
+    bool: {
+      should: [
+        { term: { sku: { value: q.toUpperCase(), boost: 20 } } },
+        {
+          multi_match: {
+            query: q,
+            fields: ["name^3", "description"],
+            fuzziness: "AUTO",
+            prefix_length: 1,
+          },
+        },
+      ],
+      minimum_should_match: 1,
+    },
+  };
+}
+```
+
+</File>
+
+الـ SKU بره الـ fuzzy. لو اليوزر لصق كود، عايز تطابق كامل، ومش عايز كود قريب يطلّع منتج تاني. وحّد الـ SKU لـ uppercase وقت ما بتحفظه ووقت ما بتبحث، عشان `apl-...` و `APL-...` يبقوا نفس الـ keyword.
+
+الـ fuzzy أغلى من التطابق العادي لأنه بيوسّع الكلمة لكذا احتمال. حطه على بحث الصفحة، مش على كل حرف في الاقتراحات. الاقتراحات فصل لوحدها.
+
+## Query context غير filter context
+
+بعد ما لقينا نتائج قريبة، اليوزر يقول: Lenovo، رام ١٦، سعر من ١٠ لـ ٣٠ ألف، متوفر، تقييم ٤ وفوق.
+
+<Grid2>
+<Card title="Query context" c={4}>
+
+سؤال: مين أقرب للنِيّة؟ بيحسب `_score`. مكانه `must` و `should`.
+
+</Card>
+<Card title="Filter context" c={2}>
+
+سؤال: الشرط متحقق؟ Lenovo يا آه يا لأ. مفيش score، والنتيجة بتتـcache. مكانه `filter`.
+
+</Card>
+</Grid2>
+
+السعر والمخزون والتقييم والبراند فلاتر. متدخلهمش في حساب الصلة، عشان منتج أغلى مياخدش ترتيب أعلى بالصدفة، وعشان نفس الفلتر يتتعاد استخدامه من غير ما يتحسب من أول وجديد مع كل جملة بحث.
+
+<File name="src/filters.js">
+
+```js
+export function toNum(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function productFilters({ brand, minPrice, maxPrice, minRating, inStock, ramGb }) {
+  const filters = [];
+  if (brand) filters.push({ term: { brand } });
+  if (ramGb != null) filters.push({ term: { ram_gb: ramGb } });
+  if (minRating != null) filters.push({ range: { rating: { gte: minRating } } });
+  if (inStock) filters.push({ range: { stock: { gt: 0 } } });
+  if (minPrice != null || maxPrice != null) {
+    const price = {};
+    if (minPrice != null) price.gte = minPrice;
+    if (maxPrice != null) price.lte = maxPrice;
+    filters.push({ range: { price } });
+  }
+  return filters;
+}
+```
+
+</File>
+
+<File name="src/search-body.js">
+
+```js
+import { textQuery } from "./search-text.js";
+import { productFilters } from "./filters.js";
+
+export function searchBody(input) {
+  const q = (input.q ?? "").trim();
+  return {
+    query: {
+      bool: {
+        must: q ? [textQuery(q)] : [{ match_all: {} }],
+        filter: productFilters(input),
+      },
+    },
+  };
+}
+```
+
+</File>
+
+من غير نص بحث، `match_all` مع الفلاتر دي صفحة قسم: "لابتوبات Lenovo المتوفرة". لسه مش facets. الأعداد اللي جنب البراند محتاجة aggregations، وفيها فخ هنشوفه في الفصل الجاي.
+
+<Box type="warn" title="فلتر المخزون مش حقيقة الدفع">
+
+`stock > 0` في Elasticsearch بيخبّي الفاضي من النتائج. الرقم ده ممكن يكون متأخر ثواني عن SQL. زرار "ادفع" يقرأ المخزون من الداتابيز جوه transaction، مش من نتيجة البحث.
+
+</Box>
+
+## 🧪 Lab
+
+ابعت نفس الجملة مرتين: `ifone` من غير `fuzziness`، وبعدين بيها. الأولى غالبًا فاضية، والتانية ترجع iPhone. بعدين ضيف `filter` براند تاني. ترتيب الـ `_score` بين نتايج نفس البراند مبيتغيرش بسبب الفلتر، والبراند الغلط يختفي كله.
+
+<Checklist id="es-fuzzy" title="✅ الخلاصة — Checklist" items={[
+  "Fuzzy بيسمح بمسافة تعديل صغيرة عشان typo، ومش بيحوّل جملة مختلفة لكلمة المنتج.",
+  "الـ SKU تطابق keyword من غير fuzziness. الاقتراحات كمان مش مكان fuzzy تقيل.",
+  "النص الحر في query context عشان الـ score. البراند والسعر والمخزون والتقييم في filter context.",
+  "فلتر المخزون في البحث للعرض. الخصم الحقيقي وقت الدفع من SQL."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه ifone تقدر ترجع iPhone بينما جملة بعيدة لأ؟">لأن الفرق مسافة تعديل صغيرة. السماح الكبير بيرجع نتائج مش مقصودة.</Q>
+  <Q n={2} q="الفلتر بيزوّد _score؟">لأ. يا المستند يعدّي الشرط يا لأ، ومن غير درجة صلة.</Q>
+  <Q n={3} q="صفحة قسم من غير خانة بحث بتستخدم إيه؟">match_all جوه must، والشروط جوه filter.</Q>
+</Quiz>

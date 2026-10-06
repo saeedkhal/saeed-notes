@@ -1,0 +1,160 @@
+---
+title: "امتى تستخدمه، وامتى المعنى مش الكلمة"
+short: القرار والـ Vector
+order: 9
+label: "فصل ٩"
+badge: "القرار · فصل ٩"
+en: "Tradeoffs · embeddings · semantic search · hybrid"
+keywords: "tradeoffs · dense_vector · knn · RRF · hybrid"
+goal: "تقرر من متطلبات البحث مش من عدد الصفوف، وتعرف vector search بيكمل الكلمة ومش بيستبدلها."
+part: "القرار"
+color: "c4"
+---
+
+## مفيش رقم سحري
+
+مفيش قاعدة تقول: مليون صف استخدم SQL، وعشر مليون استخدم Elasticsearch. العدد لوحده بيضيّع السؤال.
+
+<Grid2>
+<Card title="عشرون مليون، والبحث SKU" c={2}>
+
+كل الاستعلامات تطابق كامل على كود. إندكس في SQL هيبقى أسرع وأبسط. محرك البحث هنا تكلفة من غير مكسب.
+
+</Card>
+<Card title="مئتا ألف، والبحث تجربة" c={4}>
+
+عايز ترتيب، غلط إملائي، اقتراحات، facets، ومرادفات. محرك بحث منطقي حتى لو العدد "صغير" في نظر حد بيعد الصفوف.
+
+</Card>
+</Grid2>
+
+عشر مليون منتج مع خانة بحث هي واجهة المتجر: الحالة الأولى في المذكرة. SQL تفضل للأوردر والمخزون، و Elasticsearch للقائمة والترتيب.
+
+<Box type="story" icon="🏪" title="متفتحش فرع عشان السلسلة الكبيرة فاتحة">
+
+الفرع التاني ليه إيجار وموظفين وجرد. بتفتحه لما الزباين مش لاقيين طلبهم في الفرع الأول، مش لما تشوف سلسلة تانية عاملة مول.
+
+</Box>
+
+## اللي هتكسبه واللي هتدفعه
+
+بتكسب بحث نص سريع، ranking، fuzzy، aggregations، autocomplete، وإمكانية التوزيع. في المقابل:
+
+<Chips items={["infrastructure", "RAM", "monitoring", "synchronization", "failure handling", "reindexing", "operational complexity"]} />
+
+Elasticsearch بيحب الرام، والـ cluster محتاج حد يشوفه وهو واقع. المزامنة مسار يتكسر. تغيير التحليل يعني إعادة بناء. متضيفوش عشان شركة كبيرة بتستخدمه. ضيفه لما المشكلة اللي في فصل ١ موجودة عندك، وانت مستعد تشغّل الخدمة دي.
+
+<Box type="interview" title="إجابة القرار في سطرين">
+
+"هسيب البيزنس في SQL. لو البحث exact هكمّل بإندكس. لو البحث بقى تجربة فيها ترتيب وغلط إملائي و facets، هحط Elasticsearch كـ search index وأدفع تمن المزامنة والتشغيل. العدد لوحده مش السبب."
+
+</Box>
+
+## Vector: البحث بالمعنى
+
+لحد هنا البحث بالكلمات: التوكن موجود أو قريب إملائيًا. اليوزر ساعات يكتب النِيّة: "موبايل تصويره كويس بالليل". الوصف ممكن يقول low light و night mode من غير كلمة "بالليل".
+
+<En>Vector search</En> يحوّل النص لـ <En>embedding</En>: قائمة أرقام يمثلها موديل. Elasticsearch يخزنها في حقل `dense_vector` ويدور على أقرب المتجهات. ده <En>semantic search</En>. الموديل هو اللي يطلّع الأرقام. متألفش المتجه في الكود.
+
+<File name="src/embed.js">
+
+```js
+export async function embed(text) {
+  const res = await fetch(process.env.EMBED_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error("embed_failed");
+  const json = await res.json();
+  return json.vector;
+}
+```
+
+</File>
+
+<File name="src/knn.js">
+
+```js
+export function knnQuery(vector) {
+  return {
+    field: "embedding",
+    query_vector: vector,
+    k: 20,
+    num_candidates: 100,
+  };
+}
+```
+
+</File>
+
+طول `dims` في الـ mapping لازم يساوي طول متجه الموديل بالظبط. غيّرت الموديل؟ الإندكس القديم مش هيتقارن مع المتجه الجديد. ده reindex، مش زرار.
+
+<Box type="warn" title="الـ SKU مش سؤال معنى">
+
+اليوزر لو لصق رقم موديل أو SKU، التطابق الحرفي هو الصح. أقرب معنى ممكن يرجّع منتج شبيه ويفوّت الكود نفسه. الـ vector مش بديل للـ keyword search.
+
+</Box>
+
+## Hybrid: القائمتين يتلموا بالترتيب مش بالدرجة
+
+درجة BM25 ودرجة القرب بين المتجهات مش على نفس المسطرة. تجمعهم رقم واحد بيفسد الاتنين. <En>Hybrid search</En> يشغّل البحث بالكلمة والبحث بالمتجه، وبعدين يدمج **الترتيب** بـ <En>RRF</En> (Reciprocal Rank Fusion): كل نتيجة تاخد نقاط من مكانها في كل قائمة، واللي فوق في الاتنين يطلع الأول.
+
+<Flow items={[
+  { t: "Keyword", s: "BM25 + فلاتر", c: 4 }, "+",
+  { t: "Vector", s: "أقرب معنى", c: 2 }, "→",
+  { t: "RRF", s: "دمج بالترتيب", c: 3 },
+]} />
+
+<File name="src/hybrid.js">
+
+```js
+import { textQuery } from "./search-text.js";
+import { embed } from "./embed.js";
+
+export async function hybridSearch(es, q) {
+  const vector = await embed(q);
+  return es.search({
+    index: "products",
+    retriever: {
+      rrf: {
+        retrievers: [
+          { standard: { query: textQuery(q) } },
+          { knn: { field: "embedding", query_vector: vector, k: 30, num_candidates: 100 } },
+        ],
+        rank_window_size: 50,
+        rank_constant: 60,
+      },
+    },
+  });
+}
+```
+
+</File>
+
+شكل الـ `retriever` اتظبط بين الإصدارات. راجع الـ docs قبل ما تنقله. لو الإصدار عندك لسه من غير RRF، نفّذ البحثين وادمّج الترتيب في Express بنفس الفكرة، ومتجمعش `_score` مع مسافة المتجه.
+
+الفلاتر (مخزون، سعر، براند) لسه لازمة على الناحيتين. نتيجة "قريبة في المعنى" بس خلصت من المخزن، أو من قسم تاني، بتبوّظ الصفحة زي ما الكفر كان بيبوّظ الترتيب.
+
+## 🧪 Lab
+
+خد تلات أسئلة واكتب تحت كل واحد: keyword، vector، ولا hybrid.
+
+1. `APL-IP15P-256`
+2. `ifone 15 pro`
+3. "عايز لابتوب خفيف أسافر بيه ومش هألعب عليه"
+
+الأول keyword وفي الغالب تطابق SKU. التاني keyword مع fuzzy، والـ vector ممكن يساعد بس مش أساسي. التالت semantic أو hybrid، لأن الكلمات الحرفية "خفيف" و "سفر" ممكن متبقاش في العنوان. لو التالت رجع شنطة لابتوب قبل اللابتوب، الفلاتر أو وزن القسم لسه مش مظبوطين.
+
+<Checklist id="es-when" title="✅ الخلاصة — Checklist" items={[
+  "القرار من شكل البحث: exact ولا ranking و typos و facets. مش من عدد الصفوف.",
+  "Elasticsearch بيزود تشغيل ومزامنة ورام وإعادة index. استخدمه لما المكسب ده مطلوب.",
+  "الـ vector بيدور على المعنى عن طريق embeddings. الـ SKU ورقم الموديل يفضلوا keyword.",
+  "Hybrid يدمج ترتيب الكلمتين، مش درجاتهم الخام. RRF أداة الدمج، وراجع شكلها في إصداركم."
+]} />
+
+<Quiz>
+  <Q n={1} q="عشرون مليون منتج والبحث كله برقم SKU. Elasticsearch؟">غالبًا لأ. إندكس SQL على الـ SKU يكفي، ومحرك البحث هيزود تشغيل من غير مكسب.</Q>
+  <Q n={2} q="ليه منجمعش درجة BM25 على درجة المتجه؟">مش نفس المقياس. الدمج الصح على الترتيب، زي RRF.</Q>
+  <Q n={3} q="غيّرت موديل الـ embeddings. إيه المطلوب؟">إعادة index. طول المتجه ومعناه اتغيروا، والمقارنة مع القديم مش صح.</Q>
+</Quiz>

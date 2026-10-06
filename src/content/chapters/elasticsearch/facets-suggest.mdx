@@ -1,0 +1,146 @@
+---
+title: "Facets واقتراحات وتظليل الماتش"
+short: Facets واقتراحات
+order: 6
+label: "فصل ٦"
+badge: "تجربة اليوزر · فصل ٦"
+en: "Aggregations · autocomplete · highlighting"
+keywords: "aggregations · facets · search_as_you_type · highlight"
+goal: "تعرض عدد النتايج جنب كل فلتر من غير ما الاختيار يمسح باقي الأرقام، وتفرّق الاقتراح عن بحث الصفحة."
+part: "تجربة اليوزر"
+color: "c1"
+---
+
+## الرقم اللي جنب البراند مش كويري تانية بسذاجة
+
+اليوزر بحث عن laptop، وفلتر رام ١٦. جنب البراندات عايز يشوف: Lenovo (٤٠)، Apple (١٢)، Dell (٩). الأرقام دي <En>faceted search</En>، وبتطلع من <En>aggregations</En>: عدد، نطاقات سعر، أصغر وأكبر سعر، متوسط. مش بتحسب score. بتلخّص المستندات اللي عدّت الشروط.
+
+حقل `brand` لازم يكون `keyword`. الـ `text` المتقطع مش بينفع لعدّ القيم زي ما اليوزر شايفها.
+
+<Box type="story" icon="🛒" title="يافطة الرف">
+
+في السوبرماركت، اليافطة مش بتقولك "فيه لبن" وبس. بتقولك الرف ده فيه كام نوع. اليافطة بتتكتب من البضاعة الموجودة دلوقتي، مش من المخزن كله من غير ما تحسب الفلاتر التانية.
+
+</Box>
+
+## الفخ: اخترت Apple فباقي البراندات اختفت
+
+لو حطيت `brand = Apple` جوه نفس الفلاتر اللي الـ aggregation بتشوفها، العدّ هيطلّع Apple بس. اليوزر مش هيقدر يبدّل لـ Lenovo من غير ما يمسح الفلتر الأول.
+
+القاعدة: <Hl c="o">عدّ البراند بكل الفلاتر ما عدا اختيار البراند نفسه.</Hl> نفس الفكرة على نطاق السعر: عدّاد السعر متأثرش باختيار السعر الحالي، بس يتأثر بالبراند والرام.
+
+<File name="src/aggs.js">
+
+```js
+function asFilter(clauses) {
+  const list = clauses.filter(Boolean);
+  if (list.length === 0) return { match_all: {} };
+  if (list.length === 1) return list[0];
+  return { bool: { filter: list } };
+}
+
+export function facetAggs({ price, rating, stock, brand, ram }) {
+  return {
+    brands: {
+      filter: asFilter([price, rating, stock, ram]),
+      aggs: { values: { terms: { field: "brand", size: 20 } } },
+    },
+    rams: {
+      filter: asFilter([price, rating, stock, brand]),
+      aggs: { values: { terms: { field: "ram_gb", size: 10 } } },
+    },
+  };
+}
+```
+
+</File>
+
+النتيجة في `aggregations.brands.values.buckets`: كل bucket فيه `key` و `doc_count`. إجمالي الصفحة نفسه ممكن يتقص عند ١٠٠٠٠. لو محتاج الرقم بالظبط ابعت `track_total_hits: true`، واعرف إن ده أغلى. كتير من المتاجر بتكتب "أكثر من ١٠٠٠٠" لما `relation` تبقى `gte`.
+
+نطاقات السعر نفس الأسلوب، بـ `range` aggregation على حقل `price`، جوه filter فيه كل الشروط ما عدا السعر.
+
+## الاقتراح مش نسخة مصغّرة من بحث الصفحة
+
+أول ما اليوزر يكتب `iph` عايز قائمة: iPhone 15، iPhone 15 Pro. كل حرف ممكن يبعت طلب جديد، فلو الطلب تقيل أو من غير انتظار قصير هتضرب Elasticsearch على الفاضي.
+
+<Grid2>
+<Card title="search_as_you_type" c={1}>
+
+اختيار كويس لأسماء المنتجات. الحقل بيعمل لواحق جاهزة، والكويري `bool_prefix`. من غير fuzzy هنا.
+
+</Card>
+<Card title="edge n-gram" c={3}>
+
+تحكم أكتر في طول البادئة، والإندكس بيكبر. مناسب لو محتاج قواعد خاصة.
+
+</Card>
+</Grid2>
+
+فيه كمان <En>completion suggester</En>: سريع أوي لأنه مبني في الذاكرة، وأقل مرونة لو الاقتراح لازم يحترم فلاتر كتير. اختار على حسب الشاشة، متفتحش التلاتة مع بعض من غير سبب.
+
+<File name="src/suggest.js">
+
+```js
+export async function suggestNames(es, prefix) {
+  const q = prefix.trim();
+  if (q.length < 2) return [];
+
+  const result = await es.search({
+    index: "products",
+    size: 8,
+    _source: ["name"],
+    query: {
+      multi_match: {
+        query: q,
+        type: "bool_prefix",
+        fields: ["name.suggest", "name.suggest._2gram", "name.suggest._3gram"],
+      },
+    },
+  });
+
+  return result.hits.hits.map((hit) => hit._source.name);
+}
+```
+
+</File>
+
+الحقل `name.suggest` من نوع `search_as_you_type` يتضاف في الـ mapping جنب `name`، مش بدلّه. بحث الصفحة يفضل على `name` و `description`. في الواجهة استنى حوالي ٢٠٠ ملي ثانية بعد آخر حرف قبل الطلب، ومتبعتش طلب لكل حرف لو اليوزر لسه بيكتب بسرعة.
+
+## التظليل: مقطع، مش الوصف كله
+
+لو الكلمة جوه وصف طويل، نتيجة البحث تعرض الحتة اللي حوالي الماتش. ده <En>highlighting</En>.
+
+<File name="src/highlight.js">
+
+```js
+export const highlight = {
+  fields: {
+    description: { fragment_size: 140, number_of_fragments: 1 },
+  },
+  pre_tags: ["<mark>"],
+  post_tags: ["</mark>"],
+};
+```
+
+</File>
+
+الرد بيرجع المقطع جاهز فيه العلامات، منفصل عن `_source`. اعرض المقطع كنص فيه تظليل، ومتحطّش HTML جاي من وصف التاجر من غير ما تنضّفه. العلامة اللي طلبتها أنت بس هي اللي مسموح بيها.
+
+صفحة النتائج متبعتش `description` كامل لعشرين منتج. الاسم، السعر، الصورة، والمقطع. التفاصيل تتجاب لما يفتح المنتج، ومن SQL أو من مستند البحث حسب إيه اللي محتاجه الصفحة.
+
+## 🧪 Lab
+
+ابحث عن laptop من غير فلتر براند، واتأكد إن buckets البراند أكتر من واحد. بعدين ثبّت `brand=Apple` في كويري النتايج بس، وسيب aggregation البراند من غير الفلتر ده. Apple تفضل متعلّمة في الصفحة، و Lenovo لسه ظاهر بعدها رقم. لو Lenovo اختفت، فلتر البراند داخل على العدّ بالغلط.
+
+<Checklist id="es-facets" title="✅ الخلاصة — Checklist" items={[
+  "أعداد الفلاتر aggregations على حقول keyword أو أرقام، مش text متقطع.",
+  "عدّاد كل facet يتشاف بكل الفلاتر ما عدا اختيار الـ facet نفسه.",
+  "الاقتراح بادئة سريعة ومن غير fuzzy، وباستنى قصير في الواجهة.",
+  "الـ highlighting مقطع قصير. الوصف الكامل مش بتاع قائمة النتائج."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه عداد البراندات بقى رقم واحد بعد ما اليوزر اختار Apple؟">لأن فلتر البراند اتطبق على الـ aggregation. العدّاد لازم يتشاف من غيره.</Q>
+  <Q n={2} q="ليه الاقتراح مش بيستخدم نفس كويري الصفحة؟">كل حرف طلب. الكويري لازم تفضل بادئة خفيفة، والـ fuzzy يتساب لبحث الصفحة.</Q>
+  <Q n={3} q="highlighting بيرجع إيه بدل الوصف كله؟">مقطع حوالي الكلمة، بطول fragment_size، وبعدد number_of_fragments.</Q>
+</Quiz>

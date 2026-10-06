@@ -1,0 +1,375 @@
+---
+title: "Lab: Search API بـ Express"
+short: Lab بـ Express
+order: 10
+label: "فصل ١٠"
+badge: "التطبيق · فصل ١٠"
+en: "Express routes · mapping · search · suggest"
+keywords: "express · multi_match · aggs · suggest · 503"
+goal: "تركّب API بحث واحد: إندكس، بحث فيه ترتيب وفلاتر و facets، واقتراحات بادئة."
+part: "التطبيق"
+color: "c5"
+---
+
+## إيه اللي هنركّبه
+
+فصل المزامنة بيكتب المستند من SQL. هنا مسار القراءة: Express يسأل Elasticsearch ويرجّع صفحة نتائج. فيه كمان `POST /products` عشان تجرب من غير Postgres. المسار ده للتطوير، مش باب الكتابة في المتجر.
+
+<Tree>
+
+```text
+product-search/
+├── compose.yaml          # Elasticsearch من فصل ٢
+├── package.json
+└── src/
+    ├── es.js
+    ├── ensure-index.js
+    ├── search.js
+    └── server.js
+```
+
+</Tree>
+
+<File name="package.json">
+
+```json
+{
+  "name": "product-search",
+  "type": "module",
+  "scripts": { "start": "node src/server.js" },
+  "dependencies": {
+    "@elastic/elasticsearch": "^8.17.0",
+    "express": "^4.21.2"
+  }
+}
+```
+
+</File>
+
+الأكواد على عميل Elasticsearch 8 و Express 4. Express 4 مش بيلم رفض الـ async لوحده، عشان كده كل route فيه `try/catch` و `next(err)`.
+
+## الإندكس
+
+<File name="src/es.js">
+
+```js
+import { Client } from "@elastic/elasticsearch";
+
+export const es = new Client({
+  node: process.env.ELASTIC_URL ?? "http://localhost:9200",
+  auth: process.env.ELASTIC_API_KEY
+    ? { apiKey: process.env.ELASTIC_API_KEY }
+    : undefined,
+});
+```
+
+</File>
+
+<File name="src/ensure-index.js">
+
+```js
+import { es } from "./es.js";
+
+const index = "products";
+
+const settings = {
+  analysis: {
+    char_filter: {
+      indic_digits: {
+        type: "mapping",
+        mappings: ["٠ => 0", "١ => 1", "٢ => 2", "٣ => 3", "٤ => 4", "٥ => 5", "٦ => 6", "٧ => 7", "٨ => 8", "٩ => 9"],
+      },
+    },
+    filter: {
+      product_synonyms: {
+        type: "synonym_graph",
+        synonyms: ["iphone, آيفون, ايفون", "laptop, لابتوب, notebook"],
+      },
+    },
+    analyzer: {
+      product_text: {
+        type: "custom",
+        char_filter: ["indic_digits"],
+        tokenizer: "standard",
+        filter: ["lowercase", "arabic_normalization", "product_synonyms"],
+      },
+      suggest_text: {
+        type: "custom",
+        char_filter: ["indic_digits"],
+        tokenizer: "standard",
+        filter: ["lowercase", "arabic_normalization"],
+      },
+    },
+  },
+};
+
+const mappings = {
+  properties: {
+    sku: { type: "keyword" },
+    name: {
+      type: "text",
+      analyzer: "product_text",
+      fields: { suggest: { type: "search_as_you_type", analyzer: "suggest_text" } },
+    },
+    description: { type: "text", analyzer: "product_text" },
+    brand: { type: "keyword" },
+    category: { type: "keyword" },
+    price: { type: "float" },
+    rating: { type: "float" },
+    stock: { type: "integer" },
+    ram_gb: { type: "integer" },
+    storage_gb: { type: "integer" },
+  },
+};
+
+export async function ensureProductsIndex() {
+  if (await es.indices.exists({ index })) return;
+  await es.indices.create({ index, settings, mappings });
+}
+```
+
+</File>
+
+الاقتراح على analyzer من غير مرادفات، عشان البادئة تفضل خفيفة. بحث الصفحة هو اللي فيه المرادفات والـ fuzzy.
+
+## جسم البحث
+
+<File name="src/search.js">
+
+```js
+function toNum(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function asFilter(clauses) {
+  const list = clauses.filter(Boolean);
+  if (list.length === 0) return { match_all: {} };
+  if (list.length === 1) return list[0];
+  return { bool: { filter: list } };
+}
+
+function textQuery(q) {
+  return {
+    bool: {
+      should: [
+        { term: { sku: { value: q.toUpperCase(), boost: 20 } } },
+        {
+          multi_match: {
+            query: q,
+            fields: ["name^3", "description"],
+            fuzziness: "AUTO",
+            prefix_length: 1,
+          },
+        },
+      ],
+      minimum_should_match: 1,
+    },
+  };
+}
+
+export function searchBody(input) {
+  const q = String(input.q ?? "").trim();
+  const price = {};
+  const minPrice = toNum(input.minPrice);
+  const maxPrice = toNum(input.maxPrice);
+  if (minPrice != null) price.gte = minPrice;
+  if (maxPrice != null) price.lte = maxPrice;
+
+  const priceFilter = minPrice != null || maxPrice != null ? { range: { price } } : null;
+  const rating = toNum(input.minRating);
+  const ratingFilter = rating != null ? { range: { rating: { gte: rating } } } : null;
+  const stockFilter = input.inStock === "1" ? { range: { stock: { gt: 0 } } } : null;
+  const ram = toNum(input.ramGb);
+  const ramFilter = ram != null ? { term: { ram_gb: ram } } : null;
+  const brandFilter = input.brand ? { term: { brand: String(input.brand) } } : null;
+
+  const hitsFilters = [priceFilter, ratingFilter, stockFilter, ramFilter, brandFilter];
+  const brandCountFilters = [priceFilter, ratingFilter, stockFilter, ramFilter];
+
+  return {
+    query: {
+      bool: {
+        must: q ? [textQuery(q)] : [{ match_all: {} }],
+        filter: hitsFilters.filter(Boolean),
+      },
+    },
+    aggs: {
+      brands: {
+        filter: asFilter(brandCountFilters),
+        aggs: { values: { terms: { field: "brand", size: 20 } } },
+      },
+    },
+    highlight: {
+      fields: { description: { fragment_size: 140, number_of_fragments: 1 } },
+      pre_tags: ["<mark>"],
+      post_tags: ["</mark>"],
+    },
+  };
+}
+
+export function suggestBody(prefix) {
+  return {
+    size: 8,
+    _source: ["name"],
+    query: {
+      multi_match: {
+        query: prefix.trim(),
+        type: "bool_prefix",
+        fields: ["name.suggest", "name.suggest._2gram", "name.suggest._3gram"],
+      },
+    },
+  };
+}
+```
+
+</File>
+
+عداد البراند مش شايف فلتر البراند، فاختيار Apple مش هيمسح Lenovo من القائمة. باقي الفلاتر لسه بتضيّق العدّ.
+
+## السيرفر
+
+<File name="src/server.js">
+
+```js
+import express from "express";
+import { es } from "./es.js";
+import { ensureProductsIndex } from "./ensure-index.js";
+import { searchBody, suggestBody } from "./search.js";
+
+const app = express();
+app.use(express.json());
+
+app.get("/search", async (req, res, next) => {
+  try {
+    const page = clampInt(req.query.page, 1, 20);
+    const size = clampInt(req.query.size, 20, 50);
+    const result = await es.search({
+      index: "products",
+      from: (page - 1) * size,
+      size,
+      track_total_hits: true,
+      ...searchBody(req.query),
+    });
+    const total = result.hits.total;
+    res.json({
+      total: typeof total === "number" ? total : total?.value ?? 0,
+      totalRelation: typeof total === "number" ? "eq" : total?.relation ?? "eq",
+      hits: result.hits.hits.map((hit) => ({
+        id: hit._id,
+        score: hit._score,
+        name: hit._source?.name,
+        brand: hit._source?.brand,
+        price: hit._source?.price,
+        highlight: hit.highlight?.description ?? [],
+      })),
+      brands: (result.aggregations?.brands?.values?.buckets ?? []).map((b) => ({
+        key: b.key,
+        count: b.doc_count,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/suggest", async (req, res, next) => {
+  try {
+    const q = String(req.query.q ?? "");
+    if (q.trim().length < 2) return res.json({ suggestions: [] });
+    const result = await es.search({ index: "products", ...suggestBody(q) });
+    res.json({ suggestions: result.hits.hits.map((hit) => hit._source?.name) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/products", async (req, res, next) => {
+  try {
+    const doc = req.body ?? {};
+    if (!doc.id || !doc.name) return res.status(400).json({ error: "id_and_name_required" });
+    await es.index({
+      index: "products",
+      id: String(doc.id),
+      refresh: true,
+      document: {
+        sku: String(doc.sku ?? "").toUpperCase(),
+        name: doc.name,
+        description: doc.description ?? "",
+        brand: doc.brand ?? "",
+        category: doc.category ?? "",
+        price: Number(doc.price ?? 0),
+        rating: Number(doc.rating ?? 0),
+        stock: Number(doc.stock ?? 0),
+        ram_gb: Number(doc.ram_gb ?? 0),
+        storage_gb: Number(doc.storage_gb ?? 0),
+      },
+    });
+    res.status(201).json({ id: String(doc.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(503).json({ error: "search_unavailable" });
+});
+
+await ensureProductsIndex();
+app.listen(3000, () => console.log("search api on :3000"));
+
+function clampInt(value, fallback, max) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return Math.min(fallback, max);
+  return Math.min(n, max);
+}
+```
+
+</File>
+
+<Box type="warn" title="المسار المفتوح ده مش بتاع الإنتاج">
+
+`POST /products` من غير مصادقة، و`refresh: true`، وأمان Elasticsearch مقفول في Docker المحلي. في المتجر: الكتابة من الـ outbox، والبحث بس هو اللي متاح، و Elasticsearch مش متفتح على الشبكة.
+
+`from` و `size` كويسين لأول صفحات. التصفح العميق (`from` بالآلاف) تقيل. ساعتها دور على `search_after` في الـ docs.
+
+</Box>
+
+الـ handler الأخير أربع معاملات عشان Express يعرفه كـ errors. لو Elasticsearch واقع، العميل ياخد ٥٠٣ مش صفحة فاضية شكلها بحث ناجح.
+
+## 🧪 Lab
+
+شغّل Docker من فصل ٢، ثم `node src/server.js`، وابعت منتجين:
+
+```bash
+curl -s localhost:3000/products -H 'content-type: application/json' -d \
+  '{"id":"p-1001","sku":"APL-IP15P-256","name":"Apple iPhone 15 Pro","description":"موبايل بكاميرا ليلية.","brand":"Apple","price":62999,"rating":4.8,"stock":12,"ram_gb":8}'
+
+curl -s localhost:3000/products -H 'content-type: application/json' -d \
+  '{"id":"p-1002","sku":"CASE-IP15","name":"Clear Case","description":"case compatible with iPhone 15 Pro","brand":"Generic","price":299,"rating":4.1,"stock":40}'
+```
+
+بعدين:
+
+```bash
+curl -s 'localhost:3000/search?q=ifone%2015%20pro'
+curl -s 'localhost:3000/search?q=iphone&brand=Apple'
+curl -s 'localhost:3000/suggest?q=iph'
+```
+
+الأول: الموبايل فوق الكفر رغم الغلطة. التاني: الكفر يختفي والـ brands لسه فيها أكتر من مفتاح لو عندك منتج تاني معدّي باقي الفلاتر. التالت: أسماء باديتها قريبة من `iph`، من غير ما تشغّل fuzzy.
+
+<Checklist id="es-lab" title="✅ الخلاصة — Checklist" items={[
+  "الـ API بس هو اللي يكلّم Elasticsearch. البحث فيه score، والفلاتر في filter، وعداد البراند من غير فلتر البراند.",
+  "الاقتراح بادئة على search_as_you_type، وبحد أدنى حرفين.",
+  "سقوط Elasticsearch يبقى 503. مسار الكتابة المفتوح للتجربة مش تصميم المتجر.",
+  "الـ SKU يترفع uppercase في الكتابة وفي تطابق الـ term."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه route البحث فيه try/catch في المثال ده؟">Express 4 مش بيمرر رفض async للـ error handler لوحده.</Q>
+  <Q n={2} q="ليه عداد brands مش جواه فلتر brand؟">عشان اختيار براند واحد ميمسحش باقي البراندات من الواجهة.</Q>
+  <Q n={3} q="refresh: true موجود ليه في POST التجريبي؟">عشان البحث اللي بعده يشوف المستند فورًا. مسار الإنتاج يسيب الـ refresh العادي.</Q>
+</Quiz>

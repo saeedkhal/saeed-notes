@@ -1,0 +1,150 @@
+---
+title: "تحليل النص قبل ما يتخزن"
+short: Text Analysis
+order: 3
+label: "فصل ٣"
+badge: "جوه المحرك · فصل ٣"
+en: "Character filters · tokenizer · token filters · synonyms"
+keywords: "analyzer · tokenizer · stemming · synonyms · keyword"
+goal: "تمشي النص في خط التحليل، وتبني analyzer ينفع متجر مصري بعربي وإنجليزي من غير ما تبوّظ أرقام الموديلات."
+part: "جوه المحرك"
+color: "c3"
+---
+
+## الكلمة اللي اليوزر كتبها مش هي اللي بتتخزن
+
+`Apple iPhone 15 Pro` لو اتسجلت جملة واحدة، البحث عن `iphone` ممكن ميلقاش حاجة. التحليل بيكسر النص ويوحّده **وقت الـ indexing ووقت السؤال**، عشان الطرفين يتكلموا نفس اللغة.
+
+<Flow items={[
+  { t: "النص", s: "Apple iPhone 15 Pro", c: 1 }, "→",
+  { t: "Char filters", s: "تنظيف الحروف", c: 5 }, "→",
+  { t: "Tokenizer", s: "تقسيم كلمات", c: 3 }, "→",
+  { t: "Token filters", s: "lowercase ومرادفات", c: 4 },
+]} />
+
+الناتج توكنز زي `apple` و `iphone` و `15` و `pro`. من هنا تقدر تعمل lowercase، أو تشيل كلمات مالهاش معنى، أو توحّد المرادفات. القواعد دي قرار بزنس ولغة، مش زرار واحد اسمه "بحث عربي".
+
+<Box type="story" icon="🧾" title="الجرسون قبل المطبخ">
+
+اليوزر يقول "من فضلك آيفون ١٥ برو". الجرسون يشيل "من فضلك"، يوحّد الألف، ويحوّل الأرقام الهندية لـ `15`، وبعدين يبعت التذكرة للمطبخ. لو المطبخ فاهم شكل والتذكرة شكل تاني، الطلب هيضيع.
+
+</Box>
+
+## كل مرحلة بتقرر إيه
+
+<Grid2>
+<Card title="Character filters" c={5}>
+
+بتشتغل على النص وهو لسه جملة. زي ما تحوّل `١٥` إلى `15`، أو تشيل حركة، قبل التقسيم.
+
+</Card>
+<Card title="Tokenizer" c={3}>
+
+يقص الجملة كلمات. الـ `standard` tokenizer مناسب لأسماء المنتجات المختلطة. بيفصل على المسافات وعلامات الترقي.
+
+</Card>
+</Grid2>
+
+بعد التقسيم تيجي <En>token filters</En> بالترتيب:
+
+- **lowercase:** `iPhone` و `iphone` يبقوا نفس التوكن.
+- **stop words:** كلمات زي `with` و `for` و "من" و "في" بتتشال لو مش بتفرّق في البحث. متشلّهاش من غير ما تجرب، لأن "pro" مثلًا مش stop word ولو اتشالت هتبوّظ موديلات.
+- **stemming:** يرجع الكلمة لجذرها. مفيد في الوصف الطويل، وخطر على اسم المنتج. stemmer عربي قوي ممكن يقرّب كلمات مش عايزها تتقرب.
+- **synonyms:** `آيفون` و `ايفون` و `iphone` يبقوا حاجة واحدة. و `لابتوب` و `laptop`. المرادف الغلط بيوسّع البحث ويزوّد نتائج مش مقصودة.
+
+<Box type="warn" title="اسم المنتج غير فقرة الوصف">
+
+متحطّش أقوى stemmer على `name`. أسماء الموديلات والبراندات عايزة تطابق أوضح. الوصف يتحمّل تحليل أغنى. والـ SKU يفضل حقل `keyword`: قيمة كاملة من غير تقطيع، عشان الدور على `APL-IP15P-256` ميبقاش بحث كلمات.
+
+</Box>
+
+## Analyzer للمتجر
+
+<File name="src/index-products.js">
+
+```js
+import { es } from "./es.js";
+
+const index = "products";
+
+export const settings = {
+  analysis: {
+    char_filter: {
+      indic_digits: {
+        type: "mapping",
+        mappings: ["٠ => 0", "١ => 1", "٢ => 2", "٣ => 3", "٤ => 4", "٥ => 5", "٦ => 6", "٧ => 7", "٨ => 8", "٩ => 9"],
+      },
+    },
+    filter: {
+      product_synonyms: {
+        type: "synonym_graph",
+        synonyms: [
+          "iphone, آيفون, ايفون",
+          "laptop, لابتوب, لاب توب, notebook",
+          "phone, موبايل, تليفون",
+        ],
+      },
+    },
+    analyzer: {
+      product_text: {
+        type: "custom",
+        char_filter: ["indic_digits"],
+        tokenizer: "standard",
+        filter: ["lowercase", "arabic_normalization", "product_synonyms"],
+      },
+    },
+  },
+};
+
+export const mappings = {
+  properties: {
+    sku: { type: "keyword" },
+    name: { type: "text", analyzer: "product_text" },
+    description: { type: "text", analyzer: "product_text" },
+    brand: { type: "keyword" },
+    category: { type: "keyword" },
+    price: { type: "float" },
+    rating: { type: "float" },
+    stock: { type: "integer" },
+    ram_gb: { type: "integer" },
+    storage_gb: { type: "integer" },
+  },
+};
+
+export async function ensureProductsIndex() {
+  const exists = await es.indices.exists({ index });
+  if (exists) return;
+  await es.indices.create({ index, settings, mappings });
+}
+```
+
+</File>
+
+`brand` من نوع `keyword` لأن الفلتر "Apple" تطابق كامل، مش كلمات. هتحتاجه في الـ facets. `arabic_normalization` بيلم أشكال حروف زي الألف، فمتكررش نفس الشغل بفلتر تاني من غير ما تقرا هو بيعمل إيه. المرادف لازم يتكتب بالشكل اللي طالع من الفلتر اللي قبله. لو التطبيع غيّر الألف، حط الشكل الجديد في القائمة، و`_analyze` هو الحكم.
+
+تغيير الـ analyzer بعد ما الإندكس اتملّى **مش بيرجع يحلّل المستندات القديمة**. هتحتاج reindex. عشان كده جرّب المرادفات على عينة قبل ما تفتحها على عشر مليون منتج.
+
+## 🧪 Lab
+
+بعد ما الإندكس يتخلق، اسأل المحرك هو شايف الجملة إزاي:
+
+```bash
+curl -s localhost:9200/products/_analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"analyzer":"product_text","text":"آيفون ١٥ برو"}'
+```
+
+المفروض تشوف توكنز قريبة من `iphone` و `15` و `برو` (أو `pro` لو ضفت المرادف). لو `١٥` فضلت زي ما هي، الـ char filter مش واصل للـ analyzer. لو `آيفون` مفترق عن `iphone`، مرادفات الـ synonym لسه مش في الخط.
+
+<Checklist id="es-analysis" title="✅ الخلاصة — Checklist" items={[
+  "التحليل خط: char filters ثم tokenizer ثم token filters، على الكتابة وعلى السؤال.",
+  "lowercase والمرادفات قرار بزنس. الـ stemming على اسم الموديل غالبًا بيأذي.",
+  "حقول الفلتر والـ SKU تبقى keyword. حقول النص تبقى text بـ analyzer.",
+  "تغيير الـ analyzer مش بيحدّث القديم لوحده. محتاج reindex."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه iPhone و iphone بيلاقوا بعض من غير ما تكتب الاتنين في الكويري؟">فلتر lowercase بيوحّد التوكن وقت التخزين ووقت السؤال.</Q>
+  <Q n={2} q="SKU يتخزن text ولا keyword؟">keyword. عايز القيمة كاملة، مش توكنز متقسمة.</Q>
+  <Q n={3} q="ضفت مرادف جديد والإندكس القديم مبيستخدمهوش. ليه؟">المستندات القديمة اتسجلت بالتحليل القديم. المرادف الجديد محتاج إعادة index.</Q>
+</Quiz>

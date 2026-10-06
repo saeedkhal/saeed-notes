@@ -1,0 +1,136 @@
+---
+title: "Inverted Index: ليه البحث سريع"
+short: Inverted Index
+order: 2
+label: "فصل ٢"
+badge: "جوه المحرك · فصل ٢"
+en: "Inverted index · documents · Elasticsearch service"
+keywords: "inverted index · document · docker · client"
+goal: "تفهم Elasticsearch خدمة مش مكتبة، وإزاي الـ inverted index بيوصّلك من الكلمة للمستندات من غير ما تلف على كل المنتجات."
+part: "جوه المحرك"
+color: "c2"
+---
+
+## Elasticsearch خدمة لوحدها
+
+<En>Elasticsearch</En> محرك بحث وتحليل موزّع. بتبعتله داتا، يعملها indexing، وبعدين تبحث فيها. معاه full-text search، ترتيب، فلاتر، aggregations، fuzzy، autocomplete، و highlighting. ومتصمم يتوزع على أكتر من آلة لما الداتا أو الترافيك يكبروا.
+
+<Hl c="p">مش package تحطه جوه الـ API وخلاص.</Hl> عملية لوحدها ليها RAM وديسك وبورت. في التطوير تشتغل بـ Docker جنب الـ API والداتابيز. في الإنتاج يا تدير الـ cluster بنفسك يا تاخد خدمة جاهزة. نفس أفكار البحث موجودة في OpenSearch، والتفاصيل بتختلف. الأمثلة هنا على Elasticsearch.
+
+<Box type="warn" title="متفتحش بورت Elasticsearch على الإنترنت">
+
+اليوزر بيكلّم Express. Express بس هو اللي بيكلّم Elasticsearch. لو البورت `9200` متاح للعالم، أي حد يقدر يقرأ أو يمسح الإندكس.
+
+</Box>
+
+## من المستند للكلمة، ولا من الكلمة للمستند؟
+
+الطريقة الساذجة: مع كل بحث تلف على العشر مليون منتج وتشوف الكلمة موجودة ولا لأ. ده <En>document → words</En>.
+
+وقت الـ indexing، Elasticsearch يبني هيكل عكسي: <En>inverted index</En>. كل كلمة، وجنبها المستندات اللي ظهرت فيها. البحث بقى <Hl c="y">word → documents</Hl>.
+
+| الكلمة | مستندات |
+|---|---|
+| `iphone` | موبايل iPhone 15 Pro، كفر compatible with iPhone |
+| `pro` | موبايل iPhone 15 Pro |
+| `case` | الكفر بس |
+
+لما اليوزر يكتب `iphone`، المحرك مش بيبتدي من المنتج الأول. بيروح لسطر الكلمة في الفهرس ويطلّع الليست.
+
+<Box type="story" icon="📖" title="فهرس آخر الكتاب">
+
+من غير فهرس، هتقلب كل صفحة تدور على "كشري". بالفهرس، الكلمة مكتوبة مرة، وجنبها أرقام الصفحات. الفهرس بيتبني والكتاب بيتطبع، مش وأنت بتسأل.
+
+</Box>
+
+المستند في Elasticsearch مش صف SQL. مستند البحث بتاع المنتج ممكن يبقى JSON فيه الاسم والوصف والبراند والسعر والتقييم والمخزون، حتى لو في SQL دول خمس جداول. شكل المستند ده هنبنيه في فصل المزامنة.
+
+## الفهرس مش ببلاش وقت الكتابة
+
+كل ما تحفظ منتج أو تغيّر سعره، الفهرس لازم يتحدث. القراءة بتبقى سريعة عشان الكتابة دفعت التمن قبل كده. وعشان كده Elasticsearch <En>near-real-time</En>: بعد ما الـ index ينجح، البحث ممكن يفضل ثانية لحد ما يحصل refresh (الافتراضي حوالي ثانية). متستناش إن الطلب اللي بعده على طول يشوف التعديل.
+
+<Flow items={[
+  { t: "منتج جديد", s: "من الـ API", c: 1 }, "→",
+  { t: "Indexing", s: "تحليل النص + الفهرس", c: 3 }, "→",
+  { t: "Refresh", s: "يبقى قابل للبحث", c: 4 }, "→",
+  { t: "Search", s: "من الكلمة للمستندات", c: 2 },
+]} />
+
+## 🧪 Lab
+
+شغّل Elasticsearch محليًا. الملف ده للتطوير بس: الأمان مقفول عشان متتعطلش في أول تجربة. في الإنتاج سيبه شغال وابعت API key.
+
+<File name="compose.yaml">
+
+```yaml
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+```
+
+</File>
+
+على لينكس لو الـ container وقع بدري، دور على `vm.max_map_count`. راجع رسالة Docker، متخمّنهاش.
+
+<File name="src/es.js">
+
+```js
+import { Client } from "@elastic/elasticsearch";
+
+export const es = new Client({
+  node: process.env.ELASTIC_URL ?? "http://localhost:9200",
+});
+```
+
+</File>
+
+<File name="src/seed.js">
+
+```js
+import { es } from "./es.js";
+
+const index = "products";
+
+const exists = await es.indices.exists({ index });
+if (!exists) await es.indices.create({ index });
+
+await es.index({
+  index,
+  id: "p-1001",
+  refresh: true,
+  document: {
+    name: "Apple iPhone 15 Pro",
+    description: "موبايل بكاميرا 48 ميجا.",
+  },
+});
+
+const found = await es.search({
+  index,
+  query: { match: { name: "iphone" } },
+});
+
+console.log(found.hits.hits.map((hit) => hit._source.name));
+```
+
+</File>
+
+`refresh: true` هنا عشان التجربة تشوف المستند فورًا. في مسار الكتابة الحقيقي سيبه للـ refresh العادي، عشان متعملش refresh مع كل طلب.
+
+<Checklist id="es-index" title="✅ الخلاصة — Checklist" items={[
+  "Elasticsearch عملية مستقلة. الـ API بيتكلم معاها، واليوزر لأ.",
+  "Inverted index بيربط الكلمة بالمستندات، فمش بنلف على كل المنتجات مع كل بحث.",
+  "الفهرس بيتبني وقت الكتابة، والبحث near-real-time مش لحظة الـ index بالظبط.",
+  "مستند البحث شكل مناسب للبحث، ومش نسخة من جداول SQL."
+]} />
+
+<Quiz>
+  <Q n={1} q="inverted index بيرتّب الدنيا إزاي؟">من الكلمة لقائمة المستندات، مش من المستند لكلماته وقت السؤال.</Q>
+  <Q n={2} q="ليه منستناش نتيجة البحث تتغير في نفس اللحظة بعد index ناجح؟">Elasticsearch near-real-time. المستند يبقى قابل للبحث بعد refresh.</Q>
+  <Q n={3} q="مين المفروض يفتح اتصال على بورت 9200؟">الـ API والخدمات الداخلية. مش متصفح اليوزر.</Q>
+</Quiz>

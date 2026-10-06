@@ -1,0 +1,182 @@
+---
+title: "المزامنة: الـ SQL الحقيقة والسيرش يلحق"
+short: المزامنة
+order: 8
+label: "فصل ٨"
+badge: "المعمارية · فصل ٨"
+en: "Outbox · CDC · eventual consistency · reindex"
+keywords: "outbox · CDC · denormalize · alias · idempotent"
+goal: "تحدّث السعر في SQL وتوصّله لـ Elasticsearch من غير ما التحديث يضيع لو السيرش وقع لحظة الطلب."
+part: "المعمارية"
+color: "c3"
+---
+
+## نفس المنتج، شكلين
+
+في SQL المنتج متوزع: جدول المنتج، البراند، القسم، المخزون. في Elasticsearch عايز مستند واحد جاهز للبحث. اليوزر بيفلتر بكلمة "Apple" مش برقم `brand_id`.
+
+<File name="sql/search-doc.sql">
+
+```sql
+SELECT p.id, p.sku, p.name, p.description,
+       b.name AS brand, c.slug AS category,
+       p.price, p.rating, i.stock, p.ram_gb, p.storage_gb
+FROM products p
+JOIN brands b ON b.id = p.brand_id
+JOIN categories c ON c.id = p.category_id
+JOIN inventory i ON i.product_id = p.id
+WHERE p.id = $1;
+```
+
+</File>
+
+ده تمن الـ denormalize: لو اسم البراند اتغير، كل مستندات البراند ده لازم تتكتب تاني في Elasticsearch. التمن مقبول لأن البحث بيقرا أكتر بكتير ما اسم البراند بيتغير.
+
+## التحديث الساذج بيسيّب الداتا متخالفة
+
+أبسط طريق: `UPDATE` في SQL، وبعدين `es.index`. لو الأول نجح والتاني فشل (الشبكة، أو Elasticsearch بيعيد تشغيل)، السعر في الداتابيز جديد والفهرس قديم. اليوزر هيشوف سعر غلط. ومفيش حد هيحاول تاني، لأن الطلب خلّص عند الـ API.
+
+<Hl c="g">متخلّصش طلب اليوزر على خطوتين من غير ما تسجّل إن التانية لسه مطلوبة.</Hl>
+
+## Outbox: الحدث يتسجل مع البيزنس
+
+<En>Transactional outbox</En>: نفس الـ transaction تحدّث المنتج وتكتب صف في جدول `outbox`. يا الاتنين ينجحوا يا الاتنين يترجعوا. عملية تانية، الـ indexer، تقرأ الصفوف وتحدّث Elasticsearch.
+
+<Diagram
+  title="التحديث والحدث بيتسجلوا مع بعض"
+  height={340}
+  mheight={500}
+  nodes={[
+    { id: "api", t: "Express", s: "غيّر السعر", c: 1, x: 84, y: 26, mx: 50, my: 8 },
+    { id: "sql", t: "Postgres", s: "product + outbox", c: 2, x: 46, y: 26, mx: 50, my: 32 },
+    { id: "worker", t: "Indexer", s: "يقرأ الصفوف الجديدة", c: 4, x: 46, y: 78, mx: 50, my: 62 },
+    { id: "es", t: "Elasticsearch", s: "search document", c: 3, x: 14, y: 78, mx: 50, my: 90 },
+  ]}
+  edges={[
+    { from: "api", to: "sql", t: "transaction واحدة", c: 1 },
+    { from: "sql", to: "worker", t: "صف pending", c: 2, bend: 28, mbend: 30 },
+    { from: "worker", to: "sql", t: "sent بعد النجاح", c: 4, dash: true, bend: 28, mbend: 30 },
+    { from: "worker", to: "es", t: "index بنفس الـ id", c: 3 },
+  ]}
+/>
+
+<File name="sql/outbox.sql">
+
+```sql
+CREATE TABLE outbox (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_type text NOT NULL,
+  payload jsonb NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+</File>
+
+<File name="src/outbox.js">
+
+```js
+export async function updatePrice(pool, { id, price }) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("UPDATE products SET price = $1 WHERE id = $2", [price, id]);
+    await client.query(
+      "INSERT INTO outbox (event_type, payload) VALUES ($1, $2::jsonb)",
+      ["product.updated", JSON.stringify({ id })],
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function claimBatch(pool) {
+  const { rows } = await pool.query(
+    `UPDATE outbox SET status = 'sending'
+     WHERE id IN (
+       SELECT id FROM outbox
+       WHERE status = 'pending'
+       ORDER BY id
+       FOR UPDATE SKIP LOCKED
+       LIMIT 20
+     )
+     RETURNING id, payload`,
+  );
+  return rows;
+}
+
+export async function publishBatch(pool, es, loadSearchDoc, rows) {
+  for (const row of rows) {
+    const id = String(row.payload.id);
+    const product = await loadSearchDoc(pool, row.payload.id);
+    if (product) {
+      await es.index({ index: "products", id, document: product });
+    } else {
+      await es.delete({ index: "products", id }).catch((err) => {
+        if (err.statusCode !== 404) throw err;
+      });
+    }
+    await pool.query("UPDATE outbox SET status = 'sent' WHERE id = $1", [row.id]);
+  }
+}
+```
+
+</File>
+
+`claimBatch` يعلّم الصفوف `sending` جوه statement واحدة، فـ indexer تاني مش هياخدها (`SKIP LOCKED`). `publishBatch` يكتب Elasticsearch **وبعدين** يعلّم `sent`. الكتابة بنفس id المنتج upsert: لو العملية وقعت بعد نجاح الإندكس وقبل التعليم، المحاولة الجاية تكتب نفس المستند. التعليم قبل النجاح بيضيّع الحدث.
+
+لو الصف فضل `sending` لأن العملية ماتت في النص، رجّعه `pending` بعد دقيقتين. متعلّمش الصف `sent` قبل ما Elasticsearch يرد.
+
+<Box type="tip" title="الـ payload فيه id مش نسخة المنتج كلها">
+
+الـ indexer يقرأ المنتج من SQL وقت الإرسال، فيبعت آخر حالة. لو صفّين اتراكموا على نفس المنتج، كتابة المستند كامل آخر مرة كفاية. عشان كده id ثابت أحسن من إنك تبعت السعر القديم جوه الحدث ويتكتب فوق سعر أحدث.
+
+</Box>
+
+## Broker و CDC لما الكتابة مش من باب واحد
+
+الـ indexer يقدر يحدّث Elasticsearch على طول، أو يحط الحدث على Kafka أو RabbitMQ ولو أكتر من مستهلك محتاجه. الـ broker مش هو اللي بيحمي الـ transaction. الحماية إن الصف اتكتب في SQL مع تعديل المنتج.
+
+<En>CDC</En> زي Debezium بيقرأ سجل Postgres نفسه ويبعت التغييرات. مفيد لما أكتر من برنامج يعدّل المنتجات، ومش متطمن إن كل مسار فاكر يكتب outbox. التمن نظام زيادة تشغّله وتراقبه.
+
+الاسم بتاع التأخير ده <En>eventual consistency</En>: الداتابيز اتحدثت دلوقتي، والسيرش هيشوف السعر بعد لحظات. قول كده في الإنترفيو بصراحة. صفحة المنتج تقدر تقرأ السعر من SQL لو الفرق ده مؤذي، وتسيب Elasticsearch للقائمة والترتيب.
+
+الـ refresh الافتراضي كمان بيزوّد حوالي ثانية بعد ما الـ index ينجح. التأخير ده غير تأخير الـ outbox.
+
+## إعادة بناء الإندكس من غير ما تقفل البحث
+
+تغيير الـ mapping أو الـ analyzer محتاج إندكس جديد. ابني `products-v2`، املىه، وبعدين بدّل alias اسمه `products` من القديم للجديد. الـ API بيدور على الـ alias، فمش بيعرف إن اللي تحت اتغير.
+
+```js
+await es.indices.updateAliases({
+  actions: [
+    { remove: { index: "products-v1", alias: "products" } },
+    { add: { index: "products-v2", alias: "products" } },
+  ],
+});
+```
+
+أول تحميل للعشر مليون منتج يبقى بـ `bulk`، مش طلب index لكل منتج. راجع رد الـ bulk: `errors: true` يعني فيه عناصر فشلت حتى لو الطلب نفسه رجع ٢٠٠.
+
+## 🧪 Lab
+
+ارسم على ورقة طلب "غيّر السعر لـ ٥٠٠٠٠" في ثلاث تصاميم: تحديث مزدوج، outbox، و CDC. في كل تصميم اكتب إيه اللي يحصل لو Elasticsearch راجع ٥٠٣ في اللحظة دي. التصميم الأول بيخلّص الطلب والداتا متخالفة. التانيين بيسيّبوا أثر يتتعاد. الفرق بين outbox و CDC: مين اللي بيطلّع الأثر، التطبيق ولا سجل الداتابيز.
+
+<Checklist id="es-sync" title="✅ الخلاصة — Checklist" items={[
+  "مستند البحث denormalized للعرض والفلاتر، و SQL تفضل مصدر الحقيقة.",
+  "تحديث SQL ثم Elasticsearch من غير أثر مشترك بيضيّع التحديث لو الخطوة التانية فشلت.",
+  "الـ outbox في نفس transaction. التعليم sent بعد نجاح الإندكس، والكتابة بنفس id آمنة تتكرر.",
+  "التأخير eventual consistency، وفيه كمان refresh. الدفع والمخزون مش من نسخة البحث.",
+  "تغيير الـ mapping يبقى إندكس جديد ثم تبديل alias. التحميل الأول bulk."
+]} />
+
+<Quiz>
+  <Q n={1} q="ليه الـ outbox في نفس transaction بتاع UPDATE السعر؟">عشان يا السعر والحدث يتحفظوا سوا يا الاتنين يترجعوا. مفيش سعر جديد من غير أثر هيتعمله index.</Q>
+  <Q n={2} q="إيه اللي يخلّي إعادة الإندكس آمنة لو اتكررت؟">استخدام id المنتج كـ id للمستند. الكتابة التانية بتستبدل نفس المستند.</Q>
+  <Q n={3} q="امتى CDC أنسب من outbox جوه التطبيق؟">لما أكتر من كاتب يعدّل الداتابيز ومش ضامن إن كلهم هيكتبوا الحدث.</Q>
+</Quiz>
