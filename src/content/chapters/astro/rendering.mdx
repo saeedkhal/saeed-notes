@@ -1,0 +1,95 @@
+---
+title: ثابت ولا سيرفر؟
+short: الرندر
+order: 11
+label: فصل ١١
+badge: السيرفر · فصل ١١
+en: output static · output server · prerender · adapters
+keywords: prerender · adapter · static · server
+goal: تختار وضع البناء، وتعلّم صفحة واحدة تطلع عن القطيع، وتركّب adapter للاستضافة.
+part: السيرفر
+color: c1
+---
+
+## الوضع الافتراضي: كله يتبنى
+
+من غير أي إعداد، `output` هو `static`. كل صفحة و endpoint بيتولّدوا HTML أو ملف وقت `astro build`، و `dist/` يتنرفع على أي استضافة ملفات. مفيش سيرفر Node شغال بعد كده. ده وضع مدونة وموقع الشركة والمذكرة دي.
+
+<Grid2>
+<Card title="static" c={3}>
+
+كل الصفحات جاهزة. صفحة تطلع عن القطيع بـ `export const prerender = false`، وساعتها محتاج adapter عشان الصفحة دي تتشغّل على السيرفر.
+
+</Card>
+<Card title="server" c={2}>
+
+كل الصفحات عند الطلب. صفحة تقدر تتبنى مسبقًا بـ `export const prerender = true`. مناسب لو أكتر الموقع شخصي أو لوجن.
+
+</Card>
+</Grid2>
+
+الوضع القديم `hybrid` اتشال من Astro 5. متدورش عليه في كونفج جديد. الاستثناء صفحة بصفحة عن طريق `prerender`.
+
+<File name="src/pages/account.astro">
+
+```astro
+---
+export const prerender = false;
+const name = Astro.cookies.get("name")?.value ?? "يا زائر";
+---
+<p>أهلًا {name}</p>
+```
+
+</File>
+
+<Hl c="b">صفحة فيها كوكي أو ترويسة أو بيانات الزائر مش تتبنى مع الباقي.</Hl>
+
+## الـ adapter
+
+الـ adapter بيترجم صفحات "عند الطلب" لشكل الاستضافة: دالة على Netlify أو Vercel، أو سيرفر Node، أو Worker على Cloudflare.
+
+<File name="terminal">
+
+```bash
+pnpm astro add node
+```
+
+</File>
+
+الأمر بيكتب `adapter` في الكونفج. في غيره `@astrojs/vercel` و `@astrojs/netlify` و `@astrojs/cloudflare`. اختار اللي هتنشر عليه، مش التلاتة.
+
+من غير adapter، `prerender = false` أو `output: "server"` هيفشل البناء. الصفحات الثابتة الخالصة مش محتاجاه.
+
+<Box type="story" icon="📦" title="علبة ولا مطبخ؟">
+
+`static` علب متغلفة على الرف. أي حد ياخدها. `server` مطبخ لسه شغال: لازم الاستضافة تعرف تشغّل المطبخ (الـ adapter). صفحة `prerender = true` وسط وضع سيرفر علبة جاهزة وسط المنيو الحي.
+
+</Box>
+
+## إيه اللي بيتساب ثابت
+
+خلّي ثابت كل اللي مش بيتغير بين الزوار: المنيو، المقال، صفحة الهبوط، السايت ماب. سيّب عند الطلب: حسابي، بحث فيه صلاحيات، فورم بيكتب في قاعدة، أي حاجة بتقرأ كوكي.
+
+خلط الاتنين هو العادي في المشاريع الكبيرة مش تنازل. صفحة المقال ثابتة، وصندوق "طلباتي" جزيرة سيرفر أو صفحة `prerender = false`.
+
+## dev و preview والإنتاج
+
+`astro dev` للتعديل السريع. من Astro 6 سيرفر التطوير بقى أقرب لتشغيل الإنتاج على runtimes مش Node، عشان مفاجأة "شغالة عندي" تقل. برضه: `build` ثم `preview` ثم النشر.
+
+`Astro.request` و `Astro.cookies` و `Astro.clientAddress` ليهم معنى وقت الطلب. على صفحة ثابتة مفيش زائر وقت البناء، فمتقراش كوكي هناك وتفتكر إنه كوكي الزائر.
+
+الاستضافة الثابتة (ملفات بس) مش هتشغّل صفحة سيرفر حتى لو البناء نجح عندك بـ adapter تاني. الـ adapter والاستضافة زوج.
+
+<Box type="tip" title="GitHub Pages">
+
+صفحات بس. `site` و `base` مظبوطين، ومن غير مسارات `prerender = false`. لو محتاج سيرفر، انقل الاستضافة أو سيّب الجزء الحي على خدمة تانية.
+
+</Box>
+
+<Checklist id="astro-rendering" title="خلّصت الفصل لما" items={["تشرح `static` و `server` من غير كلمة hybrid", "تعلّم صفحة `prerender = false` وتعرف إنها محتاجة adapter", "تركّب adapter بنفس نوع الاستضافة", "متقراش كوكي زائر في صفحة بتتبنى", "تجرّب `preview` قبل ما تنشر"]} />
+
+<Quiz>
+<Q n={1} q="الوضع الافتراضي من غير `output` في الكونفج؟">`static`. كله يتبنى لملفات.</Q>
+<Q n={2} q="وضع hybrid في Astro 7 لسه موجود؟">لأ. الاستثناء صفحة بصفحة بـ `prerender`.</Q>
+<Q n={3} q="مشروع ثابت كله، محتاج adapter؟">لأ، إلا لو فيه مسار `prerender = false`.</Q>
+</Quiz>

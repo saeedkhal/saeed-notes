@@ -1,0 +1,114 @@
+---
+title: جزر السيرفر والـ Actions والجلسة
+short: التفاعل الحي
+order: 12
+label: فصل ١٢
+badge: السيرفر · فصل ١٢
+en: server:defer · actions · sessions · fallback
+keywords: server:defer · defineAction · session
+goal: تخلّي حتة من صفحة ثابتة تتجدد لوحدها، وتستقبل فورم بنوع آمن، وتفتكر الزائر بين الطلبات.
+part: السيرفر
+color: c2
+---
+
+## جزيرة سيرفر
+
+صفحة المنيو كلها HTML جاهز، وصندوق "طلباتك النهارده" بيتغير لكل زائر. `server:defer` على مكوّن Astro يأجّل الحتة دي: الصفحة تطلع فورًا، والحتة تتجاب بعدها بطلب منفصل للسيرفر، وترجع HTML مش جافاسكربت إطار.
+
+<File name="src/pages/menu.astro">
+
+```astro
+---
+import Orders from "../components/Orders.astro";
+---
+<h1>المنيو</h1>
+<Orders server:defer>
+  <p slot="fallback">بنجيب طلباتك…</p>
+</Orders>
+```
+
+</File>
+
+محتاج adapter، لأن الحتة بتترندر عند الطلب حتى لو باقي الصفحة ثابت. المحتوى الاحتياطي في `slot="fallback"` يظهر لحد ما الرد يوصل.
+
+الـ props بتعدّي في رابط الطلب مشفّرة. خلّيها صغيرة (رقم تعريف، مش مصفوفة المنيو كلها). المتصفح بيكاش طلبات GET، فتقدر تحط `Cache-Control` على الرد.
+
+<Box type="warn" title="الجزيرة مش شايفة رابط الصفحة">
+
+جوّه المكوّن المؤجّل، `Astro.url` بيبقى رابط الجزيرة نفسه (مسار خاص)، مش `/menu`. لو محتاج معامل من الصفحة الأم، ابعتْه prop. ومتحطّش سر في الـ props لأنهم طالعين في الطلب.
+
+</Box>
+
+<Hl c="o">جزيرة سيرفر = HTML متأخر. جزيرة `client:*` = جافاسكربت في المتصفح. متخلّطش الاتنين.</Hl>
+
+## Actions
+
+الـ endpoint بيديك `Response` وتكتب التحقق بنفسك. الـ <En>Action</En> دالة سيرفر بنوع: الدخل يتتحقق بـ Zod، والعميل والصفحة يشوفوا نفس الشكل.
+
+<File name="src/actions/index.ts">
+
+```ts
+import { defineAction } from "astro:actions";
+import { z } from "astro/zod";
+
+export const server = {
+  order: defineAction({
+    accept: "form",
+    input: z.object({
+      dish: z.string().min(1),
+      qty: z.number().int().min(1).max(10),
+    }),
+    handler: async (input) => {
+      return { id: "A1", dish: input.dish, qty: input.qty };
+    },
+  }),
+};
+```
+
+</File>
+
+فورم HTML يقدر يبعت للأكشن من غير جافاسكربت. من العميل، `actions.order({ dish, qty })` ترجّع `data` أو `error`. أسماء المساعدين (`getActionResult` و `isInputError`) اتظبطت عبر النسخ، فارجع لدليل الـ Actions وأنت بتوصل الصفحة بنتيجة الفورم.
+
+الصلاحيات والحد من التكرار مكانهم جوّه الـ handler أو في middleware بـ `getActionContext` من `astro:actions`. متسيبش أكشن يكتب في قاعدة من غير ما يعرف مين الطالب.
+
+نمط ثابت بعد الفورم: POST ثم تحويل ثم GET، عشان التحديث من المتصفح مايعيدش الإرسال. الجلسة هي اللي بتشيل نتيجة الأكشن بعد التحويل. محتاج مخزن جلسات من الـ adapter.
+
+## الجلسة
+
+`Astro.session` مخزن على السيرفر مربوط بالزائر، مش كوكي فيه الداتا كلها. الكوكي غالبًا مجرد معرّف.
+
+<File name="src/pages/cart.astro">
+
+```astro
+---
+export const prerender = false;
+const cart = (await Astro.session?.get("cart")) ?? [];
+---
+<p>في السلة {cart.length} حاجة</p>
+```
+
+</File>
+
+الـ adapter بيجهّز المخزن (على Netlify مثلًا Blobs). تقدر تبدّل الدرايفر من إعداد `session` في الكونفج. لو مش هتستخدم جلسات، `session: false` يشيلها من الحزمة.
+
+الجلسة بتتعمل أول ما تقرأها أو تكتبها، وبتتحفظ في آخر الطلب. متحطّش فيها ملفات ولا كائنات ضخمة.
+
+<Box type="story" icon="🎟️" title="نمرة الطاولة">
+
+الكوكي نمرة الطاولة. الطلبات نفسها متكتوبة عند الكاشير (مخزن الجلسة)، مش مطبوعة كلها على ورقة في إيد الزبون. لو الورقة وقعت، حد يقرأها ميشوفش الأكل كله.
+
+</Box>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"أفرّق Action عن endpoint؟" — الاتنين على السيرفر. الـ endpoint بترجع `Response` وشكلها عليك. الـ Action دالة بتحقق Zod ونوع مشترك بين الفورم والعميل، فالفورم البسيط أقل كود.
+
+</Box>
+
+<Checklist id="astro-server" title="خلّصت الفصل لما" items={["تحط `server:defer` مع fallback على حتة شخصية", "متبعتش props ضخمة لجزيرة السيرفر", "تعرّف Action بـ Zod في `src/actions`", "تعرف إن الجلسة مخزن سيرفر مش الداتا كلها في الكوكي", "تقفل الأكشن بصلاحية قبل ما يكتب"]} />
+
+<Quiz>
+<Q n={1} q="`server:defer` بينزّل React للزائر؟">لأ. بيرجّع HTML من السيرفر بعد التحميل.</Q>
+<Q n={2} q="جزيرة سيرفر على موقع ثابت خالص من غير adapter؟">مش هتشتغل. الحتة دي عند الطلب.</Q>
+<Q n={3} q="ليه POST ثم redirect ثم GET بعد الفورم؟">عشان تحديث الصفحة مايعيدش إرسال الطلب.</Q>
+</Quiz>

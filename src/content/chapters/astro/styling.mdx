@@ -1,0 +1,135 @@
+---
+title: الستايل من غير ما يتسرّب
+short: الستايل
+order: 6
+label: فصل ٦
+badge: الصفحات · فصل ٦
+en: scoped CSS · is:global · CSS modules · Sass · Tailwind
+keywords: scoped · :global · class:list · Tailwind
+goal: تكتب CSS محبوس في مكوّنه، وتعرف امتى تفتحه، وإزاي تدخل Sass أو Tailwind.
+part: الصفحات
+color: c1
+---
+
+## افتراضيًا الستايل محبوس
+
+وسم `<style>` جوّه `.astro` بيطلع CSS **scoped**: Astro بيزود خاصية زي `data-astro-cid-...` على عناصر المكوّن وعلى السيلكتور. ستايل `h1` في `Dish.astro` مش هيغيّر `h1` في الصفحة الأم.
+
+<File name="src/components/Price.astro">
+
+```astro
+---
+const { value } = Astro.props;
+---
+<span class="price">{value}</span>
+<style>
+  .price {
+    color: #b45309;
+    font-weight: 700;
+  }
+</style>
+```
+
+</File>
+
+<Hl c="o">متكتبش ستايل عام وأنت فاكر إنه محبوس، ومتكتبش ستايل محبوس وأنت عايزه يوصل للأطفال.</Hl>
+
+الأطفال اللي الأم حاطاهم في `slot` **مش** عليهم نفس الـ cid. السيلكتور `.card :global(p)` يوصل لفقرة جاية من بره. `<style is:global>` يفتح الملف كله، فاستخدمه نادرًا (reset أو خطوط).
+
+استيراد ملف عادي يطبقه على الصفحة كـ CSS عالمي بعد ما Vite يجمعه:
+
+<File name="src/layouts/Base.astro">
+
+```astro
+---
+import "../styles/global.css";
+---
+```
+
+</File>
+
+## class:list
+
+بدل ما تلزق نصوص، ادي مصفوفة. القيم الفاضية و `false` بتتشال.
+
+<File name="src/components/Tag.astro">
+
+```astro
+---
+const { hot } = Astro.props;
+---
+<span class:list={["tag", { hot }]}>طبق</span>
+<style>
+  .tag { padding: 0.2rem 0.5rem; }
+  .hot { background: #fee2e2; }
+</style>
+```
+
+</File>
+
+لو الأم بعته `class`، استقبله باسم تاني لأن `class` كلمة محجوزة، وحطه في `class:list` زي ما فصل المكوّنات قال.
+
+## Sass و CSS modules
+
+Sass و SCSS و Less بيشتغلوا لو الحزمة متسطّبة (`sass` مثلًا) وكتبت `<style lang="scss">`. Vite هو اللي بيمرّرهم.
+
+ملف `Price.module.css` جنب المكوّن، واستورده ككائن. الكلاسات تتسمّى بأسماء فريدة. ده بديل للـ scoped لو الستايل مش جوّه ملف `.astro` (مكوّن React مثلًا).
+
+<Grid2>
+<Card title="style جوّه .astro" c={2}>
+
+الأبسط. محبوس لوحده. مناسب لمعظم مكوّنات Astro.
+
+</Card>
+<Card title="CSS module" c={3}>
+
+ملف لوحده، أسماء متولدة. مناسب لمكوّن إطار أو ستايل مشترك بشكل صريح.
+
+</Card>
+</Grid2>
+
+## Tailwind
+
+المسار الحالي Tailwind الإصدار ٤ عن طريق إضافة Vite، مش التكامل القديم `@astrojs/tailwind` اللي كان على الإصدارات الأقدم. التثبيت بيتغير، فراجع دليل Astro للستايل قبل ما تنسخ أمر.
+
+الفكرة ثابتة: Tailwind كلاسات على العناصر، والبناء يشيل اللي متستخدمش. متحطّش ملف CSS ضخم في `public` وأنت فاكر إن Tailwind هيشوفه. لازم يعدّي على Vite.
+
+<Box type="warn" title="ترتيب الطبقات">
+
+ستايل محبوس و Tailwind بيتعاركوا على نفس العنصر. خلي مصدر واحد هو البطل لكل مكوّن. خلط الاتنين على نفس الكلاس من غير ما تفهم مين اللي كسبspecificity بيضيّع ساعة.
+
+</Box>
+
+<Box type="story" icon="🎨" title="بوية الشقة">
+
+الـ scoped بوية جوّه شقتك: مش بتلوّن شقة الجار. `is:global` بوية على واجهة العمارة كلها. اعملها لما الواجهة محتاجة لون واحد، مش عشان كسلت تكتب سيلكتور أدق.
+
+</Box>
+
+## تمرير ستايل للطفل
+
+`:global()` للحفرة اللي فيها slot. أو ادي الأم كلاس على غلاف، والطفل يورّث اللون بمتغير CSS:
+
+<File name="src/components/Plate.astro">
+
+```astro
+<div class="plate">
+  <slot />
+</div>
+<style>
+  .plate { --sauce: #b91c1c; }
+  .plate :global(em) { color: var(--sauce); }
+</style>
+```
+
+</File>
+
+متغيرات CSS على اللاياوت (`--font` و `--bg`) أحسن من إن كل مكوّن يخترع لونه. الثيم يتبدل من مكان واحد.
+
+<Checklist id="astro-styling" title="خلّصت الفصل لما" items={["تكتب `<style>` وتعرف إنه scoped", "تستخدم `:global()` عشان توصل لمحتوى slot", "تجمع كلاسات بـ `class:list`", "تعرف إن CSS في `public` مش بيتعمله bundle", "متخلطش Tailwind والـ scoped على نفس العنصر من غير قصد"]} />
+
+<Quiz>
+<Q n={1} q="ستايل `p` جوّه مكوّن Astro هيأثر على `p` في مكوّن تاني؟">لأ، طالما الـ style مش `is:global`.</Q>
+<Q n={2} q="ليه ستايل المكوّن مش واصل لفقرة جاية من slot؟">لأن عناصر الـ slot متعلّمة بـ cid المكوّن الأم، مش المكوّن اللي فيه الـ style.</Q>
+<Q n={3} q="Sass يشتغل إزاي؟">تسطّب حزمة `sass` وتكتب lang=scss على وسم style.</Q>
+</Quiz>

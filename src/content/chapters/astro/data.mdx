@@ -1,0 +1,138 @@
+---
+title: البيانات والبيئة والـ middleware
+short: البيانات
+order: 10
+label: فصل ١٠
+badge: السيرفر · فصل ١٠
+en: fetch · astro:env · endpoints · middleware · locals
+keywords: astro:env · middleware · APIRoute · locals
+goal: تجيب بيانات، تخبّي الأسرار عن المتصفح، وتعدّي كل طلب على middleware قبل الصفحة.
+part: السيرفر
+color: c5
+---
+
+## fetch في الـ frontmatter
+
+كود فوق السياج يقدر يعمل `await fetch`. في صفحة **ثابتة** النداء بيحصل وقت البناء، والناتج يتطبع في HTML. في صفحة **سيرفر** النداء بيحصل مع كل طلب.
+
+<File name="src/pages/today.astro">
+
+```astro
+---
+const res = await fetch("https://api.example.com/dish.json");
+const dish = await res.json();
+---
+<p>طبق اليوم: {dish.name}</p>
+```
+
+</File>
+
+متعملش كده لبيانات خاصة بزائر على صفحة ثابتة: كل الزوار هياخدوا نفس الـ HTML. ومتحطّش توكن جوه النص اللي هيتبنى.
+
+<Box type="story" icon="🛵" title="الطلبية">
+
+البناء الثابت زي ما تجهّز ألف طبق قبل ما المطعم يفتح، وكلهم نفس الأكل. الطلب وقت الوصول (صفحة سيرفر) الشيف يطبخ لما الزبون يوصل، فينفع يسأل "عايزه سبايسي؟".
+
+</Box>
+
+## أسرار ومتغيرات
+
+ملف `.env` مايترفعش على git. المتغير اللي اسمه هيوصل للمتصفح لازم يبقى واضح إنه عام. المسار المظبوط في Astro دلوقتي مخطط `astro:env`:
+
+<File name="astro.config.mjs">
+
+```js
+import { defineConfig, envField } from "astro/config";
+
+export default defineConfig({
+  env: {
+    schema: {
+      MENU_API: envField.string({ context: "server", access: "secret" }),
+      PUBLIC_BRAND: envField.string({ context: "client", access: "public" }),
+    },
+  },
+});
+```
+
+</File>
+
+<File name="src/pages/api/menu.ts">
+
+```ts
+import type { APIRoute } from "astro";
+import { MENU_API } from "astro:env/server";
+
+export const GET: APIRoute = async () => {
+  const res = await fetch(MENU_API);
+  return new Response(await res.text(), {
+    headers: { "content-type": "application/json" },
+  });
+};
+```
+
+</File>
+
+`astro:env/server` يتستخدم في سيرفر بس. استيراده من مكوّن هيروح للمتصفح هيفشل البناء، وده الحماية. `astro:env/client` للمتصفح، وممنوع يكون `secret`.
+
+`import.meta.env` بتاع Vite لسه شغال، و `PUBLIC_` لسه بتكشف المتغير للعميل لو مشيت على الطريق القديم. الطريق الجديد أوضح لأن النوع والسياق متعلنين في الكونفج.
+
+<Hl c="p">أي حاجة في حزمة العميل مش سر. اعتبرها متقرأة.</Hl>
+
+## الـ endpoint تاني بس بسياق
+
+الصفحة السابقة عرّفت `APIRoute`. السياق فيه `request` و `params` و `cookies` و `locals` و `redirect` و، لو مظبوط، `session` و `cache`. رجّع `Response` دايمًا. حالة الخطأ `new Response("nope", { status: 401 })`.
+
+`export const prerender = true` على endpoint في مشروع سيرفر يخلّيه ملف ثابت. والعكس `prerender = false` في مشروع ثابت يخلّيه يحتاج adapter.
+
+## الـ middleware
+
+`src/middleware.ts` دالة بتعدّي على الطلبات **قبل** الصفحة أو الـ endpoint.
+
+<File name="src/middleware.ts">
+
+```ts
+import { defineMiddleware } from "astro:middleware";
+
+export const onRequest = defineMiddleware(async (context, next) => {
+  const user = context.cookies.get("user")?.value;
+  context.locals.user = user;
+  if (context.url.pathname.startsWith("/kitchen") && !user) {
+    return context.redirect("/login");
+  }
+  return next();
+});
+```
+
+</File>
+
+`next()` يكمل السلسلة. تقدر تقرا الرد وتعدّل هيدر بعديها. `locals` كيس بتمرّر بيانات للصفحة في نفس الطلب. عرّف نوعه في `src/env.d.ts` عشان TypeScript يعرف `Astro.locals.user`:
+
+<File name="src/env.d.ts">
+
+```ts
+declare namespace App {
+  interface Locals {
+    user?: string;
+  }
+}
+```
+
+</File>
+
+أكتر من ملف middleware يترتب بـ `sequence` من `astro:middleware`. الترتيب مهم: التحقق قبل التسجيل.
+
+`context.rewrite` يغيّر الصفحة اللي هتترندر من غير ما يغيّر رابط المتصفح. `redirect` يبعت الزائر لرابط تاني فعلًا.
+
+<Box type="warn" title="الـ middleware مش دايمًا قبل كل حاجة">
+
+في الخط الافتراضي، بعض حاجات Astro (زي الـ Actions) ليها ترتيب جوّه الأنبوب. لو محتاج التحقق يسبق الـ Action بالملّي، شوف `src/fetch.ts` في فصل الاحتراف. للصفحات العادية، الملف ده كفاية.
+
+</Box>
+
+<Checklist id="astro-data" title="خلّصت الفصل لما" items={["تفرّق fetch وقت البناء عن fetch وقت الطلب", "تعرّف سر في `env.schema` وتستورده من `astro:env/server`", "متستوردش سر في مكوّن عميل", "تكتب middleware يحمي مسار ويحط `locals`", "تعرف الفرق بين redirect و rewrite"]} />
+
+<Quiz>
+<Q n={1} q="سر حطيته في صفحة ثابتة وقت البناء. الزائر يشوفه؟">لو اتطبع في HTML أو دخل حزمة العميل، أيوه. السر يفضل على السيرفر.</Q>
+<Q n={2} q="`astro:env/server` ينفع في مكوّن `client:load`؟">لأ. الاستيراد هيفشل لأن السياق سيرفر.</Q>
+<Q n={3} q="الـ locals عايشة قد إيه؟">طول الطلب الواحد. مش قاعدة بيانات.</Q>
+</Quiz>

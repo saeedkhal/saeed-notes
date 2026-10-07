@@ -1,0 +1,150 @@
+---
+title: مكوّن .astro من جوه
+short: المكوّنات
+order: 3
+label: فصل ٣
+badge: البداية · فصل ٣
+en: frontmatter · props · slots · Astro.props · template expressions
+keywords: frontmatter · props · slots · class:list
+goal: تكتب مكوّن بياخد props و slot، وتفرّق كود السيرفر عن HTML اللي الزائر هيشوفه.
+part: البداية
+color: c3
+---
+
+## ملف واحد، نصين
+
+أي `.astro` فيه سياج اختياري بين `---` و `---` اسمه <En>frontmatter</En>، وبعديه القالب. الكود اللي فوق السياج JavaScript أو TypeScript وبيشتغل **على السيرفر**: وقت البناء في الصفحات الثابتة، أو وقت الطلب لو الصفحة سيرفر. مش بيتبعت للمتصفح.
+
+<File name="src/components/Dish.astro">
+
+```astro
+---
+interface Props {
+  name: string;
+  price: number;
+  spicy?: boolean;
+}
+const { name, price, spicy = false } = Astro.props;
+const label = spicy ? "حار" : "عادي";
+---
+<article>
+  <h2>{name}</h2>
+  <p>{price} جنيه · {label}</p>
+  <slot />
+</article>
+```
+
+</File>
+
+الأقواس `{}` في القالب تعبير JavaScript نتيجته تتطبع. القالب نفسه HTML، فبتكتب `class` مش `className`، ومش لازم تلف كل حاجة في عنصر أب واحد.
+
+<Box type="story" icon="👨‍🍳" title="ورقة التحضير">
+
+الـ frontmatter ورقة الشيف قبل ما الطبق يخرج: يحسب السعر ويقرأ الاسم. الزبون مش بيشوف الورقة. بيشوف الطبق (القالب).
+
+</Box>
+
+## اللي القالب بيعمله
+
+<Chips items={["طباعة متغير أو نداء دالة", "شرط بـ && أو ternary", "لف بـ map على مصفوفة", "مكوّنات Astro مستوردة فوق", "HTML عادي وتعليقات HTML"]} />
+
+<File name="src/pages/menu.astro">
+
+```astro
+---
+import Dish from "../components/Dish.astro";
+const dishes = [
+  { name: "كشري", price: 25 },
+  { name: "كشري حار", price: 30, spicy: true },
+];
+---
+<ul>
+  {dishes.map((dish) => (
+    <li>
+      <Dish name={dish.name} price={dish.price} spicy={dish.spicy}>
+        <p>يتقدم سخن.</p>
+      </Dish>
+    </li>
+  ))}
+</ul>
+```
+
+</File>
+
+المصفوفة جوه `map` لازم ترجّع عنصر واحد أو Fragment. لو حابب أكتر من أخ من غير غلاف ظاهر:
+
+<File name="src/components/Pair.astro">
+
+```astro
+---
+import { Fragment } from "astro/jsx-runtime";
+---
+<Fragment>
+  <span>كشري</span>
+  <span>٢٥</span>
+</Fragment>
+```
+
+</File>
+
+في أغلب المكوّنات مش محتاج Fragment، لأن قالب Astro أصلًا يقبل أكتر من جذر.
+
+## الـ props والـ slots
+
+`Astro.props` هو اللي الصفحة الأم بعته. عرّف `interface Props` عشان المحرر يلحقك لو نسيت `name`.
+
+الـ <En>slot</En> حتة فاضية الأم تملأها. `slot` من غير اسم هو الافتراضي. لو سميت `name="extra"`، الأم تحط `slot="extra"` على العنصر.
+
+`Astro.slots.has("extra")` يقولك الأم بعتت الحتة دي ولا لأ، عشان متطلعش صندوق فاضي. `Astro.slots.render("extra")` بيرندر الحتة كنص HTML لو محتاج تعمل بيها حاجة في الكود.
+
+<Box type="tip" title="الـ class مش بيعدّي لوحده">
+
+لو كتبت `<Dish class="wide" />`، الكلاس **مش** هيروح لـ `article` تلقائيًا. خد `class` من `Astro.props` وحطه بنفسك على العنصر، أو استخدم `class:list` عشان تجمع أكتر من قيمة وتتجاهل `false`.
+
+</Box>
+
+<File name="src/components/Dish.astro">
+
+```astro
+---
+const { name, class: klass } = Astro.props;
+---
+<article class:list={["dish", klass, { soldout: false }]}>
+  {name}
+</article>
+```
+
+</File>
+
+## HTML خام وتعابير
+
+`set:html` بيطبع HTML من غير تهريب. استخدمه بس لنص **إنت** اللي مولّده، مش لتعليق زائر. غير كده فتحت باب XSS.
+
+`set:text` بيحط نص مهرب جوّه العنصر. مفيد لو عايز تمسح أطفال العنصر وتحط نص.
+
+<Hl c="p">أي HTML جاي من بره يعتبر غير موثوق لحد ما تهربه.</Hl>
+
+## فرق سريع عن JSX
+
+| | JSX | قالب Astro |
+| --- | --- | --- |
+| الخاصية | `className` و camelCase | `class` و kebab-case زي HTML |
+| الجذر | عنصر واحد غالبًا | أكتر من عنصر عادي |
+| التعليق | `{/* */}` | تعليق HTML، والكود فوق السياج تعليق JS |
+| فين بيشتغل | غالبًا في المتصفح كمان | القالب والـ frontmatter على السيرفر |
+
+`Astro.self` هو المكوّن نفسه، عشان تستدعيه من جوّاه (شجرة تعليقات أو منيو متداخل). متعملش دايرة مالهاش نهاية.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"الـ frontmatter بيتبعت للمتصفح؟" — لأ. بيشتغل على السيرفر. اللي يوصل للمتصفح هو HTML الناتج، وأي `<script>` أو جزيرة طلبتها صراحة.
+
+</Box>
+
+<Checklist id="astro-components" title="خلّصت الفصل لما" items={["تكتب مكوّن فيه `Props` و `Astro.props`", "تحط `slot` افتراضي وواحد مسمّى", "تلف على مصفوفة في القالب", "تعرف إن `class` على المكوّن مش بيعدّي لوحده", "متستخدمش `set:html` مع نص الزائر"]} />
+
+<Quiz>
+<Q n={1} q="فين الكود اللي فوق `---` بيشتغل؟">على السيرفر، وقت البناء أو وقت الطلب. مش في المتصفح.</Q>
+<Q n={2} q="الخاصية الصح للكلاس في قالب Astro؟">`class` مش `className`.</Q>
+<Q n={3} q="إزاي أعرف إن الأم بعتت slot اسمه extra؟">`Astro.slots.has("extra")`.</Q>
+</Quiz>

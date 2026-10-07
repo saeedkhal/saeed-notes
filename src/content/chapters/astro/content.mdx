@@ -1,0 +1,135 @@
+---
+title: المحتوى والمجموعات
+short: المحتوى
+order: 8
+label: فصل ٨
+badge: المحتوى · فصل ٨
+en: content collections · content layer · glob loader · live collections · Zod
+keywords: content.config · getCollection · live.config · zod
+goal: تنظّم المقالات بمجموعة متحقَّق من شكلها، وتفرّق اللي يتبنى مرة عن اللي يتجاب وقت الطلب.
+part: المحتوى
+color: c3
+---
+
+## صفحة Markdown غير مجموعة
+
+ملف `.md` جوّه `src/pages` بيبقى صفحة لوحده. ده كويس لصفحة أو اتنين. أول ما يبقى عندك **مجموعة** بنفس الشكل (مقالات، أصناف، وصفات)، انقلهم بره `pages` وحطهم في مجموعة. المجموعة مش بتعمل روابط لوحدها. أنت تعمل صفحة ديناميكية تقراها.
+
+<Box type="story" icon="📚" title="كشكول ولا درج ملفات؟">
+
+صفحة في `pages` ورقة لاصقة على الباب: ليها عنوان وخلصت. المجموعة درج: كل ورقة ليها نفس الخانات (عنوان، تاريخ، سعر)، وتقدر تسأل "وريني اللي اتكتب الشهر ده".
+
+</Box>
+
+## مجموعة وقت البناء
+
+التعريف في `src/content.config.ts`. اللودر يقول الملفات فين. الـ schema يقول شكل الـ frontmatter إيه. Zod بتستورده من `astro/zod` مش من حزمة `zod` لوحدها، عشان النسخة تتفق مع Astro.
+
+<File name="src/content.config.ts">
+
+```ts
+import { defineCollection } from "astro:content";
+import { glob } from "astro/loaders";
+import { z } from "astro/zod";
+
+const menu = defineCollection({
+  loader: glob({ pattern: "**/*.md", base: "./src/data/menu" }),
+  schema: z.object({
+    title: z.string(),
+    price: z.number(),
+    pubDate: z.coerce.date(),
+    draft: z.boolean().default(false),
+  }),
+});
+
+export const collections = { menu };
+```
+
+</File>
+
+<File name="src/data/menu/koshary.md">
+
+```md
+---
+title: كشري
+price: 25
+pubDate: 2026-04-01
+---
+
+رز وعدس وشعرية.
+```
+
+</File>
+
+بعد `astro sync` أو `dev`، الأنواع تتولد. الاستعلام:
+
+<File name="src/pages/menu/[id].astro">
+
+```astro
+---
+import { getCollection, getEntry, render } from "astro:content";
+
+export async function getStaticPaths() {
+  const dishes = (await getCollection("menu")).filter((d) => !d.data.draft);
+  return dishes.map((dish) => ({
+    params: { id: dish.id },
+    props: { dish },
+  }));
+}
+
+const { dish } = Astro.props;
+const { Content } = await render(dish);
+---
+<h1>{dish.data.title}</h1>
+<p>{dish.data.price} جنيه</p>
+<Content />
+```
+
+</File>
+
+`getEntry("menu", id)` يجيب واحدة. `render` يديك مكوّن `Content` للمتن. المسودات فلترها أنت، Astro مش بيخبيها لوحده إلا لو اللودر أو الـ schema قال كده.
+
+علاقة بين مجموعتين بـ `reference` جوّه الـ schema (صنف يشير لمؤلف). بعدين `getEntries` يحلّ المراجع. التفاصيل في مرجع `astro:content` لأنها أطول من سطر.
+
+<Hl c="y">المجموعة وقت البناء بتخزّن البيانات مرة، وتناسب آلاف المدخلات اللي مش بتتغير كل دقيقة.</Hl>
+
+## Markdown و MDX و Markdoc
+
+الـ glob يقدر يمسك `.md` و `.mdx` و `.mdoc` لو التكامل متسطّب (`astro add mdx`). MDX يعني JSX جوّه المقالة، فمكوّناتك تشتغل وسط النص. Markdoc مسار تاني لو الفريق كاتبه كده.
+
+من Astro 7 المعالج الافتراضي اسمه Sätteri، مش remark. الجداول والـ GFM شغالين من غير إضافات. لو عندك إضافات remark قديمة، الفصل الأخير بيقول تعمل إيه.
+
+## المجموعة الحية
+
+محتوى بيتغير كل شوية (مخزون، سعر، مسودة من الـ CMS) متحرقوش في البناء. `src/live.config.ts` و `defineLiveCollection` و لودر بيشتغل **وقت الطلب**. الاستعلام `getLiveCollection` و `getLiveEntry`.
+
+<Grid2>
+<Card title="وقت البناء" c={1}>
+
+`content.config.ts`. سريع، يتخزّن، ينفع معاه تحسين الصور و MDX. محتاج بناء جديد لما النص يتغير.
+
+</Card>
+<Card title="حي" c={4}>
+
+`live.config.ts`. طازة من غير بناء. مفيش MDX وقت التشغيل، ومفيش تحسين صور. كل طلب ممكن يسأل المصدر، إلا لو حطيت كاش.
+
+</Card>
+</Grid2>
+
+الاتنين ينفعوا في نفس المشروع: وصف الطبق مجموعة بناء، والكمية المتاحة مجموعة حية. من Astro 7 اللودر الحي يقدر يرجّع تلميح كاش، وتمرّره لـ `Astro.cache` (فصل الاحتراف).
+
+متعملش مجموعة لصفحة واحدة، ولا لملف PDF. الـ PDF مكانه `public`. ولو الـ SDK بتاع المصدر مش قابل يتعمل لودر وأنت مرتاح بيه، استدعيه في الصفحة على طول.
+
+<Box type="tip" title="أنواع TypeScript">
+
+قوالب `strict` و `strictest` جاهزة للمجموعات. لو نزلت لـ `base`، لازم `strictNullChecks` و `allowJs` في `tsconfig` عشان الأنواع تشتغل.
+
+</Box>
+
+<Checklist id="astro-content" title="خلّصت الفصل لما" items={["تعرّف مجموعة في `content.config.ts` بلودر `glob` و schema", "تستورد `z` من `astro/zod`", "تعمل صفحة `[id]` بـ `getCollection` و `render`", "تفلتر المسودات بنفسك", "تختار مجموعة حية لما البيانات تتغير من غير بناء"]} />
+
+<Quiz>
+<Q n={1} q="حطيت ملفات المجموعة في `src/data`. هتطلع روابط لوحدها؟">لأ. لازم صفحة ديناميكية تقرا المجموعة وتعمل المسارات.</Q>
+<Q n={2} q="Zod بتتجاب منين؟">من `astro/zod`، مش من نسخة عشوائية من حزمة zod.</Q>
+<Q n={3} q="ليه مخزون بيتغير كل دقيقة مايبقاش مجموعة بناء؟">عشان كل تغيير هيعمل build. المجموعة الحية بتسأل وقت الطلب.</Q>
+</Quiz>

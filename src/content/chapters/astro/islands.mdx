@@ -1,0 +1,135 @@
+---
+title: السكربتات والجزر
+short: الجزر
+order: 7
+label: فصل ٧
+badge: الصفحات · فصل ٧
+en: script · client:load · client:visible · client:only · hydration
+keywords: client:visible · client:idle · client:only · script
+goal: تضيف سلوك في المتصفح بأقل جافاسكربت، وتختار امتى الجزيرة تشتغل.
+part: الصفحات
+color: c2
+---
+
+## سكربت الصفحة مش إطار
+
+`<script>` جوّه `.astro` بيتجمع ويتحط `type="module"` ويتبعت مرة حتى لو المكوّن اتكرر. ده مكان القائمة البسيطة، تتبع النقرة، أو تشغيل عنصر من غير React.
+
+<File name="src/components/Counter.astro">
+
+```astro
+<span id="n">٠</span>
+<button id="add">زود</button>
+<script>
+  const btn = document.getElementById("add");
+  const n = document.getElementById("n");
+  let v = 0;
+  btn?.addEventListener("click", () => {
+    v += 1;
+    if (n) n.textContent = String(v);
+  });
+</script>
+```
+
+</File>
+
+لو المكوّن اتكرر في الصفحة، الـ id هيتكرر والسكربت هيمسك أول واحد بس. للجزر المتكررة استخدم مكوّن إطار، أو امسح الـ id ولف على العناصر بكلاس.
+
+`is:inline` يسيّب السكربت زي ما هو: مش هيتجمع، ومش هيتمسح تكراره، ومينفعش يعمل `import`. مناسب لسكربت طرف تالت لازم يفضل سطره كما هو.
+
+`define:vars` يمرّر قيم من السيرفر للسكربت. القيم لازم تتسلسل (نص، رقم، كائن بسيط). متبعتش دالة ولا عنصر DOM.
+
+<Box type="warn" title="الـ id في سكربت متجمع">
+
+السكربت المجمّع بيشتغل مرة. لو كتبت `getElementById` جوّه مكوّن بيتكرر، هيلاقي أول نسخة. إما مكوّن لكل نسخة بإطار، أو `querySelectorAll`.
+
+</Box>
+
+## امتى الجزيرة تصحى
+
+مكوّن React أو Vue أو Svelte من غير directive = HTML فقط. الـ directive يقول امتى الجافاسكربت ينزل ويصحّي المكوّن (hydration).
+
+<Grid2>
+<Card title="client:load" c={1}>
+
+أول ما الصفحة تحمّل. للحاجة اللي فوق الطيّة ولازم تبقى حية فورًا: سلة ظاهرة، مشغّل.
+
+</Card>
+<Card title="client:idle" c={2}>
+
+بعد ما المتصفح يهدى. حاجة مهمة بس مش أول إطار: ودجت جانبي.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="client:visible" c={3}>
+
+لما الجزيرة تدخل الشاشة. تعليق أو كاروسيل تحت. أحسن افتراضي للحاجات اللي مش ظاهرة.
+
+</Card>
+<Card title="client:media" c={4}>
+
+لما شرط CSS يتحقق، زي `(max-width: 700px)` لقائمة الموبايل. الديسكتوب مينزّلش السكربت.
+
+</Card>
+</Grid2>
+
+<Card title="client:only" c={5}>
+
+من غير رندر سيرفر. لازم تكتب الإطار: `client:only="react"`. للحاجات اللي بتلمس `window` وقت الرندر الأول. الزائر هيشوف فراغ لحد ما الجافاسكربت ييجي، فحط ارتفاع ثابت عشان الصفحة متقفزش.
+
+</Card>
+
+<Diagram
+  title="الصفحة HTML، والجزيرة بس اللي بتصحى"
+  height={300}
+  mheight={360}
+  nodes={[
+    { id: "srv", t: "السيرفر", s: "يجهّز HTML", c: 1, x: 16, y: 50, mx: 50, my: 14 },
+    { id: "html", t: "باقي الصفحة", s: "من غير JS", c: 3, x: 55, y: 24, mx: 26, my: 78 },
+    { id: "isle", t: "السلة", s: "client:visible", c: 2, x: 82, y: 74, mx: 76, my: 78 },
+  ]}
+  edges={[
+    { from: "srv", to: "html", t: "HTML", c: 3, bend: 16, mbend: 22 },
+    { from: "srv", to: "isle", t: "HTML + JS", c: 2, bend: -14, mbend: -22 },
+  ]}
+/>
+
+التركيب: `pnpm astro add react` (أو vue أو svelte أو solid أو preact). الأمر بيسطّب الحزمة ويكتب التكامل في الكونفج. الـ props اللي بتعدّي للجزيرة لازم تتسلسل JSON. مفيش دوال ولا كلاس.
+
+<File name="src/pages/index.astro">
+
+```astro
+---
+import Cart from "../components/Cart.jsx";
+---
+<h1>المنيو</h1>
+<Cart client:visible dish="كشري" price={25} />
+```
+
+</File>
+
+<Box type="story" icon="🌶️" title="الصوص على الترابيزة">
+
+الطبق وصل جاهز. الصوص (`client:visible`) الزبون يطلبه لما يقرب من الحتة دي. لو حطيت `client:load` على كل صوص في المنيو، رجّعت مطبخ كامل على الترابيزة تاني.
+
+</Box>
+
+## حالة بين جزيرتين
+
+كل جزيرة بتصحى لوحدها. مش بيشاركوا state زي شجرة React واحدة. لو السلة والعداد محتاجين نفس الرقم، إما تجمعهم في جزيرة واحدة، أو مكتبة حالة صغيرة بتشتغل بره الإطار (زي nanostores) يقرأوا منها الاتنين. متصحّيش الصفحة كلها عشان زرارين يتكلموا.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إيه الفرق بين `client:load` و `client:visible`؟" — الاتنين بينزّلوا جافاسكربت الجزيرة. الأول مع تحميل الصفحة، والتاني لما العنصر يدخل الشاشة. التاني أقل تكلفة لو الحتة تحت.
+
+</Box>
+
+<Checklist id="astro-islands" title="خلّصت الفصل لما" items={["تفرّق `<script>` المجمّع عن `is:inline`", "تختار directive مناسب مش `client:load` للكل", "تعرف إن `client:only` محتاج اسم الإطار", "متبعتش دالة في props جزيرة", "لو جزيرتين محتاجين نفس الحالة، تجمعهم أو تستخدم store مشترك"]} />
+
+<Quiz>
+<Q n={1} q="مكوّن React من غير `client:` هيوصل للمتصفح جافاسكربت؟">لأ. HTML بس.</Q>
+<Q n={2} q="قائمة الموبايل بس اللي محتاجة JS. أنهي directive؟">`client:media` بشرط عرض الموبايل.</Q>
+<Q n={3} q="السكربت المجمّع بيتبعت كام مرة لو المكوّن اتكرر؟">مرة. عشان كده `getElementById` جواه خطر لو النسخ كتير.</Q>
+</Quiz>

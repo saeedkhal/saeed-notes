@@ -1,0 +1,57 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 16
+label: الآخر
+badge: الآخر
+en: One-page recall for Astro 7
+keywords: cheatsheet · islands · prerender · cache · actions
+goal: تفتكر القرار والأمر من غير ما ترجع للفصول.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["الموقع كله تطبيق جوّه المتصفح", "Astro مش أحسن بداية. لو محتوى، كمّل"],
+  ["عايز HTML سريع من غير JS", "صفحة `.astro` من غير `client:`"],
+  ["حتة بس لازم تتفاعل", "جزيرة بـ `client:visible` مش `load` للكل"],
+  ["القائمة على الموبايل بس", "`client:media`"],
+  ["مكوّن بيلمس `window` وقت الرندر", "`client:only` مع اسم الإطار"],
+  ["جزيرتين مش شايفين نفس الرقم", "اجمعهم أو store مشترك، متصحّيش الصفحة"],
+  ["class على المكوّن مش ظاهر", "استقبله من `Astro.props` وحطه على العنصر"],
+  ["ستايل مش واصل لجوه الـ slot", "`:global()` أو متغير CSS"],
+  ["ملف في public مش بيتظبط", "ده طبيعي. المعالجة في `src`"],
+  ["صفحة ديناميكية فاضية في البناء", "`getStaticPaths` ترجع كل `params`"],
+  ["مسار بأكتر من مستوى", "`[...slug]`"],
+  ["مقالات كتير بنفس الشكل", "مجموعة في `content.config.ts` مش ملف لكل واحدة في `pages`"],
+  ["Zod نسخة غلط", "استورد `z` من `astro/zod`"],
+  ["سعر بيتغير كل شوية", "مجموعة حية في `live.config.ts`"],
+  ["صورة كبيرة على الموبايل", "`Image` مع `widths` و `sizes`"],
+  ["خط بيتجاب من دومين تاني", "Fonts API يخدمه من موقعك"],
+  ["سر ظهر في المتصفح", "كان في حزمة العميل. `astro:env/server` بس"],
+  ["كوكي الزائر على صفحة ثابتة", "متتقراش. `prerender = false` أو جزيرة سيرفر"],
+  ["البناء طالب adapter", "فيه مسار عند الطلب. ركّب adapter الاستضافة"],
+  ["`hybrid` في كونفج قديم", "اتشال. استخدم `prerender` على الملف"],
+  ["صندوق شخصي على صفحة ثابتة", "`server:defer` و fallback"],
+  ["فورم والتحقق بايظ", "Action بـ Zod"],
+  ["تحديث الصفحة بيكرر الفورم", "POST ثم redirect ثم GET مع جلسة"],
+  ["التحقق بيوصل بعد الـ Action", "`src/fetch.ts` ورتّب التحقق قبل `actions`"],
+  ["عندك `src/fetch.ts` بالغلط", "سمّه أو `fetchFile: null`"],
+  ["صفحة سيرفر بطيئة وبياناتها شبه ثابتة", "`Astro.cache` بـ `maxAge` و `tags`"],
+  ["الـ CMS غيّر محتوى والكاش لسه قديم", "`cache.invalidate` بالوسم"],
+  ["كلمتين لازقين بعد الترقية", "مسافة `{\" \"}` أو `compressHTML: true`"],
+  ["تاج مش متقفّل والبناء وقع", "كود Rust مش بيصلّح HTML. قفّله"],
+  ["remark مش شغال", "`@astrojs/markdown-remark` و `unified()`"],
+  ["سايت ماب فاضي أو روابط غلط", "ظبط `site` و `base` و `trailingSlash`"],
+  ["انتقال أنعم بين الصفحات", "`ClientRouter` مش تحويل الموقع لـ SPA"],
+  ["ثابت قديم زي TRANSITION_AFTER_SWAP", "اسم الحدث `astro:after-swap`"],
+  ["قبل ما تنشر", "`astro check` ثم `build` ثم `preview`"],
+]} />
+
+<Checklist id="astro-cheat" title="خلّصت المذكرة لما" items={["تشرح الجزيرة في جملة وتختار الـ directive الصح", "تعمل مجموعة محتوى وصفحة `[id]`", "تفرّق ثابت وسيرفر و `server:defer`", "تخبّي سر في `astro:env/server`", "تنشر بعد `check` و `build` وتعرف تكاش مسار حي"]} />
+
+<Quiz>
+<Q n={1} q="افتراضي Astro للزائر جافاسكربت قد إيه؟">ولا حاجة، لحد ما تحط `script` أو `client:` أو `ClientRouter`.</Q>
+<Q n={2} q="بيانات زائر على صفحة بتتبنى؟">لأ. سيرفر أو جزيرة `server:defer`.</Q>
+<Q n={3} q="أول ملف تفتحه لو الـ Action بيتنفّذ قبل التحقق؟">`src/fetch.ts` عشان ترتّب الأنبوب.</Q>
+</Quiz>

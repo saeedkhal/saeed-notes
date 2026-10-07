@@ -1,0 +1,137 @@
+---
+title: الصفحات والراوتنج
+short: الراوتنج
+order: 4
+label: فصل ٤
+badge: الصفحات · فصل ٤
+en: file-based routing · getStaticPaths · rest params · endpoints · redirects
+keywords: pages · getStaticPaths · [...slug] · endpoints
+goal: تربط ملف في `src/pages` برابط، وتولّد صفحات ديناميكية، وتفرّق صفحة HTML عن endpoint.
+part: الصفحات
+color: c4
+---
+
+## الملف هو الرابط
+
+Astro مش عنده جدول راوتس تكتبه. أي ملف صفحة جوّه `src/pages` بيبقى رابط. الأنواع: `.astro` و `.md` و `.mdx` (بعد ما تركّب MDX). ملف `.ts` أو `.js` في نفس الفولدر endpoint بيرجّع `Response`، مش صفحة HTML.
+
+<Tree>
+
+```text
+src/pages/index.astro          →  /
+src/pages/about.astro          →  /about
+src/pages/about/index.astro    →  /about
+src/pages/menu/koshary.md      →  /menu/koshary
+src/pages/rss.xml.ts           →  /rss.xml
+```
+
+</Tree>
+
+الانتقال بين الصفحات وسم `<a>` عادي. مفيش مكوّن `Link` خاص بالإطار. شكل الملف الناتج (`/about` ولا `/about.html` ولا `/about/index.html`) بيتظبط بـ `build.format`: `directory` أو `file` أو `preserve`.
+
+<Hl c="b">تضيف ملف في `src/pages`، يبقى عندك رابط. مفيش كونفج راوتنج جنبه.</Hl>
+
+## صفحات ديناميكية
+
+قوسين في اسم الملف يعني جزء متغير: `src/pages/menu/[slug].astro` يمسك `/menu/koshary`. في الوضع الثابت (الافتراضي) لازم تقول وقت البناء إيه القيم المسموحة، عن طريق `getStaticPaths`.
+
+<File name="src/pages/menu/[slug].astro">
+
+```astro
+---
+export function getStaticPaths() {
+  return [
+    { params: { slug: "koshary" }, props: { title: "كشري", price: 25 } },
+    { params: { slug: "salad" }, props: { title: "سلطة", price: 10 } },
+  ];
+}
+const { slug } = Astro.params;
+const { title, price } = Astro.props;
+---
+<h1>{title}</h1>
+<p>الرابط: {slug} · {price} جنيه</p>
+```
+
+</File>
+
+كل عنصر في المصفوفة صفحة. `params` لازم يغطي **كل** الأقواس في اسم الملف. `props` بيانات زيادة توصل لـ `Astro.props`، ومش بتظهر في الرابط.
+
+أكتر من قوس ينفع: `src/pages/[lang]/[version]/info.astro` يطلّع `/ar/v1/info` لو رجّعت `params` فيها `lang` و `version`.
+
+`params` اللي راجعة من `getStaticPaths` مش مفكوكة. لو القيمة فيها ترميز، فكها بـ `decodeURI` وأنت بترجّعها.
+
+## الباقي من المسار
+
+`[...slug]` بيمسك أي عمق: `/docs` و `/docs/a` و `/docs/a/b`. لو رجّعت `slug: undefined` تمسك الصفحة الأم نفسها.
+
+<Box type="story" icon="🗂️" title="درج ولا دولاب؟">
+
+`[slug]` درج واحد: اسم طبق. `[...slug]` دولاب كامل: مسار جوه مسار، زي شجرة التوثيق.
+
+</Box>
+
+في الوضع الثابت، صفحة ثابتة (`about.astro`) بتكسب لو اتصادفت مع نمط ديناميكي على نفس الرابط. متخليش الاتنين يتنازعوا على نفس الـ URL من غير ما تبقى عارف مين اللي هيطلع.
+
+## التقسيم على صفحات
+
+`getStaticPaths` بياخد `paginate`. ادّيله المصفوفة و `pageSize`، وهيعمل روابط الصفحات. الصفحة بتستقبل `page` فيها `data` للشريحة الحالية، و `url` للسابق والتالي، ورقم الصفحة. مناسب لأرشيف بلوج. راجع توقيع `paginate` في الـ docs لأن شكل `page` أدق من إن نحفظه غصب.
+
+## أخطاء وتحويلات
+
+`src/pages/404.astro` صفحة غير موجود. `src/pages/500.astro` لخطأ السيرفر لما يبقى عندك رندر عند الطلب.
+
+التحويلات في الكونفج، مش في ملف صفحة:
+
+<File name="astro.config.mjs">
+
+```js
+export default defineConfig({
+  redirects: {
+    "/old-menu": "/menu",
+    "/dish/[slug]": "/menu/[slug]",
+  },
+});
+```
+
+</File>
+
+`trailingSlash` بيقرر الشرطة في آخر الرابط: `ignore` (افتراضي، الاتنين شغالين) أو `always` أو `never`. لازم يتفق مع الاستضافة، لأن بعض المنصات بتزوّد الشرطة لوحدها وبتعمل حلقة تحويل.
+
+## الـ endpoints
+
+ملف `src/pages/api/order.ts` رابط `/api/order` بيرجّع بيانات مش HTML.
+
+<File name="src/pages/api/order.ts">
+
+```ts
+import type { APIRoute } from "astro";
+
+export const GET: APIRoute = () => {
+  return new Response(JSON.stringify({ dish: "كشري" }), {
+    headers: { "content-type": "application/json" },
+  });
+};
+
+export const POST: APIRoute = async ({ request }) => {
+  const body = await request.json();
+  return new Response(JSON.stringify({ ok: true, body }));
+};
+```
+
+</File>
+
+الدوال المعروفة: `GET` و `POST` و `PUT` و `PATCH` و `DELETE` و `HEAD` و `OPTIONS`. لو الطريقة مش متصدّرة، Astro يرد 405. `export const prerender = false` يخلّي الـ endpoint يشتغل وقت الطلب، وده محتاج adapter (الفصل بتاع أوضاع الرندر).
+
+<Box type="warn" title="متحطّش سر في صفحة ثابتة">
+
+صفحة بتتبنى مرة واحدة هتحرق ناتج `fetch` جواها في الـ HTML. توكن أو بيانات زائر مكانهم endpoint أو صفحة سيرفر، مش `getStaticPaths`.
+
+</Box>
+
+<Checklist id="astro-routing" title="خلّصت الفصل لما" items={["ترسم ٣ ملفات ورابط كل واحد", "تكتب `getStaticPaths` فيها `params` و `props`", "تفرّق `[slug]` عن `[...slug]`", "تعمل endpoint يرجع JSON", "تعرف فين الـ redirects و `trailingSlash`"]} />
+
+<Quiz>
+<Q n={1} q="`src/pages/menu/index.astro` رابطه إيه؟">`/menu`.</Q>
+<Q n={2} q="ليه الصفحة الديناميكية الثابتة محتاجة `getStaticPaths`؟">عشان البناء يعرف كل الروابط قبل ما الزائر يطلب.</Q>
+<Q n={3} q="ملف `src/pages/health.ts` اللي مصدّر `GET` بيرجّع إيه؟">`Response`، مش مكوّن HTML. ده endpoint.</Q>
+</Quiz>

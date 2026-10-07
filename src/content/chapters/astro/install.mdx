@@ -1,0 +1,119 @@
+---
+title: التثبيت وهيكل المشروع
+short: التثبيت
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: create astro · src/pages · public · astro.config · Node 22
+keywords: create astro · src · public · CLI
+goal: تعمل مشروع جديد، وتفرّق `src` عن `public`، وتعرف أوامر الـ CLI اللي هتستخدمها كل يوم.
+part: البداية
+color: c2
+---
+
+## المطلوب قبل ما تبدأ
+
+من Astro 6 وطالع، المشروع محتاج <En>Node.js 22</En> أو أحدث. Node 18 و 20 مش مدعومين. مدير الحزم حر: npm أو pnpm أو yarn أو bun. المذكرة دي بتستخدم أوامر <En>pnpm</En> لأن الموقع اللي بتقرأ فيه شغال بيه.
+
+<File name="terminal">
+
+```bash
+pnpm create astro@latest
+```
+
+</File>
+
+الـ wizard هيسألك: اسم الفولدر، قالب (فاضي أو بلوج أو دوكس)، TypeScript ولا لأ، ومدى الصرامة (`base` أو `strict` أو `strictest`)، وهل يعمل git. للمشاريع الجديدة خد `strict`. الـ content collections محتاجة `strictNullChecks`.
+
+لو عايز تبدأ من ريبو جاهز على GitHub، نفس الأمر بيقبل رابط الريبو. والتثبيت اليدوي: حزمة `astro` في `package.json`، و `tsconfig` بيعمل `extends` لـ `astro/tsconfigs/strict`، وملف `src/pages/index.astro`.
+
+<Box type="tip" title="ترقية مشروع قديم">
+
+`pnpm dlx @astrojs/upgrade` بيحدّث Astro والتكاملات الرسمية مع بعض. متحدّثش `astro` لوحده وتسيّب `@astrojs/mdx` على نسخة قديمة.
+
+</Box>
+
+## الشجرة اللي هتتعود عليها
+
+الفولدر **الوحيد** المحجوز هو `src/pages`. الباقي اتفاقية. المجتمع بيسمّي المكوّنات `components` واللاياوت `layouts`، بس تقدر تغيّر الأسماء دي.
+
+<Tree>
+
+```text
+koshary-site/
+├── public/                 # يتتنسخ زي ما هو، من غير معالجة
+│   ├── favicon.svg
+│   └── robots.txt
+├── src/
+│   ├── components/
+│   ├── layouts/
+│   ├── pages/              # كل ملف هنا = رابط
+│   │   └── index.astro
+│   ├── styles/
+│   ├── content.config.ts   # مجموعات المحتوى وقت البناء
+│   └── live.config.ts      # اختياري: محتوى بيتجاب وقت الطلب
+├── astro.config.mjs
+├── package.json
+└── tsconfig.json
+```
+
+</Tree>
+
+<Grid2>
+<Card title="src/" c={1}>
+
+الكود والأصول اللي Astro **يعالجها**: صفحات، مكوّنات، CSS، صور هتتحسّن، Markdown. ملف `.astro` مش بيتبعت للمتصفح كنص. بيترندر HTML.
+
+</Card>
+<Card title="public/" c={4}>
+
+ملفات تتتنسخ لآخر البناء من غير لمس: `robots.txt`، أيقونة، PDF. CSS أو JS تحطه هنا **مش** هيتجمع ولا هيتحسن. اللي بتكتبه بنفسك خليه في `src`.
+
+</Card>
+</Grid2>
+
+رابط ملف في `public/menu.pdf` هو `/menu.pdf` من جذر الموقع. متحطّش `/public` في الرابط.
+
+## الملفات اللي حوالي الشجرة
+
+`package.json` فيه السكربتات. Astro محتاج الاعتمادات وقت البناء، فحطها في `dependencies` لحد ما يبقى عندك سبب حقيقي لـ `devDependencies`.
+
+`astro.config.mjs` (أو `.ts`) إعدادات البناء: التكاملات، الـ adapter، عنوان الموقع. TypeScript في الكونفج بيتقرأ بأداة `tsm` وبيحترم `tsconfig`. الـ SEO (عنوان الصفحة ووصفها) **مش** بيتحط هنا. ده مكانه وسم `head` في اللاياوت، لأن Astro مش بيستخدم الكونفج كبيانات للموقع.
+
+`tsconfig.json` عشان المحرر يفهم الاستيراد. من غيره حاجات زي أنواع الحزم بتبان ناقصة.
+
+<File name="astro.config.mjs">
+
+```js
+import { defineConfig } from "astro/config";
+
+export default defineConfig({
+  site: "https://koshary.example",
+});
+```
+
+</File>
+
+`site` هو عنوان النشر من غير شرطة في الآخر. محتاجه الـ sitemap والروابط الـ canonical. لو الموقع مش على جذر الدومين (زي GitHub Pages تحت `/repo`)، زوّد `base: "/repo"`.
+
+## أوامر كل يوم
+
+<Chips items={["astro dev — سيرفر التطوير", "astro build — يخرج dist/", "astro preview — يشغّل ناتج البناء", "astro check — فحص الأنواع", "astro sync — يولّد أنواع المحتوى", "astro add — يركّب تكامل", "astro info — نسخة وبيئة للمساعدة"]} />
+
+<Box type="warn" title="dev غير preview">
+
+`astro dev` للتطوير، وفيه حاجات بتتسامح. `astro preview` بيشغّل **ناتج البناء**. قبل ما تقول "شغالة"، جرّب build وبعدين preview. من Astro 6، سيرفر التطوير اتقرّب من تشغيل الإنتاج (خصوصًا على runtimes زي Cloudflare)، بس المعاينة لسه الاختبار الصادق.
+
+</Box>
+
+## 🧪 Lab
+
+اعمل مشروع فاضي، افتح `src/pages/index.astro`، غيّر العنوان لـ "كشري ستيشن"، وشغّل `pnpm dev`. بعدين حط `public/note.txt` فيه سطر، وافتح `/note.txt` في المتصفح. الملف ظهر من غير أي صفحة Astro، لأن `public` بيتنسخ كما هو.
+
+<Checklist id="astro-install" title="خلّصت الفصل لما" items={["تعمل مشروع بـ `pnpm create astro@latest` على Node 22", "تفرّق `src` عن `public` بمثال", "تعرف إن `src/pages` هو الفولدر المحجوز الوحيد", "تحط `site` في الكونفج وتعرف ليه", "تفرّق `dev` عن `build` و `preview`"]} />
+
+<Quiz>
+<Q n={1} q="CSS كتبته وحطيته في `public/` هيتعمله bundle؟">لأ. `public` يتتنسخ من غير معالجة. CSS بتاعك مكانه `src`.</Q>
+<Q n={2} q="عنوان الصفحة ووصفها بيتحطوا في `astro.config`؟">لأ. في `head` الصفحة أو اللاياوت. الكونفج للبناء مش لبيانات الـ SEO.</Q>
+<Q n={3} q="أقل نسخة Node لمشروع Astro 7؟">Node 22.</Q>
+</Quiz>

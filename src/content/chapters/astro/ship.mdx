@@ -1,0 +1,83 @@
+---
+title: الإعدادات والتكاملات والنشر
+short: النشر
+order: 14
+label: فصل ١٤
+badge: الاحتراف · فصل ١٤
+en: astro.config · integrations · CSP · deploy · astro check
+keywords: integrations · CSP · adapter · CI
+goal: تقرا الكونفج كخريطة، تركّب تكامل، وتقفل الموقع قبل ما يطلع للناس.
+part: الاحتراف
+color: c4
+---
+
+## الكونفج خريطة مش سرداب
+
+ملف واحد، ومفاتيح كتير. اللي بيلمسه أغلب الناس:
+
+<Chips items={["site و base و trailingSlash", "output و adapter", "integrations", "redirects", "vite", "image و fonts", "env.schema", "security.csp", "cache و routeRules", "markdown.processor", "i18n و prefetch"]} />
+
+`vite` ممر للهروب: إضافة أو `build` خاص. متخبيش منطق التطبيق هناك. Vite 8 مع Astro 7 بيستخدم Rolldown، وإعدادات `esbuild` و `rollupOptions` القديمة ليها طبقة توافق، بس الإضافات اللي بتلمس داخل Vite راجع دليل ترقيتها.
+
+<Box type="tip" title="غيّر مفتاح وانت فاهم الأثر">
+
+`base` غلط يكسّر كل الأصول. `trailingSlash` يختلف عن الاستضافة يعمل حلقة تحويل. `site` ناقص يكسّر السايت ماب والـ canonical. التلاتة دول أول حاجة تتراجع قبل النشر.
+
+</Box>
+
+## التكاملات
+
+تكامل حزمة بتعدّل البناء: إطار واجهة، MDX، سايت ماب، adapter. `pnpm astro add sitemap` يسطّب ويكتب `integrations` في الكونفج.
+
+تكتب تكامل لما نفس السلوك يتكرر في أكتر من مشروع: حقن سكربت، توليد ملف آخر البناء. الواجهة hooks زي `astro:config:setup` (تعدّل الكونفج وتزود إضافة Vite) و `astro:build:done` (بعد ما `dist` يجهز). راجع مرجع الـ Integration API قبل ما تعتمد على اسم الـ hook، لأن فيه hooks للـ dev وللـ routes كمان.
+
+دليل التكاملات الرسمي فيه مئات الحزم للمجتمع. حزمة مجتمع بتتنفّذ وقت البناء، فاقراها قبل ما تركّبها.
+
+<Grid2>
+<Card title="رسمي" c={1}>
+
+`astro add` بيظبطه. بيتحدّث مع `@astrojs/upgrade`.
+
+</Card>
+<Card title="مجتمع" c={5}>
+
+ممكن نفس الأمر لو الحزمة معلّمة كده، وإلا تثبيت يدوي وسطر في `integrations`.
+
+</Card>
+</Grid2>
+
+## CSP
+
+سياسة أمان المحتوى تقول للمتصفح مين يحق له يبعت سكربت وستايل. `security.csp` في الكونفج يخلّي Astro يحسب هاشات السكربتات والستايل اللي هو طلّعهم. سكربت طرف تالت من دومين تاني لازم تزوده في السياسة، وإلا هيتقفل.
+
+بعض الـ adapters تقدر تكتب الهيدر على الصفحات الثابتة (زي `staticHeaders` على Netlify) بدل وسم `<meta>` بس. الهيدر أقوى. راجع صفحة الـ adapter بتاعك.
+
+<Hl c="p">متفعّلش CSP يوم الإطلاق من غير ما تجرّب الصفحات. هتقفل تحليلاتك أو الخط لو ناسي مصدر.</Hl>
+
+## النشر
+
+ثابت: أي استضافة ملفات. ارفع `dist/`. ظبط `site` و `base`.
+
+سيرفر: نفس الـ adapter والاستضافة. متبنيش بـ adapter الـ Node وتنشر على Cloudflare Workers.
+
+في الـ CI: `pnpm install --frozen-lockfile` ثم `pnpm astro check` ثم `pnpm build`. `astro check` بيلحق أخطاء الأنواع قبل ما الزائر يلحقها.
+
+اختبار مكوّن بره المتصفح فيه Container API: ترندر `.astro` أو مكوّن إطار وتقرأ HTML. من Astro 7 استيراد `getContainerRenderer` بقى من مسار `container-renderer` بتاع التكامل (زي `@astrojs/react/container-renderer`) مش من جذر الحزمة. اختبار الرحلة الكاملة Playwright على `preview`.
+
+<Box type="story" icon="🚪" title="الباب قبل الشارع">
+
+`astro check` البواب يتفرج على البطاقة. `build` المطبخ يطلّع الطلبات. `preview` تدوق الطبق قبل ما يطلع للقاعة. نشر من غير التلاتة يعني الزبون أول من يدوق الغلط.
+
+</Box>
+
+## أسرار النشر
+
+متحوّلش `.env` جوه الصورة أو الـ `dist` العام. أسرار السيرفر تتضبط في لوحة الاستضافة، وتتقرا عبر `astro:env`. المتغير `PUBLIC_` هيبان في المتصفح حتى لو حاطه في لوحة "سرّية".
+
+<Checklist id="astro-ship" title="خلّصت الفصل لما" items={["تعدّد مفاتيح الكونفج اللي بتأثر على الروابط", "تركّب تكامل بـ `astro add`", "تعرف CSP هتقفل السكربت الغريب", "تختار adapter مطابق للاستضافة", "تشغّل `astro check` و `build` في CI"]} />
+
+<Quiz>
+<Q n={1} q="`base` غلط يعمل إيه؟">يكسر مسارات الأصول والصفحات لو الموقع مش على جذر الدومين.</Q>
+<Q n={2} q="Adapter Node على Cloudflare Workers؟">لأ. كل استضافة بالـ adapter بتاعها.</Q>
+<Q n={3} q="`getContainerRenderer` في Astro 7 بيتستورد منين؟">من مسار `container-renderer` جوّه حزمة الإطار، مش من جذرها.</Q>
+</Quiz>

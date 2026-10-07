@@ -1,0 +1,115 @@
+---
+title: اللاياوت ورأس الصفحة
+short: اللاياوت
+order: 5
+label: فصل ٥
+badge: الصفحات · فصل ٥
+en: layouts · slots · head · canonical · Open Graph
+keywords: layout · slot · title · canonical
+goal: تلم الهيكل المتكرر في لاياوت، وتطلع عنوان ووصف و canonical من غير ما تكررهم في كل صفحة.
+part: الصفحات
+color: c5
+---
+
+## اللاياوت مكوّن عادي
+
+مفيش نوع ملف خاص. اللاياوت مكوّن Astro فيه `slot`، والصفحات بتلف نفسها بيه. الاتفاقة إنه يعيش في `src/layouts`، بس ده مش قانون.
+
+<File name="src/layouts/Base.astro">
+
+```astro
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description = "كشري ستيشن" } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    <meta property="og:title" content={title} />
+  </head>
+  <body>
+    <header><a href="/">كشري ستيشن</a></header>
+    <slot />
+    <footer>آخر الطبق</footer>
+  </body>
+</html>
+```
+
+</File>
+
+<File name="src/pages/index.astro">
+
+```astro
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="المنيو">
+  <h1>اختار طبقك</h1>
+</Base>
+```
+
+</File>
+
+الـ `<head>` في الصفحة البيت جوه اللاياوت بيتدمج مع `<head>` اللاياوت. تقدر تزود وسم من الصفحة وهو يطلع في الرأس، مش يضيع.
+
+لاياوت جوه لاياوت عادي: `Post` يلف المحتوى ويستخدم `Base` للهيكل. متعملش سلسلة طويلة من غير سبب.
+
+<Box type="story" icon="🖼️" title="البرواز">
+
+اللاياوت البرواز: لوجو وفوتر ونفس الـ `head`. الصفحة اللوحة اللي بتتبدل. مش بترسم البرواز من الأول كل مرة.
+
+</Box>
+
+## Markdown له لاياوت من الـ frontmatter
+
+صفحة `.md` جوّه `src/pages` مش فيها مكوّن تستورده. بتمرر اللاياوت في الـ frontmatter:
+
+<File name="src/pages/story.md">
+
+```md
+---
+layout: ../layouts/Base.astro
+title: حكاية الطبق
+description: إزاي الكشري وصل
+---
+
+متن المقالة هنا.
+```
+
+</File>
+
+اللاياوت بيستقبل `frontmatter` كـ prop فيها المفاتيح دي، والمحتوى يروح للـ `slot`. الأسماء الدقيقة للـ props بتاعة Markdown راجعها في الدليل لو المحرر اتلخبط، لأن الشكل اتظبط أكتر من مرة عبر النسخ.
+
+## عنوان الموقع مش في الكونفج
+
+`site` في الكونفج **عنوان النشر** عشان الروابط المطلقة والسايت ماب. عنوان الصفحة ووصفها وصورة المشاركة حقول بتكتبها أنت في `head`. نمط شغال: مكوّن `Head.astro` ياخد `title` و `description`، واللاياوت يستخدمه. كده كل الصفحات ماشية على نفس العقد.
+
+<Hl c="g">الرابط الـ canonical يتبنى من `Astro.site` + مسار الصفحة، مش يتكتب بإيد في كل ملف.</Hl>
+
+من غير `site` في الكونفج، `Astro.site` يبقى فاضي والـ canonical المطلق مش هيتبني. حط العنوان الحقيقي قبل النشر.
+
+## إيه اللي متتحطش في اللاياوت
+
+سكربت تحليلات أو بيكسل حطه في اللاياوت **مرة**، ومتكررش في كل صفحة. جزيرة تفاعلية في الهيدر (قائمة موبايل) حط عليها `client:*` في اللاياوت، فتتبعت مرة واحدة لكل الصفحات اللي بتستخدمه. ده قرار أداء: هيدر متفاعل يعني جافاسكربت على **كل** الصفحات.
+
+<Box type="tip" title="اللغة والاتجاه">
+
+حط `lang` و `dir` على `<html>`. الموقع ده `ar` و `rtl`. لو عندك أكتر من لغة، اللاياوت ياخد اللغة من `Astro.currentLocale` (فصل التنقل).
+
+</Box>
+
+<Checklist id="astro-layouts" title="خلّصت الفصل لما" items={["تلف صفحة بـ layout فيه `slot`", "تطلع `title` و `description` و canonical من props", "تعرف إن `head` الصفحة يندمج مع `head` اللاياوت", "تربط صفحة Markdown بـ `layout` في الـ frontmatter", "متكتبش عنوان SEO جوه `astro.config`"]} />
+
+<Quiz>
+<Q n={1} q="اللاياوت نوع ملف خاص؟">لأ. مكوّن `.astro` فيه `slot`.</Q>
+<Q n={2} q="`site` في الكونفج بيبقى عنوان التاب؟">لأ. ده أصل روابط النشر. عنوان التاب وسم `title` في الصفحة.</Q>
+<Q n={3} q="صفحة Markdown بتستخدم اللاياوت إزاي؟">بمفتاح `layout` في الـ frontmatter، والمحتوى يروح للـ slot.</Q>
+</Quiz>
