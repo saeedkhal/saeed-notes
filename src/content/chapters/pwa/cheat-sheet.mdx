@@ -1,7 +1,7 @@
 ---
 title: "Cheat Sheet: الـ PWA في صفحة"
 short: Cheat Sheet
-order: 7
+order: 8
 label: الآخر
 badge: الآخر
 en: One-page recall for PWA and caching
@@ -16,7 +16,11 @@ color: dark
   ["الأيقونة صغيرة جوه دايرة", "أيقونة maskable، والمهم في الـ 80% اللي في النص"],
   ["عايز الموقع يفتح offline", "Service Worker يمسك fetch ويرد من Cache Storage"],
   ["فين أحفظ الملفات الأساسية؟", "في install بـ `cache.addAll`"],
-  ["فين أمسح الكاش القديم؟", "في activate"],
+  ["الطلب موجود في الصندوق؟", "`cache.match`"],
+  ["احفظ رد بعد ما تعدّله", "`Response` جديد ثم `cache.put`"],
+  ["امسح طلب واحد", "`cache.delete`"],
+  ["امسح الصندوق كله", "`caches.delete`"],
+  ["فين أمسح الكاش القديم؟", "في activate، بعد `caches.keys()`"],
   ["النسخة الجديدة مستنية", "waiting لحد ما التابات تتقفل، أو `skipWaiting()`"],
   ["الـ SW مش ماسك الصفحة الحالية", "`clients.claim()`"],
   ["المتصفح عرف التحديث إزاي؟", "قارن sw.js بايت ببايت"],

@@ -1,0 +1,224 @@
+---
+title: أوامر الكاش اللي هتستخدمها
+short: أوامر الكاش
+order: 6
+label: فصل ٦
+badge: الكاش · فصل ٦
+en: caches.open · match · put · delete · fetch · install · activate
+keywords: caches.open · match · put · delete · claim
+goal: تكتب فتح الكاش والبحث فيه وتعديله ومسحه، وتفهم سطور install و activate في مثال الموقع.
+part: الكاش
+color: c1
+---
+
+الكاش في المتصفح مش فولدر على الهارد تفتحه من مدير الملفات. هو صناديق بأسماء جوّه <En>Cache Storage</En>. كل صندوق فيه طلبات وردود. الأوامر تحت دي هي اللي مثال الموقع بيستخدمها، بنفس الترتيب اللي هتحتاجه وأنت بتكتب الـ Service Worker.
+
+<Box type="story" icon="🧊" title="التلاجة والأرفف">
+
+`caches.open("menu-v1")` يفتح رف اسمه `menu-v1`، ولو مش موجود يعمله. جوه الرف أطباق: كل طبق طلب (`Request`) والرد بتاعه (`Response`). مش بتعدل الطبق وهو على الرف. بتعمل نسخة جديدة وتحطها مكانه.
+
+</Box>
+
+## ١. اعمل فولدر كاش بالاسم ده
+
+<File name="sw.js">
+
+```js
+const cache = await caches.open("menu-v1");
+```
+
+</File>
+
+`caches.open` بترجّع الصندوق. الاسم نص أنت بتختاره. غيّر الاسم (`menu-v2`) لما شكل الحاجات المحفوظة يتغير، عشان القديمة تتشال في `activate`.
+
+## ٢. الطلب ده موجود في الفولدر؟
+
+<File name="sw.js">
+
+```js
+const hit = await cache.match(request);
+if (hit) {
+  // hit هو الـ Response المحفوظ
+}
+```
+
+</File>
+
+لو مش موجود، `match` بترجّع `undefined` مش خطأ. `caches.match(request)` بتدوّر في **كل** الصناديق. `cache.match` بتدوّر في الصندوق اللي فتحته بس. في مثال الموقع بنفتح صندوق الصفحات وندوّر فيه بالمسار من غير `?hl=`.
+
+## ٣. امسك الطلب وعدّل الرد قبل ما يتخزّن
+
+جسم الرد بيتقرأ **مرة واحدة**. عشان كده بنبني `Response` جديد ونخزّن نسخة منه بـ `clone`.
+
+<File name="sw.js">
+
+```js
+self.addEventListener("fetch", (event) => {
+  event.respondWith((async () => {
+    const cache = await caches.open("menu-v1");
+    const remote = await fetch(event.request);
+    if (!remote.ok) return remote;
+
+    const headers = new Headers(remote.headers);
+    headers.set("x-cached-at", String(Date.now()));
+    const stamped = new Response(await remote.blob(), {
+      status: remote.status,
+      statusText: remote.statusText,
+      headers,
+    });
+    await cache.put(event.request, stamped.clone());
+    return stamped;
+  })());
+});
+```
+
+</File>
+
+`fetch` هنا الحدث: كل طلب الصفحة بتعمله يعدّي على الـ SW. `respondWith` يقول للمتصفح "أنا هرد". `put` يحط الرد في الصندوق. الموقع بيحط كمان `x-sw-build` عشان يعرف النسخة من أنهي deploy.
+
+<Hl c="y">متخزّنش الرد وبعدين تحاول تقراه تاني من غير `clone`. الجسم بيخلص.</Hl>
+
+## ٤. الطلب GET ولا POST؟
+
+<File name="sw.js">
+
+```js
+if (event.request.method !== "GET") return;
+```
+
+</File>
+
+`return` من غير `respondWith` يعني سيّب المتصفح يكمّل للنت عادي. `cache.put` **بيرفض** أي حاجة غير `GET`. الـ POST فيه جسم وبيتكرر غلط لو اتخزن، فسيّبه يعدّي. نفس السطر موجود في أول `fetch` بتاع الموقع.
+
+## ٥. امسح فولدر الكاش كله
+
+<File name="sw.js">
+
+```js
+await caches.delete("menu-v1");
+```
+
+</File>
+
+ده بيمسح الصندوق واسمه. مش بيمسح مدخل واحد.
+
+## ٦. امسح طلب واحد من الفولدر
+
+<File name="sw.js">
+
+```js
+const gone = await cache.delete(request);
+```
+
+</File>
+
+`gone` يبقى `true` لو لقى الطلب ومسحه. المفتاح لازم يطابق اللي اتخزن بيه. الموقع بيخزّن الصفحات بالمسار من غير query، فالمسح يستخدم نفس المفتاح.
+
+## ٧. هات الرد من الكاش مش من النت
+
+<File name="sw.js">
+
+```js
+const cached = await cache.match(request);
+if (cached) return cached;
+```
+
+</File>
+
+مفيش `fetch` هنا. لو الصندوق فاضي، مفيش رد وهتكمل انت بقى تجيب من النت أو ترجع صفحة offline.
+
+## ٨. هات الرد من النت
+
+<File name="sw.js">
+
+```js
+const remote = await fetch(request);
+```
+
+</File>
+
+دي شبكة عادية. الـ SW لسه يقدر يخزّن الناتج بعدها بـ `put`. لو عايز النت بس ومن غير كاش، متفتحش صندوق خالص.
+
+## سطور مثال الموقع، سطر سطر
+
+<File name="src/pwa/sw.js">
+
+```js
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL).then((cache) => cache.addAll(SHELL_FILES)),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    const keep = [SHELL, PAGES, ASSETS, STATIC];
+    for (const key of await caches.keys()) {
+      if (!keep.includes(key)) await caches.delete(key);
+    }
+    await self.clients.claim();
+  })());
+});
+```
+
+</File>
+
+<Grid2>
+<Card title="install" c={2}>
+
+المتصفح بيشغّل الحدث ده لما يشوف ملف SW جديد (البايتات اتغيرت). في الوقت ده الـ SW **لسه ماسكش** الصفحات. بنستخدمه نحفظ الملفات الأساسية قبل ما نرد على حد.
+
+</Card>
+<Card title="caches.open(SHELL)" c={3}>
+
+`SHELL` نص زي `shell-` ورقم الـ build. كل deploy صندوق جديد. `addAll` يجيب القائمة ويحطها. لو ملف واحد فشل، التثبيت كله يفشل والنسخة القديمة تفضل شغالة.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="activate" c={4}>
+
+بيحصل لما النسخة دي تبقى هي الشغالة، بعد ما القديمة تسيب المكان. ده وقت تنضيف الصناديق اللي اسمها مش في `keep`.
+
+</Card>
+<Card title="caches.keys()" c={5}>
+
+قائمة أسماء كل الصناديق على الأصل ده، مش الملفات اللي جواها. اللوب يمسح أي اسم مش في القائمة البيضا.
+
+</Card>
+</Grid2>
+
+<Card title="clients.claim()" c={1}>
+
+من غير السطر ده، الصفحات المفتوحة قبل التفعيل تفضل مع الـ SW القديم لحد ما تتعمل لها reload. `claim` يخلّي النسخة الجديدة تمسك التابات المفتوحة دلوقتي.
+
+</Card>
+
+`event.waitUntil` يقول للمتصفح: متقفلش الـ SW لحد ما الـ promise تخلّص. من غيرها التثبيت أو التفعيل ممكن يتقطع في النص والكاش يفضل نصّه.
+
+<Box type="warn" title="install مش activate">
+
+`install` بيبني. `activate` بينضّف ويمسك. تحط `delete` جوه `install` ممكن تمسح صندوق لسه النسخة القديمة محتاجاه. المسح مكانه `activate`.
+
+</Box>
+
+## أوامر تستاهل تتحط معاهم
+
+<Chips items={["event.waitUntil — خلّي الـ SW عايش لحد ما الوعد يخلّص", "self.skipWaiting() — متستناش التابات القديمة تتقفل", "event.respondWith — أنا اللي هرد على الطلب", "cache.addAll — نزّل قائمة ملفات وقت install", "response.clone() — الجسم بيتقرأ مرة", "cache.keys() — إيه الطلبات اللي جوه الصندوق"]} />
+
+`skipWaiting` في آخر `install` عشان النسخة الجديدة متقعدش في حالة waiting. الموقع بيعمله بعد ما `addAll` تنجح. من غيره، المستخدم يقفل كل التابات قبل ما `activate` يحصل.
+
+<Box type="tip" title="فين تشوف الصناديق">
+
+DevTools ثم Application ثم Cache storage. هتلاقي الأسماء اللي `open` عملتها، ولو مسحت واحد بـ `caches.delete` هيختفي من القائمة دي.
+
+</Box>
+
+<Checklist id="pwa-commands" title="خلّصت الفصل لما" items={["تفتح صندوق بـ `caches.open` وتدوّر فيه بـ `match`", "تفرّق `cache.delete` عن `caches.delete`", "ترفض تخزين غير `GET`", "تبني `Response` جديد قبل `put` وتعمل `clone`", "تحط الحفظ في `install` والمسح و `claim` في `activate`"]} />
+
+<Quiz>
+<Q n={1} q="`caches.delete` ولا `cache.delete` تمسح صندوق باسمه؟">`caches.delete` بتمسح الصندوق كله. `cache.delete` بتمسح طلب واحد جواه.</Q>
+<Q n={2} q="ليه `put` مش بيقبل POST؟">الكاش متصمم لطلبات `GET`. الـ POST سيّبه يعدّي للنت من غير ما تتخزن.</Q>
+<Q n={3} q="`clients.claim` بيعمل إيه؟">يخلّي الـ SW الجديد يمسك الصفحات المفتوحة دلوقتي، من غير ما تستنى reload.</Q>
+</Quiz>
