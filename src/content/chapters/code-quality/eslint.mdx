@@ -1,0 +1,100 @@
+---
+title: ESLint يمسك الغلط المعروف
+short: ESLint
+order: 3
+label: فصل ٣
+badge: التنسيق · فصل ٣
+en: flat config · eslint.config.js · --fix · recommended
+keywords: flat config · rules · --fix · init
+goal: تكتب قاعدة، تفرّق التحذير عن الخطأ، وتعرف إيه اللي --fix هيصلحه وإيه لأ.
+part: الأدوات
+color: c3
+---
+
+## قواعد، مش ذوق
+
+<En>ESLint</En> يقرأ الملفات ويمرّر عليها قواعد. القاعدة تقول: تحذير، أو خطأ يوقف الأمر. مثال: متغير متعرّف ومتستخدمش، أو `==` بدل `===`، أو `console` لو الفريق مش عايزها في الكود النهائي.
+
+الامتداد في المحرر يعلّم السطر. الحزمة `eslint` في المشروع هي اللي فيها القواعد. من غير الحزمة، الامتداد ما عندوش قواعد مشروعك يطبّقها.
+
+<File name="terminal">
+
+```bash
+npm install --save-dev eslint
+npm init @eslint/config@latest
+```
+
+</File>
+
+الأمر التاني معالج إعداد. هيسألك: المشروع <En>CommonJS</En> (`require`) ولا <En>ES modules</En> (`import`)، JavaScript ولا TypeScript، وفي أسئلة عن الإطار لو موجود. في مقالات قديمة الأمر اسمه `npx eslint --init`. من ESLint ٩ المعالج الرسمي هو `npm init @eslint/config`. راجع صفحة ESLint لو الاسم اتغير تاني.
+
+الناتج ملف إعداد <En>flat config</En>، غالبًا `eslint.config.js`. ملف `.eslintrc` القديم و`.eslintignore` مش شغل النسخة ٩.
+
+## ملف القواعد
+
+المصفوفة تتقرا بالترتيب. اللي بعد يغلب اللي قبل لو الاتنين لمسوا نفس القاعدة. `js.configs.recommended` جابة قواعد جاهزة معقولة، زي متغيرات مش مستخدمة. فوقها بتضيف قواعد الفريق.
+
+<File name="eslint.config.js">
+
+```js
+import js from "@eslint/js";
+
+export default [
+  { ignores: ["dist/**", "coverage/**"] },
+  js.configs.recommended,
+  {
+    files: ["**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+    },
+    rules: {
+      eqeqeq: ["error", "always"],
+      "no-unused-vars": "warn",
+      "no-console": "off",
+    },
+  },
+];
+```
+
+</File>
+
+`files` يحدد الملفات. `sourceType: "module"` لو الكود `import`. لو المشروع `require`، خلّيها `"commonjs"`. `eqeqeq` على `error` يعني `==` يفشل الفحص. `no-unused-vars` على `warn` يعلّم من غير ما يوقف الأمر. `no-console` على `off` يطفي القاعدة حتى لو جاية من حتة تانية.
+
+`node_modules` متجاهل في الـ flat config. مخرجات البناء تتحط في أول كائن، بمفتاح `ignores`، زي المثال اللي فوق. ملف `.eslintignore` كان شغل الإعداد القديم.
+
+<Hl c="p">متديش ESLint قواعد شكل زي indent و quotes لو Prettier موجود. الشكل لـ Prettier، والمعنى لـ ESLint. الفصل الجاي يقفل التعارض رسميًا.</Hl>
+
+## الفحص والإصلاح
+
+<File name="terminal">
+
+```bash
+npx eslint app.js
+npx eslint app.js --fix
+npx eslint .
+```
+
+</File>
+
+من غير `--fix` يطبع الأخطاء والتحذيرات ومكانها. مع `--fix` يصلح اللي القاعدة معلّمة إنه يتصلح لوحده، زي فاصلة منقوطة ناقصة لو قاعدة `semi` شغالة.
+
+`eqeqeq` **مش** هتتحوّل لوحدها من `==` لـ `===`. الفرق مش شكلي: `==` بيعمل تحويل نوع، و`null == undefined` صحيح بينما `===` لأ. إصلاح أوتوماتيك هنا ممكن يغيّر سلوك البرنامج، فالأداة تبلّغ وتسيبك.
+
+العلم كلمة واحدة: `--fix`. مسافة بعد الشرطتين بتخلي الطرفية تشوف حجة اسمها `fix`، مش علم الإصلاح.
+
+لو الإعدادات اتلخبطت، امسح `eslint.config.js` وشغّل المعالج من الأول. متبنيش فوق ملف أنت مش فاهم ترتيب مصفوفته.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"ليه مش كل قواعد ESLint بتتصحح بـ --fix؟" — لأن بعض التصحيحات بتغيّر المعنى. التنسيق الآمن يتصلح. المقارنة ونوع التحويل يتسابوا لحد ما تشوف السطر.
+
+</Box>
+
+<Checklist id="quality-eslint" title="خلّصت الفصل لما" items={["تثبّت eslint وتشغّل معالج الإعداد", "تقرأ ملف flat config كمصفوفة بالترتيب", "تفرق error عن warn عن off", "تعرف --fix مش هيحوّل == إلى ===", "تتجاهل dist من مفتاح ignores"]} />
+
+<Quiz>
+<Q n={1} q="الامتداد من غير حزمة eslint في المشروع؟">هيفضل من غير قواعد المشروع. الامتداد بيعرض، والحزمة بتفحص.</Q>
+<Q n={2} q="warn ولا error لمتغير مش مستخدم لو عايزه يظهر وموقفّش الـ CI؟">`warn`. الـ error يفشل الأمر.</Q>
+<Q n={3} q="ليه eqeqeq مش بيتصلح لوحده؟">لأن == و === مش نفس السلوك، فالتغيير الآلي ممكن يكسّر شرط كان متعمد.</Q>
+</Quiz>

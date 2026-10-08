@@ -1,0 +1,48 @@
+---
+title: "Cheat Sheet: لو المشكلة… فكّر في…"
+short: Cheat Sheet
+order: 8
+label: الآخر
+badge: الآخر
+en: Prettier · ESLint · Husky · lint-staged · CI
+keywords: --check · --fix · flat config · pre-commit · npm ci
+goal: تفتكر الأمر والإعداد من غير ما ترجع للفصول.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["عايز شكل موحّد مش مراجعة منطق", "Prettier"],
+  ["متغير مش مستخدم أو == ممنوع", "ESLint"],
+  ["الناتج لازم يطلع رقم معين", "اختبار فيه assert"],
+  ["الفحص يتعدى على اللابتوب", "CI على السيرفر"],
+  ["تثبيت Prettier من غير ما يتحدث لوحده", "`npm install --save-dev --save-exact prettier`"],
+  ["فاصلة منقوطة في آخر الجملة", "`semi` في `.prettierrc`، مش في كل سطر"],
+  ["الافتراضي أصلًا فيه فواصل", "`semi: true` مش تغيير. `false` هو اللي يشيلها"],
+  ["نسّق عند الحفظ للمشروع بس", "`.vscode/settings.json` مع defaultFormatter و formatOnSave"],
+  ["ظبط الملف دلوقتي", "`npx prettier --write app.js`"],
+  ["اسأل من غير ما تكتب", "`npx prettier --check .`"],
+  ["متظبطش ملفات البناء", "`.prettierignore`"],
+  ["إعداد ESLint ٩", "`eslint.config.js` مصفوفة، مش eslintrc"],
+  ["معالج الإعداد", "`npm init @eslint/config@latest`"],
+  ["ورّيني الغلط", "`npx eslint app.js`"],
+  ["صلح اللي يتصلح", "`npx eslint app.js --fix`"],
+  ["== لسه موجود بعد --fix", "eqeqeq مش إصلاح آمن، لأن السلوك بيتغير"],
+  ["تجاهل dist في ESLint ٩", "مفتاح `ignores`، مش eslintignore"],
+  ["Prettier و ESLint بيتخانقوا على الفاصلة", "`eslint-config-prettier` آخر المصفوفة"],
+  ["حطيت قاعدة شكل بعد Prettier", "رجّعت التعارض. الأخير يغلب"],
+  ["قبل الـ commit على المتعلّم بس", "Husky يشغّل `npx lint-staged`"],
+  ["git add جوه lint-staged", "قديم. الأداة بترجّع الملفات للـ staging لوحدها"],
+  ["عدّيت الـ hook", "`--no-verify` مش بيعدّي الـ CI"],
+  ["اختبار Node من غير حزمة", "`node --test` و `assert.equal`"],
+  ["تثبيت السيرفر", "`npm ci` أو `pnpm install --frozen-lockfile`"],
+  ["أمر CI للتنسيق", "`prettier --check` مش `--write`"],
+]} />
+
+<Checklist id="quality-cheat" title="خلّصت المذكرة لما" items={["تفرّق Prettier و ESLint والاختبار والـ CI بجملة لكل واحد", "تقفل التعارض بآخر عنصر في إعداد ESLint", "تشغّل lint-staged من pre-commit وتعرف إنه مش بديل عن CI", "ترفض على السيرفر بـ check من غير ما السيرفر يكتب الملفات"]} />
+
+<Quiz>
+<Q n={1} q="آخر سطرين في eslint.config.js لو Prettier موجود؟">قواعد المعنى، وبعدها eslint-config-prettier آخر حاجة.</Q>
+<Q n={2} q="أمر التنسيق في الـ CI؟">`npx prettier --check .`</Q>
+<Q n={3} q="pre-commit بيعمل إيه؟">يشغّل lint-staged على الملفات المتعلّمة، ويلغي الـ commit لو الأمر فشل.</Q>
+</Quiz>

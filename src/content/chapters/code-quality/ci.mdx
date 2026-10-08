@@ -1,0 +1,78 @@
+---
+title: الـ CI يعيد الفحص بره اللابتوب
+short: CI
+order: 7
+label: فصل ٧
+badge: قبل الدفع · فصل ٧
+en: GitHub Actions · npm ci · prettier --check · eslint · test
+keywords: CI · npm ci · --check · --no-verify
+goal: تكتب خط فحص يرفض الدفع لو التنسيق أو اللنت أو الاختبار وقع، من غير ما يعدّل الملفات.
+part: قبل الدفع
+color: c2
+---
+
+## المرآة والباب
+
+على جهازك: الحفظ ينسّق، والـ commit يشغّل Husky. ده المرآة. بعد `git push`، سيرفر يشغّل نفس الفحص على نسخة نظيفة من المستودع. ده الباب.
+
+<Flow items={[{"t": "Save", "c": 1, "s": "Prettier في المحرر"}, "→", {"t": "commit", "c": 2, "s": "Husky و lint-staged"}, "→", {"t": "push", "c": 4, "s": "النسخة تطلع"}, "→", {"t": "CI", "c": 5, "s": "check على المشروع"}]} />
+
+الـ CI **ميستخدمش** `--write` ولا `--fix`. لو استخدمهم، هيعدّل ملفات على السيرفر ومحدش هياخد التعديل، والفحص هيعدي على شكل مش هو اللي اتدفع. السيرفر يحكم بس.
+
+<Hl c="y">--check و eslint من غير --fix و npm test. أي واحد بغير صفر، الدفع يترفض.</Hl>
+
+## خط على GitHub Actions
+
+الملف يتحط في `.github/workflows/check.yml`. الأسماء تتراجع في صفحة كل action لأن الإصدار بيتغير.
+
+<File name=".github/workflows/check.yml">
+
+```yaml
+name: check
+on: [push, pull_request]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npx eslint .
+      - run: npm test
+```
+
+</File>
+
+`npm ci` يثبّت اللي في ملف القفل بالظبط، وميرفعش إصدارات. `npm install` على السيرفر ممكن يحل شجرة مختلفة عن جهازك. لو الفريق على pnpm، الخطوة المقابلة `pnpm install --frozen-lockfile`، والكاش يتظبط على pnpm. راجع صفحة `setup-node`.
+
+`npm test` لازم يكون موجود في `scripts` زي ما الفصل اللي فات قال. لو مفيش اختبارات لسه، متعملش خطوة بتنادي أمر مش موجود. إما تضيف اختبار واحد حقيقي، أو تشيل الخطوة لحد ما الأمر يبقى له معنى.
+
+<Box type="idea" title="الترتيب مش عشوائي">
+
+التنسيق الأول رخيص ويمسك diff شكلي. ESLint بعديه يمسك القواعد. الاختبار آخر حاجة لأنه أبطأ، ومفيش داعي يستنى لو الشكل واقع. أي خطوة تفشل، اللي بعدها في العادة مش هتشتغل.
+
+</Box>
+
+## ليه الباب مش اختياري؟
+
+<Chips items={["git commit --no-verify يعدّي Husky", "نسخة قديمة من غير prepare متظبطتش الـ hooks", "ملف اتعدل بعد الـ commit ومتدفعش من نفس الفحص"]} />
+
+الثلاثة دول يعدّوا المرآة. الـ CI شايف الكوميت اللي على الفرع، مش اللي أنت فاكره على الجهاز. عشان كده الفحص على السيرفر هو اتفاق الفريق، مش إعداد محرر شخصي.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"لي Prettier في الـ CI طالما المحرر بينسّق عند الحفظ؟" — عشان الحفظ إعداد جهاز، وممكن يتقفل، والـ hook يتعدى. `--check` على السيرفر يثبت إن النسخة المتدفعة خارجة من نفس إعدادات `.prettierrc`.
+
+</Box>
+
+<Checklist id="quality-ci" title="خلّصت الفصل لما" items={["تفرق فحص السيرفر عن إصلاح الـ hook", "تستخدم npm ci مش install عشان القفل", "تشغّل prettier --check و eslint من غير إصلاح", "تربط npm test بسكربت موجود", "تشرح ليه --no-verify مخلاش الـ CI اختياري"]} />
+
+<Quiz>
+<Q n={1} q="ليه CI ميشغّلش prettier --write؟">عشان ميعدّلش الملفات على السيرفر. المطلوب حكم على اللي اتدفع.</Q>
+<Q n={2} q="npm ci مختلف عن npm install إزاي؟">ci يثبّت ملف القفل كما هو. install ممكن يحل إصدارات تانية.</Q>
+<Q n={3} q="الـ commit عدى بـ --no-verify. إيه اللي لسه ممكن يرفضه؟">خطوة الـ CI على الـ push أو الـ pull request.</Q>
+</Quiz>

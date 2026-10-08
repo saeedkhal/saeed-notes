@@ -1,0 +1,116 @@
+---
+title: قبل الـ commit، على الملفات المتعلّمة بس
+short: Husky و lint-staged
+order: 5
+label: فصل ٥
+badge: قبل الدفع · فصل ٥
+en: husky · pre-commit · lint-staged · --no-verify
+keywords: husky · lint-staged · pre-commit · staging
+goal: تشغّل ESLint و Prettier على الملفات اللي في الـ staging قبل ما الـ commit يتكمل.
+part: قبل الدفع
+color: c5
+---
+
+## ليه مش على المشروع كله كل مرة؟
+
+الفريق عايز يضمن إن اللي داخل التاريخ متنسّق وعدل على القواعد. لو الفحص على المستودع كله مع كل commit، هيفحص ملفات أنت ملمستهاش، وهيبطأ. المطلوب: الملفات المتعلّمة بس، يعني اللي في الـ <En>staging</En>.
+
+أداتان:
+
+<Grid2>
+<Card title="Husky" c={2}>
+
+يعلّق أمر على حدث Git. هنا الحدث `pre-commit`: قبل ما الـ commit يتسجل، شغّل الأمر. لو الأمر طلع بغير صفر، الـ commit يتلغي.
+
+</Card>
+<Card title="lint-staged" c={4}>
+
+ياخد الملفات المتعلّمة، ويشغّل أوامر على اللي امتداده مطابق. مش على باقي المشروع.
+
+</Card>
+</Grid2>
+
+<File name="terminal">
+
+```bash
+npm install --save-dev husky lint-staged
+npx husky init
+```
+
+</File>
+
+`husky init` يعمل فولدر `.husky`، ويضيف سكربت `prepare` في `package.json` عشان أي حد يعمل install يلاقي الـ hooks متظبطة. ويفتح `.husky/pre-commit` غالبًا فيه `npm test`. غيّر السطر ده إلى:
+
+<File name=".husky/pre-commit">
+
+```bash
+npx lint-staged
+```
+
+</File>
+
+## الأوامر فين؟
+
+`lint-staged` يقرأ مفتاح في `package.json`. المفتاح نمط ملفات، والقيمة أوامر تتنفّذ بالترتيب على الملفات دي.
+
+<File name="package.json">
+
+```json
+{
+  "lint-staged": {
+    "**/*.{js,ts,jsx,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "**/*.{css,scss,md,mdx}": [
+      "prettier --write"
+    ]
+  }
+}
+```
+
+</File>
+
+ESLint الأول عشان `--fix` يظبط اللي يقدر عليه، وبعدين Prettier يمسك الشكل الأخير. لو عكست، ESLint ممكن يرجّع شكل Prettier لسه مظبطه، لو لسه فيه قاعدة شكلية شغالة.
+
+من lint-staged ١٠، الملفات اللي اتعدلت بالأمر بتترجع للـ staging لوحدها. سطر `git add` في المقالات القديمة كان مطلوب زمان. دلوقتي زيادة، وسيبه.
+
+<Hl c="o">الـ commit يشغّل الفحص. لو الأمر فشل، الـ commit مش هيتسجل، والرسالة هتوريك ليه.</Hl>
+
+## فحص من غير ما يكتب
+
+لو عايز الـ hook يرفض بس، من غير ما يصلح الملف تحت إيدك:
+
+<File name="package.json">
+
+```json
+{
+  "lint-staged": {
+    "**/*.{js,ts,jsx,tsx}": [
+      "eslint",
+      "prettier --check"
+    ],
+    "**/*.{css,md,mdx}": [
+      "prettier --check"
+    ]
+  }
+}
+```
+
+</File>
+
+الاختيار الشائع: الإصلاح على الـ commit عشان الفرع يتسجل نظيف، والفحص من غير كتابة على الـ CI عشان السيرفر يحكم وميعدّلش. الاتنين مع بعض في الفصول الجاية.
+
+<Box type="warn" title="الـ hook مش بوابة">
+
+`git commit --no-verify` يعدّي Husky. كمان اللي يدفع من جهاز من غير ما يعمل install مش هيلاقي الـ hook. عشان كده الفصل الأخير يعيد `eslint` و `prettier --check` والاختبارات على السيرفر. الـ hook مرآة قبل ما تخرج. الـ CI باب العمارة.
+
+</Box>
+
+<Checklist id="quality-hooks" title="خلّصت الفصل لما" items={["تفرق Husky عن lint-staged", "تحط npx lint-staged في pre-commit", "تشغّل الأوامر على الامتدادات مش على المشروع كله", "تعرف git add في الإعداد ده بقى قديم", "تعرف --no-verify يعدّي الفحص المحلي"]} />
+
+<Quiz>
+<Q n={1} q="lint-staged بيفحص كل الملفات ولا المتعلّمة؟">المتعلّمة بس، يعني اللي في الـ staging.</Q>
+<Q n={2} q="الأمر في pre-commit رجع بغير صفر. الـ commit حصل؟">لأ. Git بيلغيه.</Q>
+<Q n={3} q="ليه الـ CI لسه لازم رغم الـ hook؟">عشان --no-verify وأي جهاز من غير hooks يعدّي المرآة المحلية.</Q>
+</Quiz>

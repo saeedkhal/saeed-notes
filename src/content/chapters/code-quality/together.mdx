@@ -1,0 +1,105 @@
+---
+title: متخليهمش يتخانقوا
+short: الاتنين مع بعض
+order: 4
+label: فصل ٤
+badge: التنسيق · فصل ٤
+en: eslint-config-prettier · flat config · shareable config · order
+keywords: eslint-config-prettier · extends · flat · order
+goal: تقفل قواعد ESLint الشكلية عشان Prettier هو صاحب الشكل، وتعرف إن آخر عنصر في المصفوفة هو اللي يكسب.
+part: الأدوات
+color: c4
+---
+
+## التعارض شكله إيه؟
+
+ESLint يقول: الفاصلة المنقوطة خطأ لو موجودة. Prettier يقول: كل جملة تخلّص بفاصلة. تحفظ الملف، Prettier يحط الفاصلة، ESLint يعلّمها أحمر. تحذفها عشان اللينتر، الحفظ الجاي يرجّعها. الشغل يلف.
+
+الخلاف ده على **شكل**. صاحب الشكل واحد: Prettier. ESLint يسيب قواعد الشكل، ويفضل على المعنى.
+
+الحزمة اللي بتعمل كده اسمها `eslint-config-prettier`. مش بتضيف قواعد. بتقفل قواعد ESLint اللي بتتداخل مع Prettier.
+
+<File name="terminal">
+
+```bash
+npm install --save-dev eslint-config-prettier
+```
+
+</File>
+
+## آخر عنصر هو اللي يتطبق
+
+<File name="eslint.config.js">
+
+```js
+import js from "@eslint/js";
+import eslintConfigPrettier from "eslint-config-prettier";
+
+export default [
+  js.configs.recommended,
+  {
+    files: ["**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+    },
+    rules: {
+      eqeqeq: ["error", "always"],
+      "no-unused-vars": "warn",
+    },
+  },
+  eslintConfigPrettier,
+];
+```
+
+</File>
+
+`eslintConfigPrettier` **في الآخر**. لو حطيت بعده كائن فيه `semi` أو `quotes` أو `indent`، رجّعت التعارض، لأن الكائن الأخير يغلب اللي قبله. بعض نسخ الحزمة كانت بتتستورد من `eslint-config-prettier/flat`. لو السطر العادي وقع، صفحة الحزمة هي اللي تقول المسار.
+
+قواعد المعنى زي `eqeqeq` و`no-unused-vars` تفضل قبل سطر Prettier. سطر Prettier مش بيلغيها. بيلغي اللي بيخاصم الفورماتر.
+
+<Hl c="g">الترتيب مش زينة. آخر حاجة في المصفوفة تكسب القاعدة اللي الاتنين لمسوها.</Hl>
+
+<Box type="warn" title="غلطة الترتيب الشائعة">
+
+تحط إعداد Prettier في النص، وبعده كائن فيه `semi: ["error", "never"]`. الكائن الأخير يشغّل القاعدة تاني، وPrettier لو بيكتب الفواصل هيتعارك معاه. الشكل يتقفل في الآخر، مش في النص.
+
+</Box>
+
+## إعداد جاهز من حد تاني
+
+في حزم اسمها بالعادة `eslint-config-` وبعدين اسم، زي `eslint-config-prettier` أو إعداد Airbnb. تثبّت الحزمة، وتقرأ صفحتها عشان تعرف إزاي تتستورد. ESLint ٩ غيّر الشكل، فمفيش سطر واحد ينفع لكل الحزم.
+
+الشكل القديم في `.eslintrc` كان مصفوفة أسماء:
+
+<File name=".eslintrc.json">
+
+```json
+{
+  "extends": ["some-config", "prettier"]
+}
+```
+
+</File>
+
+كلمة `prettier` هنا معناها إعداد ESLint اللي بيقفل التعارض، مش حزمة Prettier نفسها. وفي الملف الحديث الاستيراد مكان النص، والمصفوفة مكان `extends`. `prettier` لسه آخر اسم، لنفس سبب الترتيب.
+
+<Box type="tip" title="Airbnb وغيرها">
+
+لو الفريق عايز قواعد جاهزة أوسع من `recommended`، دور على الحزمة واتبع طريقة الاستيراد المكتوبة عندها للـ flat config. حطها قبل `eslint-config-prettier`، مش بعده. متفترضش إن مقال مكتوب لإعداد JSON القديم هيشتغل في ملف المصفوفة من غير ما الصفحة تقول كده.
+
+</Box>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إزاي Prettier و ESLint يشتغلوا مع بعض؟" — Prettier يملك الشكل. ESLint يملك قواعد المعنى. `eslint-config-prettier` آخر عنصر في الإعداد عشان يقفل القواعد الشكلية المتداخلة، من غير ما يلمس قواعد زي المتغيرات غير المستخدمة.
+
+</Box>
+
+<Checklist id="quality-together" title="خلّصت الفصل لما" items={["تشرح التعارض بمثال الفاصلة المنقوطة", "تحط eslint-config-prettier آخر المصفوفة", "تسيب eqeqeq قبل سطر Prettier", "تعرف إن آخر كائن يغلب القاعدة المشتركة", "تفرق شكل extends القديم عن استيراد الـ flat config"]} />
+
+<Quiz>
+<Q n={1} q="eslint-config-prettier بيضيف قواعد شكل ولا يقفلها؟">يقفل قواعد ESLint اللي بتتعارض مع Prettier. مش فورماتر.</Q>
+<Q n={2} q="حطيت semi بعد سطر prettier. إيه اللي هيحصل؟">قاعدة semi هترجع تشتغل وتغلب الإقفال، والتعارض يرجع.</Q>
+<Q n={3} q="extends وفيها prettier في ملف قديم معناها إيه؟">إعداد ESLint اللي بيقفل التعارض، ويكون آخر عنصر.</Q>
+</Quiz>
