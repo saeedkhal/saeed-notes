@@ -1,0 +1,141 @@
+---
+title: ارفض المدير الغلط والنسخة الغلط
+short: الإجبار
+order: 4
+label: فصل ٤
+badge: الإجبار · فصل ٤
+en: strict · devEngines · onFail · corepack enable npm · CI
+keywords: devEngines · onFail · strict · CI · only-allow
+goal: تخلي Yarn و npm يقعوا في مشروع pnpm، وتثبّت النسخة في CI من غير ما السيرفر يجيب مدير تاني.
+part: الإجبار
+color: c4
+---
+
+## المدير التاني يقع لوحده
+
+بعد `corepack use` والتفعيل، من جوه المشروع:
+
+<File name="terminal">
+
+```bash
+yarn install
+```
+
+</File>
+
+الرسالة بالإنجليزي، وفيها مسار الملف اللي اتقرأ:
+
+<File name="terminal">
+
+```text
+This project is configured to use pnpm because /path/to/package.json has a "packageManager" field
+```
+
+</File>
+
+الأمر يطلع بغير صفر. ملف `yarn.lock` مش هيتعمل. نفس الكلام لو الحقل Yarn وكتبت `pnpm`. المسار في الرسالة هو الملف الحاكم، حتى لو أنت واقف في فولدر تحته.
+
+ده إجبار **الاسم**. النسخة متجبرة لأن الوسيط مش هيشغّل غير الرقم اللي بعد `@`.
+
+<Box type="story" icon="🚪" title="الباب والمفتاح">
+
+الورقة على الباب: مفتاح pnpm رقم ١٠٫١٥٫٠. Yarn مفتاح تاني، البواب يرجّعك. pnpm ١٢ مفتاح نفس السلسلة بس مش الرقم المكتوب، برضه مش هيفتح. المفتاح اللي في جيبك من تثبيت عام قديم مش هو اللي بيتجرب، ما دام الأمر دخل من الـ shim.
+
+</Box>
+
+## `devEngines` شرط زيادة
+
+الحقل ده مش بدل `packageManager`. هو فحص توافق. `onFail` يقول يحصل إيه لو الاسم أو النسخة مش ماشيين مع المطلوب.
+
+<File name="package.json">
+
+```json
+{
+  "packageManager": "pnpm@10.15.0",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "10.15.0",
+      "onFail": "error"
+    }
+  }
+}
+```
+
+</File>
+
+`onFail` قيمته `error` أو فاضي: اختلاف يوقف الأمر. `warn` يطبع ويكمل. `ignore` يسكت. الاتنين لازم يتفقوا: لو `packageManager` يقول yarn و `devEngines` يقول pnpm، Corepack يرفض. ولو النسخة المكتوبة مش جوّه المطلوب في `devEngines`، يرفض برضه.
+
+متستخدمش مدى في `devEngines` وأنت عايز نسخة واحدة للأبد. المدى بيتسأل للريجستري. حط نفس الرقم في المكانين.
+
+<Hl c="o">packageManager هو الرقم اللي هيشتغل. devEngines هو الشرط اللي يصرخ لو الرقم أو الاسم مش هما.</Hl>
+
+## npm لسه الباب الخلفي
+
+طالما `corepack enable npm` ما حصلش، `npm install` بيستخدم npm بتاع Node ومش بيسأل Corepack. قفل Yarn مش قفل للباب ده.
+
+<File name="terminal">
+
+```bash
+corepack enable npm
+npm install
+```
+
+</File>
+
+بعد التفعيل، npm الوسيط يشوف الحقل. مشروع pnpm يرفض `npm install` زي ما رفض `yarn`.
+
+حزام تاني، لو جهاز في الفريق مش مفعّل shim لـ npm: سكربت `preinstall` بحزمة `only-allow`. npm و pnpm بيشغّلوا `preinstall` قبل التثبيت. الحزمة تخرج بغير صفر لو اسم المدير الحالي مش pnpm.
+
+<File name="package.json">
+
+```json
+{
+  "scripts": {
+    "preinstall": "npx only-allow pnpm"
+  }
+}
+```
+
+</File>
+
+الحزام ده مش بديل عن الحقل. هو يمسك اللي عدّى من غير shim. الحقل هو اللي يختار النسخة.
+
+في متغير `COREPACK_ENABLE_STRICT=0` يطفي رفض المدير الغلط. متتحطش في CI. دي للتجربة المحلية، وبتخلّي المدير التاني يشتغل بنسخته العامة. عكس الإجبار.
+
+## على السيرفر
+
+الـ CI جهاز جديد كل مرة. مفيش pnpm عام، وده كويس. فيه Node، وفيه Corepack لو الإصدار قبل ٢٥.
+
+<File name=".github/workflows/check.yml">
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with:
+      node-version: 22
+  - run: corepack enable
+  - run: corepack install
+  - run: pnpm install --frozen-lockfile
+```
+
+</File>
+
+`corepack enable` يحط الوسائط على السيرفر. `corepack install` يحمّل النسخة المكتوبة في `packageManager` قبل التثبيت. `--frozen-lockfile` يرفض قفل مش مطابق. من Node ٢٥ زود `npm install -g corepack` قبل `enable`. راجع إصدار الـ action.
+
+<Flow items={[{"t": "package.json", "c": 1, "s": "pnpm@10.15.0"}, "→", {"t": "corepack enable", "c": 2, "s": "الوسائط على PATH"}, "→", {"t": "corepack install", "c": 3, "s": "حمّل النسخة"}, "→", {"t": "pnpm install", "c": 4, "s": "قفل متجمد"}]} />
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إزاي تلزام المستودع بـ pnpm ١٠٫١٥٫٠؟" — `packageManager` بالنسخة من غير مدى، `corepack enable` ومنه npm لو عايز تقفل الباب التاني، و`devEngines` بـ `onFail: error` لو عايز الشرط يتقال بصراحة. الـ CI يعمل enable و install، مش `npm install -g pnpm@latest`.
+
+</Box>
+
+<Checklist id="corepack-enforce" title="خلّصت الفصل لما" items={["تجرب yarn في مشروع pnpm وتشوف الرفض", "تحط devEngines متوافق مع packageManager", "تفرق onFail error عن warn عن ignore", "تفعّل shim لـ npm أو تحط only-allow", "تخلي CI يعمل corepack enable و corepack install مش تثبيت عام"]} />
+
+<Quiz>
+<Q n={1} q="الحقل pnpm وكتبت yarn. مين اللي بيرفض؟">Corepack، ما دام yarn شغال من الـ shim. الرسالة إن المشروع متظبط على pnpm.</Q>
+<Q n={2} q="onFail قيمته warn. الاختلاف هيوقف الأمر؟">لأ. هيطبع تحذير ويكمل. الإيقاف عند error أو لما القيمة فاضية.</Q>
+<Q n={3} q="ليه CI مش npm install -g pnpm؟">عشان النسخة تيجي من packageManager، مش من آخر إصدار عام على السيرفر.</Q>
+</Quiz>

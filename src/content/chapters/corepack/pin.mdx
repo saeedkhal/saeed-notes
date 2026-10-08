@@ -1,0 +1,106 @@
+---
+title: اكتب النسخة في package.json
+short: تثبيت النسخة
+order: 3
+label: فصل ٣
+badge: التشغيل · فصل ٣
+en: packageManager · corepack use · corepack up · corepack install · hash
+keywords: packageManager · use · up · install · sha512
+goal: تثبّت مدير الحزم ونسخة محددة في المشروع، وتفرّق المدى عن النسخة الثابتة.
+part: التشغيل
+color: c3
+---
+
+## الحقل هو العقد
+
+<File name="package.json">
+
+```json
+{
+  "packageManager": "pnpm@10.15.0"
+}
+```
+
+</File>
+
+الاسم، وبعديه `@`، وبعديها نسخة <En>semver</En> ثابتة. مفيش `^` ولا `~`. Corepack بيرفض مدى في الحقل ده، لأن المدى مش عقد: النهاردة يحل لرقم وبكرة لرقم تاني.
+
+القيم المسموحة للاسم: `pnpm` و `yarn` و `npm`.
+
+`corepack use` مش بيكتب الرقم لوحده. بيلحقه ببصمة، والشكل الناتج قريب من:
+
+<File name="package.json">
+
+```json
+{
+  "packageManager": "pnpm@10.15.0+sha512.…"
+}
+```
+
+</File>
+
+اللي بعد `+sha512.` هاش طويل. متختصرهوش في Git ومتكتبهوش بإيدك. Corepack يقارن الملف اللي نزّله بالبصمة، ولو الريجستري رجّع حاجة تانية التحميل يقع. مقالات قديمة بتوري `+sha224.` — النسخ الحالية بتكتب `sha512`. لو البادئة اتغيرت، راجع الـ docs، ومتنسخهاش من مقال.
+
+## أمر واحد يكتب ويحمّل
+
+من جوه فولدر المشروع:
+
+<File name="terminal">
+
+```bash
+mkdir koshary && cd koshary
+npm init -y
+corepack use pnpm@10
+```
+
+</File>
+
+`corepack use pnpm@10` يجيب آخر إصدار في خط ١٠، يكتب `packageManager` في `package.json` ومعاه البصمة، ويشغّل تثبيت. `corepack use pnpm@10.15.0` يثبت الرقم ده بالظبط. `corepack use pnpm@latest` آخر إصدار، وده قرار متعمد مش افتراض الفريق.
+
+افتح `package.json` بعد الأمر. لو فوقيك فولدر فيه `package.json` وقفل زي `pnpm-lock.yaml`، Corepack ممكن يعتبرك جوه المشروع الأعلى ويكتب الحقل هناك. رسالة الرفض بتقول مسار الملف. اقرأ المسار قبل ما تدور في الفولدر اللي واقف فيه.
+
+بعدها:
+
+<File name="terminal">
+
+```bash
+pnpm --version
+```
+
+</File>
+
+الرقم اللي يطلع هو اللي في الحقل، مش `npm ls -g pnpm`.
+
+<Hl c="p">النسخة الثابتة في Git هي الإجبار. اللي مش متسجل في package.json مش اتفاق.</Hl>
+
+## ارفع جوه نفس الخط، ومتقفزش كبير
+
+<File name="terminal">
+
+```bash
+corepack up
+```
+
+</File>
+
+`up` يحدّث لآخر إصدار في نفس الخط الكبير، أو في المدى المكتوب في `devEngines` لو موجود. مش هيقفز من ١٠ لـ ١١. القفزة الكبيرة: `corepack use pnpm@latest` أو `corepack use pnpm@11`.
+
+`corepack install` من غير `-g` يحمّل المدير المكتوب في المشروع الحالي ويجهّزه، من غير ما يغيّر الحقل. مناسب للـ CI قبل `pnpm install`. العلم `-g` يغيّر النسخة الافتراضية بره المشاريع اللي مالهاش حقل. متستخدمهوش عشان "تظبط الفريق". الفريق يتظبط بالحقل.
+
+## مدى في الحقل التاني، مش هنا
+
+`devEngines.packageManager` يقدر يحمل مدى، زي `>=10`. Corepack يسأل الريجستري عن آخر نسخة جوه المدى، والنتيجة ممكن تتغير. عشان كده المدى لوحده مش تثبيت. التثبيت هو `packageManager` بنسخة كاملة. الفصل الجاي يجمع الاتنين من غير ما يتخانقوا.
+
+<Box type="warn" title="متكتبش pnpm@^10.15.0">
+
+العلامة دي شكلها تحديد وهي العكس. Corepack عايز رقم ثابت، والرسالة بتقول `Invalid package manager specification` و `expected a semver version`. اشيل العلامة واترك `pnpm@10.15.0`، أو سيبه لـ `corepack use` يكتبه مع البصمة.
+
+</Box>
+
+<Checklist id="corepack-pin" title="خلّصت الفصل لما" items={["تحط packageManager بنسخة من غير مدى", "تستخدم corepack use عشان يكتب الحقل", "تفرق use عن up وعن install", "تعرف إن pnpm --version هنا بيقرأ الحقل", "ترفض ^ جوه قيمة packageManager"]} />
+
+<Quiz>
+<Q n={1} q="corepack use pnpm@10 بيعمل إيه في package.json؟">يكتب آخر ١٠٫x في packageManager ويشغّل تثبيت.</Q>
+<Q n={2} q="corepack up من مشروع على pnpm ١٠ هيروح ١١؟">لأ. يفضل في نفس الخط الكبير. القفزة بـ corepack use pnpm@11 أو latest.</Q>
+<Q n={3} q="ليه المدى مرفوض في packageManager؟">لأنه يتحل لرقم مختلف مع الوقت، والعقد يبقى مش ثابت.</Q>
+</Quiz>

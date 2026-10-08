@@ -1,0 +1,24 @@
+---
+title: Corepack يلزم المشروع بمدير الحزم
+highlight: Corepack
+subtitle: enable · packageManager · devEngines · version pin
+description: تشغّل pnpm أو Yarn من غير تثبيت عام يتغير لوحده، وتخلي المشروع يرفض مدير حزم تاني أو نسخة غير اللي متفق عليها.
+emoji: 📦
+order: 19
+tags: [devops]
+note: شرح بأسلوبي لـ Corepack كما في مستودع nodejs/corepack. الأوامر بتتغير، وابتداءً من Node ٢٥ الأداة مش داخلة مع Node. راجع صفحة Corepack قبل ما تعتمد على علم قديم.
+---
+
+المذكرة ماشية على <Hl c="y">٤ فصول + شيت</Hl>. الأول Corepack بيعمل إيه ومش بيعمل إيه. بعدين تشغيل الـ shims. بعدين تثبيت نسخة في `package.json`. وفي الآخر الإجبار: مدير غلط، أو نسخة غلط، أو `npm` اللي مش معدّي على Corepack.
+
+<Box type="story" icon="🔑" title="تشبيه المذكرة كلها">
+
+المطبخ هو pnpm أو Yarn. Corepack مش بيطبخ. هو أمين المفاتيح: يبص على ورقة المشروع، يطلّع المفتاح المكتوب عليها، ولو طلبت مفتاح تاني يقولك لأ. من غير الورقة، أي مفتاح في جيبك يعدّي.
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+محتاج Node. من ١٤٫١٩ لحد قبل ٢٥، Corepack جاي مع Node بس مقفول لحد `corepack enable`. من Node ٢٥ تثبّته إنت: `npm install -g corepack`. الأمثلة هنا على pnpm. Yarn نفس الفكرة، والاسم في الحقل يتغير.
+
+</Box>

@@ -1,0 +1,92 @@
+---
+title: شغّل الـ shims الأول
+short: التشغيل
+order: 2
+label: فصل ٢
+badge: التشغيل · فصل ٢
+en: corepack enable · disable · Node 25 · npm shim
+keywords: enable · disable · shim · Node 25
+goal: تفعّل Corepack، وتعرف إن npm مش داخل التفعيل الافتراضي.
+part: التشغيل
+color: c2
+---
+
+## التفعيل مرة على الجهاز
+
+Corepack موجود ومقفول لحد ما تقول. `enable` يحط برامج وسيطة جنب `node`، أسماؤها `pnpm` و `yarn` ومشتقاتهم. لما تكتب الاسم، الوسيط يشتغل مش النسخة العامة القديمة.
+
+<File name="terminal">
+
+```bash
+corepack --version
+corepack enable
+pnpm --version
+```
+
+</File>
+
+لو `corepack` مش لاقي، يا Node أقدم من الدعم، يا أنت على Node ٢٥ أو أحدث والأداة اتشتالت من التوزيع. ساعتها:
+
+<File name="terminal">
+
+```bash
+npm install -g corepack
+corepack enable
+```
+
+</File>
+
+في سخرية معروفة: بتستخدم npm عشان تثبّت الأداة اللي هتمنعك تستخدم npm غلط. التوزيع مع Node كان عشان نتجنب الخطوة دي. من ٢٥ رجعت.
+
+<Box type="tip" title="حدّث Corepack نفسه">
+
+`npm install -g corepack@latest` يجيب آخر Corepack. سلوك الحقول زي `devEngines` اتطور في النسخ الأحدث. لو أمر في المذكرة مش متعرّف، حدّث Corepack قبل ما تفترض إن المشروع بايظ.
+
+</Box>
+
+## npm مش في التفعيل الافتراضي
+
+`corepack enable` من غير أسماء يفعّل Yarn و pnpm. `npm` اللي جاي مع Node يفضل هو اللي يشتغل، وCorepack مش هيشوفه. يعني حقل `packageManager` القيمته pnpm ممكن يمنع `yarn` وميمنعش `npm install`.
+
+عشان `npm` كمان يعدّي على نفس البوابة:
+
+<File name="terminal">
+
+```bash
+corepack enable npm
+```
+
+</File>
+
+أو مرة واحدة: `corepack enable pnpm yarn npm`.
+
+<Hl c="b">من غير shim لـ npm، الإجبار على pnpm نص إجبار. Yarn يتقفل، و npm العام يعدّي.</Hl>
+
+## اقفلها لو خربت المسار
+
+`corepack disable` يشيل الوسائط. `corepack disable pnpm` يشيل pnpm بس. مفيد لو فعّلت و`pnpm` بقى بيشير لمكان غلط، أو عايز ترجع للنسخة العامة مؤقتًا عشان تجرب.
+
+على نظام الملفات للقراءة بس، `enable` يفشل لأنه مش قادر يكتب جنب `node`. الحل في الوثائق aliases في الشيل، زي `alias pnpm="corepack pnpm"`. ده جهازك، مش اتفاق الفريق.
+
+## جوه مشروع من غير ما الـ shim هو الافتراضي
+
+تقدر تنادي المدير من خلال Corepack حتى لو بتجرب نسخة:
+
+<File name="terminal">
+
+```bash
+corepack pnpm@10.15.0 --version
+corepack pnpm install
+```
+
+</File>
+
+السطر التاني لسه بيتحقق من حقل المشروع. `corepack yarn install` جوه مشروع pnpm هيقع، مش هيلف حولين القفل.
+
+<Checklist id="corepack-enable" title="خلّصت الفصل لما" items={["تشغّل corepack enable و pnpm يرد", "تعرف تعمل إيه لو Node ٢٥ ومفيش أمر corepack", "تفرق التفعيل الافتراضي عن corepack enable npm", "تقفل shim واحد بـ corepack disable من غير ما تمسح Node"]} />
+
+<Quiz>
+<Q n={1} q="corepack enable لوحده بيحوّل npm لـ shim؟">لأ. npm محتاج corepack enable npm. الافتراضي Yarn و pnpm.</Q>
+<Q n={2} q="Node ٢٥ و corepack مش لاقي. الخطوة؟">npm install -g corepack وبعدين corepack enable.</Q>
+<Q n={3} q="corepack yarn install جوه مشروع packageManager بتاعه pnpm؟">يقع. النداء الصريح برضه بيحترم حقل المشروع.</Q>
+</Quiz>
