@@ -1,65 +1,87 @@
 ---
-title: مفتاح، مش مطبخ
-short: الفكرة
+title: تلات حاجات مش حاجة واحدة
+short: المشكلة
 order: 1
 label: فصل ١
 badge: البداية · فصل ١
-en: corepack · shim · packageManager · pnpm · yarn · npm
-keywords: shim · packageManager · pin
-goal: تفرّق Corepack عن مدير الحزم، وتعرف إنه بينزّل النسخة المطلوبة وقت التشغيل.
+en: Node · package manager · dependencies · lockfile
+keywords: Node · npm · pnpm · lockfile
+goal: تفرّق بين Node ومدير الحزم والحزم نفسها، وتفهم ليه قفل dependencies مش قفل للأداة.
 part: البداية
 color: c1
 ---
 
-## ليه مش `npm install -g pnpm`؟
+## مين بيعمل إيه؟
 
-تثبيت pnpm عام على الجهاز يثبّت نسخة واحدة لكل المشاريع. مشروع عايز ٩ ومشروع عايز ١٢ هيختلفوا على نفس الأمر `pnpm`. ملف القفل اتكتب بنسخة، واتفتح بنسخة تانية، والفرق يطلع في الـ CI مش على جهازك.
-
-<En>Corepack</En> سكربت جاي يقف قدام أوامر `pnpm` و `yarn` (و `npm` لو طلبته). لما تكتب `pnpm install`، مش بيشغّل أول pnpm لاقاه في الجهاز. بيدوّر على أقرب `package.json`، يقرأ حقل `packageManager`، ينزّل النسخة دي لو مش متخزنة، ويشغّلها.
-
-<Hl c="y">Corepack مش بديل pnpm. هو اللي يجيب pnpm الصح قبل ما الأمر يشتغل.</Hl>
-
-## تلات حالات
+لما تقول: "مشروعي بـ npm"، فيه ٣ طبقات منفصلة:
 
 <Grid2>
-<Card title="المشروع كاتب المدير ده" c={2}>
+<Card title="١ — Node" c={1}>
 
-الحقل `packageManager` يقول `pnpm@10.15.0` وأنت كتبت `pnpm`. Corepack يجيب ١٠٫١٥٫٠ تحديدًا، حتى لو عندك ١٢ متثبت عام.
+هو الـ runtime اللي يشغّل JavaScript. رقمه زي `22.20.0`. مش هو npm.
 
 </Card>
-<Card title="كاتب مدير تاني" c={4}>
+<Card title="٢ — package manager" c={3}>
 
-الحقل يقول pnpm وأنت كتبت `yarn`. Corepack يوقف الأمر. كده ملف القفل متتلخبطش بأداة تانية.
+npm أو Yarn أو pnpm. يقرأ الوصفة، يحل شجرة الحزم، ويكتب الـ lockfile و `node_modules`.
 
 </Card>
 </Grid2>
 
-<Card title="مفيش حقل خالص" c={5}>
+<Card title="٣ — dependencies" c={5}>
 
-Corepack يفترض إنك عارف أنت بتعمل إيه، ويشغّل نسخة هو معتبراها معروفة وسليمة. دي مش حالة فريق. من غير الحقل مفيش إجبار.
+React وExpress وباقي الحزم. نسخها موجودة في `package.json`، والتفاصيل الدقيقة للشجرة في lockfile.
 
 </Card>
 
-## أقرب ملف هو اللي بيحكم
+<Flow items={[{"t": "Node", "s": "يشغّل JavaScript", "c": 1}, "→", {"t": "pnpm 10.15.0", "s": "يبني الشجرة", "c": 3}, "→", {"t": "dependencies", "s": "كود المشروع", "c": 5}]} />
 
-Corepack يطلع من الفولدر الحالي لفوق لحد ما يلاقي `package.json`. لو في ملف في هوم المستخدم فيه `packageManager`، كل مشروع تحتيه من غير حقل خاص هيتقيد بيه. ناس كتير اتلخبطت كده بعد ما جرّبوا Yarn مرة في الهوم.
+## طالما الحزم مقفولة، نسخة npm تفرق ليه؟
 
-<Box type="warn" title="اعمل كده لو كل الأوامر بترفض فجأة">
+الـ lockfile يقفل **ناتج حل الحزم**، لكنه مش بيقفل البرنامج اللي هيقرأ الناتج. إصدار مختلف من npm أو pnpm ممكن يختلف في:
 
-الرسالة بتسمي الملف: `because /home/you/package.json has a "packageManager" field`. لو المسار مش مشروعك، دور لفوق، وخصوصًا هوم المستخدم. الملف ده مش قفل لمشروع واحد. هو قفل لأي حاجة تحته ما دام مفيش حقل أقرب.
+- صيغة الـ lockfile، وهل يعيد كتابته.
+- قواعد `peerDependencies` و `optionalDependencies`.
+- شكل `node_modules` والـ linking.
+- تشغيل lifecycle scripts والتحذيرات والسياسات.
+- قبول lockfile قديم أو اعتباره محتاج تحديث.
+
+وكمان `npm install` و `pnpm install` العاديين مسموح لهم يصلحوا أو يحدّثوا القفل. التثبيت القابل للتكرار يحتاج ٣ حاجات مع بعض:
+
+<Chips items={["مدير + نسخة ثابتين", "lockfile داخل Git", "frozen install في CI"]} />
+
+<File name="terminal">
+
+```bash
+# npm
+npm ci
+
+# pnpm
+pnpm install --frozen-lockfile
+```
+
+</File>
+
+<Hl c="y">الـ lockfile يقفل شجرة الحزم. Corepack يقفل الأداة اللي تقرأ الشجرة.</Hl>
+
+## Corepack مكانه فين؟
+
+<En>Corepack</En> مش runtime ومش package manager. هو launcher صغير يقف قبل مدير الحزم:
+
+<Flow items={[{"t": "pnpm install", "c": 1}, "→", {"t": "Corepack shim", "s": "يقرأ المشروع", "c": 2}, "→", {"t": "pnpm 10.15.0", "s": "النسخة المحددة", "c": 3}, "→", {"t": "node_modules", "c": 5}]} />
+
+لو المشروع كاتب `pnpm@10.15.0`، Corepack يجهّز ويشغّل الرقم ده. لو كتبت Yarn، يرفض. لو مفيش اتفاق مكتوب، مفيش ضمان إن أفراد الفريق شغّالين بنفس الأداة.
+
+<Box type="interview" title="إجابة السؤال في سطرين">
+
+"طالما dependency versions محددة، ليه أثبّت npm؟" — لأن dependencies بيانات، ومدير الحزم هو الخوارزمية اللي تفسّرها وتبنيها. ثبّت الاتنين: الشجرة بالـ lockfile، والأداة بـ `packageManager`.
 
 </Box>
 
-<Box type="interview" title="سؤال إنترفيو">
-
-"Corepack بيثبّت الحزم؟" — لأ. pnpm أو Yarn أو npm بيثبّتوا. Corepack يختار نسخة المدير ويشغّلها، ويرفض المدير اللي مش مكتوب في المشروع.
-
-</Box>
-
-<Checklist id="corepack-idea" title="خلّصت الفصل لما" items={["تشرح Corepack في جملة من غير ما تقول إنه pnpm", "تعرف إنه يقرأ أقرب package.json", "تفرق مشروع كاتب نفس المدير عن مشروع كاتب مدير تاني", "تدوري لفوق لو أمر اترفض من غير سبب في المشروع الحالي"]} />
+<Checklist id="corepack-idea" title="خلّصت الفصل لما" items={["تفرق بين Node ومدير الحزم والـ dependencies", "تشرح ليه lockfile مش بيقفل نسخة npm", "تستخدم frozen install في CI", "تقول إن Corepack launcher مش package manager"]} />
 
 <Quiz>
-<Q n={1} q="Corepack ينزّل express ولا ينزّل pnpm؟">ينزّل نسخة مدير الحزم المطلوبة ويشغّلها. express ينزّله المدير نفسه.</Q>
-<Q n={2} q="عندك pnpm ١٢ عام والمشروع كاتب pnpm@10.15.0. أنهي يشتغل؟">١٠٫١٥٫٠، لو الأمر معدّي على shim بتاع Corepack.</Q>
-<Q n={3} q="ليه package.json في الهوم خطر؟">لأنه أقرب ملف لفوق، فيقيّد أي فولدر تحته ما لوش حقل أقرب.</Q>
+<Q n={1} q="مين بيشغّل JavaScript: Node ولا pnpm؟">Node. pnpm بيدير dependencies.</Q>
+<Q n={2} q="الـ lockfile قفل إيه، ومقفلش إيه؟">قفل شجرة الحزم الدقيقة. مقفلش نسخة الأداة اللي تقراه.</Q>
+<Q n={3} q="Corepack ينزّل Express ولا pnpm؟">يجهّز نسخة pnpm المطلوبة؛ pnpm هو اللي ينزّل Express.</Q>
 </Quiz>

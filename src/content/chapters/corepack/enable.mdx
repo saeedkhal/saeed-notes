@@ -1,52 +1,75 @@
 ---
-title: شغّل الـ shims الأول
-short: التشغيل
-order: 2
-label: فصل ٢
-badge: التشغيل · فصل ٢
-en: corepack enable · disable · Node 25 · npm shim
-keywords: enable · disable · shim · Node 25
-goal: تفعّل Corepack، وتعرف إن npm مش داخل التفعيل الافتراضي.
+title: لما تكتب pnpm مين بيرد؟
+short: رحلة الأمر
+order: 3
+label: فصل ٣
+badge: التشغيل · فصل ٣
+en: PATH · shim · corepack enable · Node · npm
+keywords: PATH · shim · command -v · Node 25
+goal: تفهم رحلة الأمر من الـ shell للـ shim، وعلاقة Node بـ npm وCorepack.
 part: التشغيل
-color: c2
+color: c3
 ---
 
-## التفعيل مرة على الجهاز
+## `pnpm` ميعرفش Corepack
 
-Corepack موجود ومقفول لحد ما تقول. `enable` يحط برامج وسيطة جنب `node`، أسماؤها `pnpm` و `yarn` ومشتقاتهم. لما تكتب الاسم، الوسيط يشتغل مش النسخة العامة القديمة.
+لما تكتب `pnpm install`، pnpm مش بيدور على Corepack. الـ shell يدور في `PATH` من الأول للآخر ويشغّل **أول ملف اسمه `pnpm`**.
+
+بعد `corepack enable`، Corepack يحط ملف وسيط اسمه `pnpm` جنب تثبيت Node. لو الملف ده هو الأول في `PATH`، الرحلة تبقى:
+
+<Flow items={[{"t": "shell", "s": "دور على pnpm", "c": 1}, "→", {"t": "Corepack shim", "s": "اقرأ packageManager", "c": 2}, "→", {"t": "pnpm المطلوب", "s": "شغّل install", "c": 3}]} />
+
+لو pnpm عالمي قديم جاي قبله في `PATH`، القديم هو اللي يشتغل ومش هيعدّي على Corepack. افحص:
 
 <File name="terminal">
 
 ```bash
-corepack --version
+command -v pnpm       # Windows: where pnpm
 corepack enable
+command -v pnpm
 pnpm --version
 ```
 
 </File>
 
-لو `corepack` مش لاقي، يا Node أقدم من الدعم، يا أنت على Node ٢٥ أو أحدث والأداة اتشتالت من التوزيع. ساعتها:
+<Hl c="b">حقل packageManager مش زر تشغيل. لازم الأمر نفسه يعدّي على Corepack shim.</Hl>
+
+## هل كل Node بينزل معاه npm؟
+
+توزيعات Node الرسمية عادةً بتشحن npm معاها، لكنهم مشروعين وإصدارين منفصلين. إصدار Node يختار نسخة npm وقت نشره، وتقدر تحدّث npm منفصل:
 
 <File name="terminal">
 
 ```bash
-npm install -g corepack
+node --version
+npm --version
+npm install -g npm@11
+```
+
+</File>
+
+لما تغيّر Node بـ nvm مثلًا، أنت بتنتقل لتثبيت Node تاني وغالبًا معاه npm تاني. متفترضش إن تحديث npm حدّث Node، أو العكس.
+
+Corepack قصة تالتة: اتوزع مع Node من ١٤٫١٩ لحد قبل ٢٥، لكنه مش مفعّل لمجرد وجوده. من Node ٢٥ اتشال من توزيعة Node. اعمل onboarding يتحمل الحالتين:
+
+<File name="terminal">
+
+```bash
+npm install -g corepack@0.36.0
 corepack enable
 ```
 
 </File>
 
-في سخرية معروفة: بتستخدم npm عشان تثبّت الأداة اللي هتمنعك تستخدم npm غلط. التوزيع مع Node كان عشان نتجنب الخطوة دي. من ٢٥ رجعت.
+<Box type="tip" title="ليه رقم لـ Corepack نفسه؟">
 
-<Box type="tip" title="حدّث Corepack نفسه">
-
-`npm install -g corepack@latest` يجيب آخر Corepack. سلوك الحقول زي `devEngines` اتطور في النسخ الأحدث. لو أمر في المذكرة مش متعرّف، حدّث Corepack قبل ما تفترض إن المشروع بايظ.
+لو كل المطورين والـ CI يثبتوا `latest`، سلوك البوابة نفسها ممكن يتغير في أيام مختلفة. المثال يثبّت 0.36.0 لأنه الإصدار اللي اتراجع عليه الشرح. حدّثه بقرار، وراجع الـ docs قبل ما تنسخ الرقم بعد فترة.
 
 </Box>
 
 ## npm مش في التفعيل الافتراضي
 
-`corepack enable` من غير أسماء يفعّل Yarn و pnpm. `npm` اللي جاي مع Node يفضل هو اللي يشتغل، وCorepack مش هيشوفه. يعني حقل `packageManager` القيمته pnpm ممكن يمنع `yarn` وميمنعش `npm install`.
+`corepack enable` من غير أسماء يفعّل Yarn وpnpm. npm اللي جاي مع Node يفضل هو اللي يشتغل، وCorepack مش هيشوفه. يعني مشروع pnpm ممكن يرفض `yarn install`، لكن `npm install` يعدّي من الباب الجانبي.
 
 عشان `npm` كمان يعدّي على نفس البوابة:
 
@@ -58,9 +81,7 @@ corepack enable npm
 
 </File>
 
-أو مرة واحدة: `corepack enable pnpm yarn npm`.
-
-<Hl c="b">من غير shim لـ npm، الإجبار على pnpm نص إجبار. Yarn يتقفل، و npm العام يعدّي.</Hl>
+أو نادِه صراحةً: `corepack npm install`. الحالتان تخلي npm يمر على الفحص.
 
 ## اقفلها لو خربت المسار
 
@@ -68,9 +89,9 @@ corepack enable npm
 
 على نظام الملفات للقراءة بس، `enable` يفشل لأنه مش قادر يكتب جنب `node`. الحل في الوثائق aliases في الشيل، زي `alias pnpm="corepack pnpm"`. ده جهازك، مش اتفاق الفريق.
 
-## جوه مشروع من غير ما الـ shim هو الافتراضي
+## لو مش عايز تغيّر PATH
 
-تقدر تنادي المدير من خلال Corepack حتى لو بتجرب نسخة:
+تقدر تنادي المدير صراحةً من خلال Corepack:
 
 <File name="terminal">
 
@@ -81,12 +102,12 @@ corepack pnpm install
 
 </File>
 
-السطر التاني لسه بيتحقق من حقل المشروع. `corepack yarn install` جوه مشروع pnpm هيقع، مش هيلف حولين القفل.
+السطر التاني لسه بيتحقق من حقل المشروع. `corepack yarn install` جوه مشروع pnpm يقع؛ النداء الصريح مش ثغرة.
 
-<Checklist id="corepack-enable" title="خلّصت الفصل لما" items={["تشغّل corepack enable و pnpm يرد", "تعرف تعمل إيه لو Node ٢٥ ومفيش أمر corepack", "تفرق التفعيل الافتراضي عن corepack enable npm", "تقفل shim واحد بـ corepack disable من غير ما تمسح Node"]} />
+<Checklist id="corepack-enable" title="خلّصت الفصل لما" items={["تشرح إن الـ shell يشغّل أول pnpm في PATH", "تفحص المسار بـ command -v", "تفرق Node عن npm عن Corepack", "تثبت Corepack صراحةً على Node ٢٥", "تعرف إن npm shim مش مفعّل افتراضيًا"]} />
 
 <Quiz>
-<Q n={1} q="corepack enable لوحده بيحوّل npm لـ shim؟">لأ. npm محتاج corepack enable npm. الافتراضي Yarn و pnpm.</Q>
-<Q n={2} q="Node ٢٥ و corepack مش لاقي. الخطوة؟">npm install -g corepack وبعدين corepack enable.</Q>
-<Q n={3} q="corepack yarn install جوه مشروع packageManager بتاعه pnpm؟">يقع. النداء الصريح برضه بيحترم حقل المشروع.</Q>
+<Q n={1} q="مين يقرر أنهي pnpm يشتغل أولًا؟">الـ shell حسب ترتيب PATH. المفروض الأول يكون Corepack shim.</Q>
+<Q n={2} q="هل تحديث npm يحدث Node؟">لأ. npm مشروع وإصدار منفصلان، حتى لو توزيعة Node الرسمية بتشحن نسخة منه.</Q>
+<Q n={3} q="ليه npm install ممكن يعدّي في مشروع pnpm؟">لأن npm shim مش مفعّل افتراضيًا. فعّله صراحةً أو استخدم حزامًا إضافيًا.</Q>
 </Quiz>

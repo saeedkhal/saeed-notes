@@ -1,14 +1,14 @@
 ---
-title: ارفض المدير الغلط والنسخة الغلط
+title: جرّب الاتفاق وهو بيتكسر
 short: الإجبار
-order: 4
-label: فصل ٤
-badge: الإجبار · فصل ٤
+order: 5
+label: فصل ٥
+badge: الإجبار · فصل ٥
 en: strict · devEngines · onFail · corepack enable npm · CI
 keywords: devEngines · onFail · strict · CI · only-allow
 goal: تخلي Yarn و npm يقعوا في مشروع pnpm، وتثبّت النسخة في CI من غير ما السيرفر يجيب مدير تاني.
-part: الإجبار
-color: c4
+part: الاتفاق
+color: c5
 ---
 
 ## المدير التاني يقع لوحده
@@ -35,11 +35,11 @@ This project is configured to use pnpm because /path/to/package.json has a "pack
 
 الأمر يطلع بغير صفر. ملف `yarn.lock` مش هيتعمل. نفس الكلام لو الحقل Yarn وكتبت `pnpm`. المسار في الرسالة هو الملف الحاكم، حتى لو أنت واقف في فولدر تحته.
 
-ده إجبار **الاسم**. النسخة متجبرة لأن الوسيط مش هيشغّل غير الرقم اللي بعد `@`.
+ده إجبار **الاسم**. النسخة متجبرة لأن الوسيط مش هيشغّل غير الرقم اللي بعد `@`. بس ده workflow guard مش سور أمان: مطور متعمد يقدر يتخطى الـ shim أو يطفي strict mode.
 
 <Box type="story" icon="🚪" title="الباب والمفتاح">
 
-الورقة على الباب: مفتاح pnpm رقم ١٠٫١٥٫٠. Yarn مفتاح تاني، البواب يرجّعك. pnpm ١٢ مفتاح نفس السلسلة بس مش الرقم المكتوب، برضه مش هيفتح. المفتاح اللي في جيبك من تثبيت عام قديم مش هو اللي بيتجرب، ما دام الأمر دخل من الـ shim.
+الورقة على الباب: مفتاح pnpm رقم ١٠٫١٥٫٠. Yarn مفتاح تاني، البواب يرجّعك. المفتاح العام القديم مش هو اللي بيتجرب، بشرط إنك دخلت من باب Corepack أصلًا.
 
 </Box>
 
@@ -103,39 +103,26 @@ npm install
 
 في متغير `COREPACK_ENABLE_STRICT=0` يطفي رفض المدير الغلط. متتحطش في CI. دي للتجربة المحلية، وبتخلّي المدير التاني يشتغل بنسخته العامة. عكس الإجبار.
 
-## على السيرفر
+## أقرب `package.json` هو اللي بيحكم
 
-الـ CI جهاز جديد كل مرة. مفيش pnpm عام، وده كويس. فيه Node، وفيه Corepack لو الإصدار قبل ٢٥.
+Corepack يطلع من الفولدر الحالي لفوق. لو لقى `package.json` في الهوم فيه `packageManager`، ممكن يعتبر كل فولدر تحته جزءًا من المشروع ده.
 
-<File name=".github/workflows/check.yml">
+<Box type="warn" title="اقرأ مسار الخطأ">
 
-```yaml
-steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-node@v4
-    with:
-      node-version: 22
-  - run: corepack enable
-  - run: corepack install
-  - run: pnpm install --frozen-lockfile
-```
-
-</File>
-
-`corepack enable` يحط الوسائط على السيرفر. `corepack install` يحمّل النسخة المكتوبة في `packageManager` قبل التثبيت. `--frozen-lockfile` يرفض قفل مش مطابق. من Node ٢٥ زود `npm install -g corepack` قبل `enable`. راجع إصدار الـ action.
-
-<Flow items={[{"t": "package.json", "c": 1, "s": "pnpm@10.15.0"}, "→", {"t": "corepack enable", "c": 2, "s": "الوسائط على PATH"}, "→", {"t": "corepack install", "c": 3, "s": "حمّل النسخة"}, "→", {"t": "pnpm install", "c": 4, "s": "قفل متجمد"}]} />
-
-<Box type="interview" title="سؤال إنترفيو">
-
-"إزاي تلزام المستودع بـ pnpm ١٠٫١٥٫٠؟" — `packageManager` بالنسخة من غير مدى، `corepack enable` ومنه npm لو عايز تقفل الباب التاني، و`devEngines` بـ `onFail: error` لو عايز الشرط يتقال بصراحة. الـ CI يعمل enable و install، مش `npm install -g pnpm@latest`.
+الرسالة نفسها بتقول `because /home/you/package.json has a "packageManager" field`. لو المسار مش مشروعك، دور في الفولدرات الأعلى. متبدأش تمسح pnpm وتثبته قبل ما تعرف أنهي ملف اتحكم.
 
 </Box>
 
-<Checklist id="corepack-enforce" title="خلّصت الفصل لما" items={["تجرب yarn في مشروع pnpm وتشوف الرفض", "تحط devEngines متوافق مع packageManager", "تفرق onFail error عن warn عن ignore", "تفعّل shim لـ npm أو تحط only-allow", "تخلي CI يعمل corepack enable و corepack install مش تثبيت عام"]} />
+<Box type="interview" title="سؤال إنترفيو">
+
+"إزاي تلزم المستودع بـ pnpm ١٠٫١٥٫٠؟" — `packageManager` بالنسخة الثابتة، وCorepack shim فعّال، و`devEngines` بـ `onFail: error` للفحص الواضح. ولو عايز تمسك npm، فعّل shim بتاعه أو استخدم `only-allow`.
+
+</Box>
+
+<Checklist id="corepack-enforce" title="خلّصت الفصل لما" items={["تجرب yarn في مشروع pnpm وتشوف الرفض", "تحط devEngines متوافق مع packageManager", "تفرق onFail error عن warn عن ignore", "تفعّل shim لـ npm أو تحط only-allow", "تقرأ مسار package.json من رسالة الخطأ"]} />
 
 <Quiz>
 <Q n={1} q="الحقل pnpm وكتبت yarn. مين اللي بيرفض؟">Corepack، ما دام yarn شغال من الـ shim. الرسالة إن المشروع متظبط على pnpm.</Q>
 <Q n={2} q="onFail قيمته warn. الاختلاف هيوقف الأمر؟">لأ. هيطبع تحذير ويكمل. الإيقاف عند error أو لما القيمة فاضية.</Q>
-<Q n={3} q="ليه CI مش npm install -g pnpm؟">عشان النسخة تيجي من packageManager، مش من آخر إصدار عام على السيرفر.</Q>
+<Q n={3} q="هل packageManager حماية لا يمكن تجاوزها؟">لأ. هو workflow guard يعتمد على مرور الأمر عبر Corepack، مش security boundary.</Q>
 </Quiz>

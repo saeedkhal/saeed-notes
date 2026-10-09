@@ -1,0 +1,119 @@
+---
+title: طب لو صاحبي معندوش Corepack؟
+short: الفريق والـ CI
+order: 6
+label: فصل ٦
+badge: التطبيق · فصل ٦
+en: onboarding · clone · CI · frozen-lockfile · Node 25
+keywords: onboarding · clone · corepack install · CI
+goal: تعمل خطوات بداية واحدة لزميل جديد وللسيرفر، حتى لو Corepack مش موجود.
+part: التطبيق
+color: c1
+---
+
+## المشروع مينفعش يفترض الجهاز
+
+وجود `packageManager` داخل Git مهم، لكنه مش بينزّل Corepack سحريًا. لو صاحبك معندوش Corepack، أو عنده pnpm عالمي يسبق الـ shim، ممكن الاتفاق ما يتطبقش.
+
+الحل مش "كل واحد يظبط جهازه بطريقته". اكتب onboarding قصير يتكرر في الجهاز والـ CI:
+
+<File name="terminal">
+
+```bash
+git clone https://example.com/koshary-app.git
+cd koshary-app
+
+node --version
+npm install -g corepack@0.36.0
+corepack enable
+corepack install
+
+pnpm --version
+pnpm install --frozen-lockfile
+```
+
+</File>
+
+`corepack install` يجهّز النسخة المكتوبة قبل أمر pnpm، فيفصل خطأ تنزيل المدير عن خطأ تنزيل dependencies. هو مفيد، لكن مش إلزامي كل مرة.
+
+<Box type="tip" title="Node قبل ٢٥">
+
+ممكن Corepack يكون جاي مع Node ١٤٫١٩ لحد ٢٤، لكن نسخته تختلف حسب Node. تثبيت Corepack برقم موحد في onboarding يخلي سلوك البوابة نفسه متوقع. لو هتعتمد على النسخة المرفقة، على الأقل افحص `corepack --version`.
+
+</Box>
+
+## نفس الاتفاق في GitHub Actions
+
+الـ CI جهاز جديد؛ دي ميزة، لأنه يكشف الافتراضات اللي على لابتوبك.
+
+<File name=".github/workflows/check.yml">
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  - uses: actions/setup-node@v4
+    with:
+      node-version: 22
+
+  - run: npm install -g corepack@0.36.0
+  - run: corepack enable
+  - run: corepack install
+  - run: pnpm install --frozen-lockfile
+  - run: pnpm test
+```
+
+</File>
+
+ليه مثبتناش `pnpm@latest` عالميًا؟ لأن نسخة pnpm جاية من المشروع. وليه ثبّتنا Corepack برقم؟ لأننا عايزين launcher نفسه ثابت في الفريق والـ CI.
+
+<Flow items={[{"t": "clone", "c": 1}, "→", {"t": "Corepack 0.36", "s": "launcher", "c": 2}, "→", {"t": "packageManager", "s": "pnpm 10.15.0", "c": 3}, "→", {"t": "frozen lockfile", "s": "نفس الشجرة", "c": 5}]} />
+
+## Lab: اكسر كل طبقة
+
+اعمل مشروع تجريبي:
+
+<File name="terminal">
+
+```bash
+mkdir corepack-lab && cd corepack-lab
+npm init -y
+
+npm install -g corepack@0.36.0
+corepack enable
+corepack use pnpm@10.15.0
+
+pnpm --version
+yarn install
+```
+
+</File>
+
+راجع إن `package.json` أخد `packageManager` ومعاه integrity hash، وإن `yarn install` وقع برسالة تقول إن المشروع بيستخدم pnpm.
+
+بعدين جرّب:
+
+<File name="terminal">
+
+```bash
+corepack enable npm
+npm install
+```
+
+</File>
+
+المفروض npm يقع برضه. كده شفت الفرق بين حقل مكتوب، وshim موجود، وأمر فعلًا مرّ من خلاله.
+
+<Box type="warn" title="المثال مش Docker image ثابت للأبد">
+
+رقم Corepack هنا مقصود للتعلّم وإعادة النتيجة وقت كتابة المذكرة. في مشروعك اختار رقمًا راجعته، وحدّثه دوريًا. متحوّلش المثال لنسخة منسية سنين.
+
+</Box>
+
+<Checklist id="corepack-team" title="خلّصت الفصل لما" items={["تعمل onboarding لا يفترض وجود Corepack", "تثبت Corepack نفسه برقم راجعته", "تخلي نسخة pnpm تيجي من packageManager", "تستخدم frozen lockfile في CI", "تكسر Yarn وnpm في الـ Lab وتشوف الرسالة"]} />
+
+<Quiz>
+<Q n={1} q="صاحبك معندوش Corepack. هل packageManager ينزّله؟">لأ. لازم provisioning صريح: تثبيت Corepack ثم enable.</Q>
+<Q n={2} q="ليه corepack install قبل pnpm install؟">يجهّز مدير الحزم ويفشل بدري لو تنزيله فيه مشكلة. لكنه مش لازم قبل كل install.</Q>
+<Q n={3} q="مين يحدد نسخة pnpm في CI؟">حقل packageManager داخل المشروع، مش npm install -g pnpm@latest.</Q>
+</Quiz>

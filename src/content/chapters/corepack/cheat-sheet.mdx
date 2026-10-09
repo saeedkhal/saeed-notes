@@ -1,7 +1,7 @@
 ---
 title: "Cheat Sheet: لو المشكلة… فكّر في…"
 short: Cheat Sheet
-order: 5
+order: 7
 label: الآخر
 badge: الآخر
 en: enable · packageManager · devEngines · use · install
@@ -12,9 +12,17 @@ color: dark
 ---
 
 <Cheat items={[
-  ["Corepack ولا pnpm؟", "Corepack يجيب المدير. pnpm يثبّت الحزم"],
-  ["الأمر مش لاقي", "Node قبل ٢٥: جاي مع Node. من ٢٥: `npm install -g corepack`"],
+  ["Node ولا pnpm؟", "Node يشغّل JavaScript. pnpm يدير dependencies"],
+  ["Corepack ولا pnpm؟", "Corepack launcher يجيب المدير. pnpm يثبّت الحزم"],
+  ["الـ lockfile كفاية؟", "لأ: ثبّت manager version واستخدم frozen install"],
+  ["نفس الحزم وnpm مختلف", "ممكن يغيّر lockfile format والـ peers والـ layout"],
+  ["npm وYarn وpnpm واحد؟", "لأ: resolver وlockfile وinstallation model مختلفين"],
+  ["أكتر من lockfile", "اختار المدير الرسمي واحذف الباقي بعد مراجعة الفريق"],
+  ["الأمر مش لاقي Corepack", "ثبّته صراحةً؛ وده مطلوب من Node ٢٥"],
+  ["تثبيت راجعناه هنا", "`npm install -g corepack@0.36.0`"],
   ["فعّل الوسائط", "`corepack enable`"],
+  ["مين يشغّل pnpm؟", "الـ shell يشغّل أول pnpm في PATH"],
+  ["افحص المسار", "`command -v pnpm` أو `where pnpm`"],
   ["npm لسه يعدّي", "`corepack enable npm`"],
   ["اقفل الوسائط", "`corepack disable`"],
   ["اكتب النسخة في المشروع", "`corepack use pnpm@10.15.0`"],
@@ -22,7 +30,7 @@ color: dark
   ["قفزة خط كبير", "`corepack use pnpm@11` أو `pnpm@latest`"],
   ["حمّل من غير ما تغيّر الحقل", "`corepack install`"],
   ["شكل الحقل", "`pnpm@10.15.0` من غير ^ أو ~"],
-  ["البصمة بعد النسخة", "`corepack use` يكتب `+sha512.` متكتبهوش بإيدك"],
+  ["البصمة بعد النسخة", "`corepack use` يولّد integrity hash؛ متكتبهوش بإيدك"],
   ["Yarn في مشروع pnpm", "يرفض. المشروع متظبط على pnpm"],
   ["كل المشاريع بترفض فجأة", "package.json في فولدر أعلى، غالبًا الهوم"],
   ["شرط الاسم والنسخة", "`devEngines.packageManager` و `onFail`"],
@@ -31,11 +39,13 @@ color: dark
   ["الحقلين مختلفين", "Corepack يرفض لحد ما يتفقوا"],
   ["عطّلت الرفض محلیًا", "`COREPACK_ENABLE_STRICT=0`، مش في CI"],
   ["باب npm من غير shim", "`preinstall` مع `only-allow`"],
-  ["CI", "`corepack enable` ثم `corepack install` ثم `pnpm install --frozen-lockfile`"],
+  ["زميل معندوش Corepack", "install ثم enable؛ packageManager مش بيثبّته سحريًا"],
+  ["CI", "ثبّت Corepack، enable، install، ثم `pnpm install --frozen-lockfile`"],
   ["مدى في packageManager", "غلط. النسخة ثابتة بس"],
+  ["هل الإجبار security؟", "لأ؛ workflow guard يعتمد على مرور الأمر عبر الـ shim"],
 ]} />
 
-<Checklist id="corepack-cheat" title="خلّصت المذكرة لما" items={["تثبّت مدير ونسخة بأمر use وتشوف الرقم في package.json", "تخلي مدير تاني يقع", "تقفل باب npm يا بالـ shim يا بـ only-allow", "تكرر التفعيل والتحميل في CI من غير تثبيت عام"]} />
+<Checklist id="corepack-cheat" title="خلّصت المذكرة لما" items={["تفرق Node عن manager عن dependencies", "تشرح ليه lockfile لوحده مش كفاية", "تتبع الأمر من PATH للـ shim للمدير الحقيقي", "تثبّت مديرًا ونسخة بأمر use", "تكرر نفس الاتفاق مع زميل جديد وفي CI"]} />
 
 <Quiz>
 <Q n={1} q="سطر packageManager الصحيح لـ pnpm ١٠٫١٥٫٠؟">`pnpm@10.15.0`</Q>

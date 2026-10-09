@@ -1,0 +1,78 @@
+---
+title: npm وYarn وpnpm مش تلات واجهات
+short: خلط المديرين
+order: 2
+label: فصل ٢
+badge: المشكلة · فصل ٢
+en: package-lock · yarn.lock · pnpm-lock · node_modules
+keywords: package-lock · yarn.lock · pnpm-lock
+goal: تعرف المشاكل اللي تحصل لما أفراد الفريق يستخدموا مديري حزم مختلفين على نفس المشروع.
+part: المشكلة
+color: c2
+---
+
+## كل مدير له عقد وطريقة بناء
+
+لو مشروع معمول بـ npm وصاحبك شغّل Yarn أو pnpm، هو مش بس غيّر اسم الأمر. كل مدير عنده lockfile وطريقة تثبيت:
+
+<Grid2>
+<Card title="npm" c={1}>
+
+يكتب `package-lock.json` ويبني `node_modules` بالطريقة اللي npm متوقعها.
+
+</Card>
+<Card title="Yarn" c={2}>
+
+يكتب `yarn.lock`. بعض إصداراته تقدر تستخدم Plug'n'Play بدل `node_modules`.
+
+</Card>
+</Grid2>
+
+<Card title="pnpm" c={3}>
+
+يكتب `pnpm-lock.yaml`، ويستخدم content-addressable store وروابط بدل نسخ كل حزمة لكل مشروع.
+
+</Card>
+
+## إيه المشكلة العملية؟
+
+تخيل المستودع فيه `package-lock.json`. صاحبك تجاهله وشغّل `pnpm install`:
+
+1. pnpm يحل الحزم بقواعده.
+2. يكتب `pnpm-lock.yaml`.
+3. يبني layout مختلف.
+4. بقى عندك ملفا قفل، ومفيش إجابة واحدة لسؤال: "أنهي شجرة هي الرسمية؟"
+
+ممكن التطبيق يشتغل عنده ويقع عندك بسبب `peer dependency` مختلفة، أو import كان متاح بالصدفة مع hoisting مدير ومش متاح مع مدير تاني. والـ CI ممكن يقرأ lockfile غير اللي المطور اختبره.
+
+<Box type="warn" title="متعملش commit لأكتر من lockfile">
+
+اختار مدير واحد. احتفظ بالـ lockfile بتاعه، واحذف الباقي بعد ما تتأكد إنهم مش مقصودين. وجود `package-lock.json` و `yarn.lock` و `pnpm-lock.yaml` مع بعض غالبًا علامة إن الفريق ملوش اتفاق.
+
+</Box>
+
+## حتى نسختين من نفس المدير ممكن يختلفوا
+
+npm ٨ وnpm ١١ مش شرط يكتبوا نفس صيغة القفل أو يحلوا الـ peers بنفس السلوك. نفس الكلام بين major versions من pnpm. عشان كده الاتفاق محتاج:
+
+<Flow items={[{"t": "اسم المدير", "s": "pnpm", "c": 1}, "→", {"t": "نسخته", "s": "10.15.0", "c": 2}, "→", {"t": "قفلته", "s": "pnpm-lock.yaml", "c": 3}]} />
+
+<Hl c="p">اختيار المدير جزء من إعداد المشروع، مش تفضيل شخصي لكل مطور.</Hl>
+
+## طب ما نخلي README يقول؟
+
+اكتبها في README، لكن النص مش enforcement. حد ممكن ينسى ويكتب `npm install`. حقل `packageManager` يخلي الاتفاق machine-readable، وCorepack يقرأه قبل تشغيل المدير.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"ينفع أفتح مشروع npm بـ pnpm؟" — تقنيًا ممكن في حالات، لكنك غيّرت resolver والـ lockfile والـ layout. من غير migration مقصودة من الفريق، ده تغيير في المشروع مش مجرد أداة محلية.
+
+</Box>
+
+<Checklist id="corepack-mixing" title="خلّصت الفصل لما" items={["تربط كل مدير بالـ lockfile بتاعه", "تشرح ليه layout بتاع pnpm مختلف", "ترفض أكتر من lockfile للمشروع نفسه", "تعتبر تغيير المدير migration مش تفضيل شخصي"]} />
+
+<Quiz>
+<Q n={1} q="وجود package-lock وpnpm-lock مع بعض معناه إيه؟">غالبًا مديرين اتستخدموا، ومحتاج تحدد مين الرسمي وتحذف القفل التاني.</Q>
+<Q n={2} q="هل اختلاف manager يغيّر الأوامر بس؟">لأ. ممكن يغيّر حل الحزم والـ lockfile وشكل node_modules.</Q>
+<Q n={3} q="README لوحده يمنع npm install؟">لأ. تعليمات للبشر، مش بوابة تنفيذ.</Q>
+</Quiz>

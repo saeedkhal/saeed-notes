@@ -1,24 +1,24 @@
 ---
-title: Corepack يلزم المشروع بمدير الحزم
+title: Corepack يثبّت مدير الحزم للفريق
 highlight: Corepack
-subtitle: enable · packageManager · devEngines · version pin
-description: تشغّل pnpm أو Yarn من غير تثبيت عام يتغير لوحده، وتخلي المشروع يرفض مدير حزم تاني أو نسخة غير اللي متفق عليها.
+subtitle: Node · lockfile · shims · packageManager · CI
+description: افهم ليه الـ lockfile لوحده مش كفاية، وإزاي أمر pnpm يعدّي على Corepack، وتلزم الفريق بمدير حزم ونسخة محددين.
 emoji: 📦
 order: 19
 tags: [devops]
-note: شرح بأسلوبي لـ Corepack كما في مستودع nodejs/corepack. الأوامر بتتغير، وابتداءً من Node ٢٥ الأداة مش داخلة مع Node. راجع صفحة Corepack قبل ما تعتمد على علم قديم.
+note: شرح بأسلوبي مبني على أسئلة عملية عن Node و npm والـ lockfile وخلط مديري الحزم. راجعت السلوك على Corepack 0.36. من Node ٢٥ الأداة مش داخلة مع Node، فراجع الـ docs مع إصدارك.
 ---
 
-المذكرة ماشية على <Hl c="y">٤ فصول + شيت</Hl>. الأول Corepack بيعمل إيه ومش بيعمل إيه. بعدين تشغيل الـ shims. بعدين تثبيت نسخة في `package.json`. وفي الآخر الإجبار: مدير غلط، أو نسخة غلط، أو `npm` اللي مش معدّي على Corepack.
+المذكرة ماشية على <Hl c="y">٦ أسئلة عملية + شيت</Hl>: لو الحزم مقفولة، ليه نسخة npm تفرق؟ إيه اللي يحصل لو واحد استخدم Yarn في مشروع pnpm؟ لما تكتب `pnpm install` مين يشغّل Corepack؟ هل npm جزء من Node؟ وإزاي زميل جديد والـ CI يلتزموا بنفس النسخة؟
 
 <Box type="story" icon="🔑" title="تشبيه المذكرة كلها">
 
-المطبخ هو pnpm أو Yarn. Corepack مش بيطبخ. هو أمين المفاتيح: يبص على ورقة المشروع، يطلّع المفتاح المكتوب عليها، ولو طلبت مفتاح تاني يقولك لأ. من غير الورقة، أي مفتاح في جيبك يعدّي.
+الوصفة هي `package.json`، وقايمة المشتريات المقفولة هي الـ lockfile، والمطبخ هو pnpm أو Yarn. Corepack مش بيطبخ ومش بيختار المكونات. هو أمين المفاتيح: يسلّمك نسخة المطبخ المكتوبة على ورقة المشروع. عشان نفس الوصفة والقائمة يتنفذوا بنفس الأداة.
 
 </Box>
 
 <Box type="idea" title="قبل ما تبدأ">
 
-محتاج Node. من ١٤٫١٩ لحد قبل ٢٥، Corepack جاي مع Node بس مقفول لحد `corepack enable`. من Node ٢٥ تثبّته إنت: `npm install -g corepack`. الأمثلة هنا على pnpm. Yarn نفس الفكرة، والاسم في الحقل يتغير.
+الأمثلة على pnpm ١٠، لكن الفكرة تنطبق على Yarn. متفترضش إن وجود `packageManager` وحده بيفعّل Corepack: لازم أمر `pnpm` يوصل للـ shim. ومن Node ٢٥ لازم تثبّت Corepack بنفسك.
 
 </Box>
