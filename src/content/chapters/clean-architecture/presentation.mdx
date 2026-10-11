@@ -1,0 +1,179 @@
+---
+title: الـ Presentation و الـ Composition Root — React بيتوصل إزاي
+short: React و التوصيل
+order: 5
+label: فصل ٥
+badge: التطبيق · فصل ٥
+en: presentation layer · hooks · TanStack Query · composition root · folder structure
+keywords: composition root · useMutation · folders
+goal: تربط الـ use case بـ React من خلال hook، وتعرف فين بالظبط بنركّب الـ dependencies، وشكل الفولدرات.
+part: التطبيق
+color: c5
+---
+
+## الـ component يبقى رفيع
+
+الـ component بيعمل حاجتين بس: **يعرض** و **ينقل نية المستخدم** للـ use case. مفيش قواعد بيزنس ولا `fetch`.
+
+<File name="src/ui/jobs/usePublishJob.ts">
+
+```ts
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServices } from "../services";
+
+export function usePublishJob() {
+  const { publishJob } = useServices();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: publishJob,
+    onSuccess: (result, id) => {
+      if (result.ok) queryClient.invalidateQueries({ queryKey: ["job", id] });
+    },
+  });
+}
+```
+
+</File>
+
+<File name="src/ui/jobs/PublishButton.tsx">
+
+```tsx
+import { usePublishJob } from "./usePublishJob";
+
+const MESSAGES = {
+  "missing-title": "اكتب عنوان للوظيفة",
+  "short-description": "الوصف لازم يبقى ٥٠ حرف على الأقل",
+  "bad-salary": "أقل مرتب أكبر من أعلى مرتب",
+  "past-deadline": "آخر ميعاد للتقديم عدّى",
+  closed: "الوظيفة مقفولة",
+} as const;
+
+export function PublishButton({ jobId }: { jobId: string }) {
+  const { mutate, data, isPending } = usePublishJob();
+
+  return (
+    <div>
+      <button disabled={isPending} onClick={() => mutate(jobId)}>
+        {isPending ? "بننشر..." : "انشر الوظيفة"}
+      </button>
+      {data?.ok === false && data.reason === "invalid" && (
+        <ul role="alert">
+          {data.problems.map((p) => <li key={p}>{MESSAGES[p]}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+```
+
+</File>
+
+TanStack Query هنا في **طبقة الـ UI**: بيدير الـ loading والكاش وإعادة الجلب. الـ use case مش عارف إن في Query أصلًا. ونفس الكلام لـ Zustand: حالة الشاشة (درج مفتوح، خطوة في wizard) تفضل في الـ UI.
+
+## الطلب وقت التشغيل
+
+<Diagram
+  title="الداتا بتمشي لبره ولجوه… بس الـ imports لجوه بس"
+  height={330}
+  mheight={600}
+  nodes={[
+    { id: "btn", t: "PublishButton", s: "UI", c: 1, x: 88, y: 18, mx: 50, my: 5 },
+    { id: "hook", t: "usePublishJob", s: "useMutation", c: 1, x: 56, y: 18, mx: 50, my: 22 },
+    { id: "uc", t: "publishJob", s: "use case", c: 4, x: 22, y: 18, mx: 50, my: 40 },
+    { id: "domain", t: "canPublish", s: "domain", c: 3, x: 22, y: 82, mx: 22, my: 62 },
+    { id: "repo", t: "HttpJobRepository", s: "عن طريق الـ port", c: 2, x: 56, y: 82, mx: 72, my: 76 },
+    { id: "api", t: "API", s: "backend", c: 5, x: 88, y: 82, mx: 72, my: 95 },
+  ]}
+  edges={[
+    { from: "btn", to: "hook", t: "click", c: 1 },
+    { from: "hook", to: "uc", t: "mutate(id)", c: 1 },
+    { from: "uc", to: "domain", t: "ينفع ينشر؟", c: 3 },
+    { from: "uc", to: "repo", t: "jobs.save()", c: 4 },
+    { from: "repo", to: "api", t: "PUT /jobs/:id", c: 2 },
+  ]}
+/>
+
+## الـ Composition Root: المكان الوحيد اللي يعرف كل حاجة
+
+حد لازم يقول "الـ `JobRepository` في التطبيق الحقيقي هو `HttpJobRepository`". ده بيحصل في مكان **واحد** قريب من نقطة دخول التطبيق، اسمه **composition root**:
+
+<File name="src/ui/services.tsx">
+
+```tsx
+import { createContext, useContext, type ReactNode } from "react";
+import { makePublishJob } from "../application/publishJob";
+import { HttpJobRepository } from "../infrastructure/httpJobRepository";
+
+function createServices() {
+  const jobs = new HttpJobRepository(import.meta.env.VITE_API_URL);
+  const clock = { now: () => new Date() };
+  return { publishJob: makePublishJob({ jobs, clock }) };
+}
+
+type Services = ReturnType<typeof createServices>;
+const ServicesContext = createContext<Services | null>(null);
+
+export function ServicesProvider({ children, services = createServices() }: { children: ReactNode; services?: Services }) {
+  return <ServicesContext.Provider value={services}>{children}</ServicesContext.Provider>;
+}
+
+export function useServices() {
+  const services = useContext(ServicesContext);
+  if (!services) throw new Error("useServices must be used inside ServicesProvider");
+  return services;
+}
+```
+
+</File>
+
+وفي Storybook أو تيست الـ component، بتمرّر `services` مبنية على `InMemoryJobRepository`، فالشاشة تشتغل من غير backend خالص.
+
+<Box type="warn" title="createServices() كـ default parameter">
+
+الـ default بيتحسب مع **كل render** للـ provider. ده مقبول لأن الـ provider بيترندر مرة في جذر التطبيق. لو هيترندر كتير، اعمل `createServices()` مرة واحدة بره الـ component ومرّرها.
+
+</Box>
+
+## شكل الفولدرات
+
+<Tree>
+
+```text
+src/
+├── domain/            ← مفيهوش import لأي حاجة بره domain
+│   └── job.ts
+├── application/       ← بيعمل import من domain بس
+│   ├── ports.ts
+│   └── publishJob.ts
+├── infrastructure/    ← بينفّذ ports (domain + application)
+│   ├── httpJobRepository.ts
+│   └── inMemoryJobRepository.ts
+└── ui/                ← React: components و hooks و services.tsx
+    ├── services.tsx   ← الـ composition root
+    └── jobs/
+        ├── usePublishJob.ts
+        └── PublishButton.tsx
+```
+
+</Tree>
+
+<Box type="tip" title="خلّي الـ lint يحرس القاعدة">
+
+القاعدة بتتكسر بالغلط في PR زحمة. استخدم `eslint-plugin-boundaries` أو قاعدة `no-restricted-imports` تمنع `domain/` إنه يعمل import من `ui/` أو `infrastructure/`. راجع الـ docs بتاعة الـ plugin لشكل الـ config.
+
+</Box>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"تنظّم الفولدرات بالطبقات ولا بالـ feature؟" — في المشاريع الكبيرة الأحسن الاتنين: **feature أولًا** (`jobs/` و `candidates/`)، وجوه كل feature الطبقات (`domain` و `application` و `infrastructure` و `ui`). كده كل feature تقدر تتنقل أو تتقسم لوحدها.
+
+</Box>
+
+<Checklist id="clean-arch-presentation" title="خلّصت الفصل لما" items={["تكتب hook بيلف الـ use case في useMutation", "تعرف إن TanStack Query و Zustand مكانهم طبقة الـ UI", "تعمل composition root واحد بيركّب الـ adapters", "تشغّل نفس الشاشة في Storybook بـ InMemory repository", "تحمي حدود الطبقات بـ lint"]} />
+
+<Quiz>
+<Q n={1} q="الـ component بيعمل new HttpJobRepository بنفسه. المشكلة؟">ربط الشاشة بالـ infrastructure. التركيب مكانه الـ composition root بس.</Q>
+<Q n={2} q="useMutation يتحط جوه الـ use case؟">لأ. ده React وTanStack Query، يعني UI. الـ use case يفضل دالة عادية.</Q>
+<Q n={3} q="الطلب بيروح من الـ UI للـ API. إزاي الاعتماديات لسه لجوه؟">الـ use case بيكلم port، والـ adapter بينفّذه. الـ import بيشاور على الـ interface مش على fetch.</Q>
+</Quiz>
