@@ -1,0 +1,88 @@
+---
+title: Sticky و Scroll Snap — CSS بس
+short: Sticky و Snap
+order: 2
+label: فصل ٢
+badge: Layout · فصل ٢
+en: position sticky · containing block · scroll-snap-type · scroll-snap-align · scroll-padding
+keywords: sticky · snap · scroll-padding
+goal: تعمل headers بتثبت وتسلّم لبعض، وأقسام بتقف بالظبط في مكانها، من غير ولا سطر JavaScript.
+part: Layout
+color: c2
+---
+
+## Sticky positioning: الهيدر يثبت وبعدين يسلّم
+
+<ScrollDemo kind="sticky" title="الـ headers بتثبت فوق، وكل واحد بيزق اللي قبله" />
+
+<File name="sticky.css">
+
+```css
+.section-title {
+  position: sticky;
+  top: 0;            /* يثبت لما يوصل لأول الـ scroller */
+  background: white; /* من غيرها المحتوى هيبان من تحته */
+  z-index: 1;
+}
+```
+
+</File>
+
+العنصر الـ sticky بيتصرف عادي، لحد ما يوصل لـ `top: 0`، فيثبت. بس هو **محبوس جوه الأب بتاعه**: أول ما الـ section يخلص، الهيدر بيمشي معاه لفوق، والهيدر اللي بعده ياخد مكانه. عشان كده كل هيدر بيبان كأنه بيسلّم اللي بعده.
+
+<Box type="story" icon="🚌" title="الكمسري">
+
+الكمسري واقف ثابت جنب الباب طول ما إنت في عربيته. لما عربيته تخلص، بيفضل فيها، وكمسري العربية اللي بعدها هو اللي يقابلك.
+
+</Box>
+
+<Box type="warn" title="sticky مش شغال؟ دوّر على overflow">
+
+أشهر سبب: أب من الآباء عليه `overflow: hidden` أو `overflow: auto`. ده بيخلّيه هو الـ scroller، فالـ sticky بيثبت بالنسبة له مش للصفحة. السبب التاني: نسيت `top`. والتالت: الأب ارتفاعه قد العنصر بالظبط، فمفيش مسافة يثبت فيها.
+
+</Box>
+
+## Scroll Snap: الصفحة تقف في مكانها
+
+<ScrollDemo kind="snap" title="كل لوحة بتقف مكانها بالظبط" />
+
+<File name="snap.css">
+
+```css
+.scroller {
+  scroll-snap-type: y mandatory; /* محور y، والوقوف إجباري */
+  overflow-y: auto;
+}
+.panel {
+  height: 100%;
+  scroll-snap-align: start;      /* أول اللوحة يقف عند أول الـ scroller */
+}
+```
+
+</File>
+
+| الخاصية | القيم | معناها |
+| --- | --- | --- |
+| `scroll-snap-type` | `mandatory` أو `proximity` | لازم يقف عند نقطة، ولا بس لو قريب منها |
+| `scroll-snap-align` | `start` أو `center` أو `end` | أنهي حتة من العنصر تقف عند الحافة |
+| `scroll-snap-stop` | `always` | متعدّيش اللوحة دي حتى لو المستخدم زق جامد |
+| `scroll-padding-top` | طول | سيب مسافة فوق، مثلًا عشان header ثابت |
+
+<Box type="tip" title="mandatory ممكن يضايق">
+
+لو لوحة أطول من الشاشة، `mandatory` ممكن يمنع المستخدم يوصل لآخرها. لمحتوى طويل استخدم `proximity`، وسيب `mandatory` للـ carousels واللوحات اللي قد الشاشة.
+
+</Box>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"عندي header ثابت فوق، ولما بدوس على لينك `#section` العنوان بيستخبى تحته. أحلها إزاي؟" — `scroll-padding-top` على الـ scroller (أو `html`) بطول الـ header، أو `scroll-margin-top` على العناصر نفسها.
+
+</Box>
+
+<Checklist id="scroll-sticky-snap" title="خلّصت الفصل لما" items={["تعمل header sticky وتعرف ليه بيسلّم للي بعده", "تشخّص sticky مش شغال بسبب overflow", "تعمل snap بـ `scroll-snap-type` و `scroll-snap-align`", "تفرّق mandatory عن proximity", "تحل الـ header اللي بيغطي الـ anchor"]} />
+
+<Quiz>
+<Q n={1} q="sticky شغال في Chrome بس جوه الـ card مش شغال. أول حاجة تشيّك عليها؟">أب عليه overflow غير visible.</Q>
+<Q n={2} q="محتاج JavaScript عشان الـ snap؟">لأ. CSS بس، والمتصفح بيعمل الحركة.</Q>
+</Quiz>

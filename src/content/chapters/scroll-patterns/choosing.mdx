@@ -1,0 +1,78 @@
+---
+title: تختار أنهي نمط وإزاي متبوّظش التجربة
+short: الاختيار
+order: 6
+label: فصل ٦
+badge: بعدها · فصل ٦
+en: choosing a pattern · accessibility · performance · keyboard · reduced motion
+keywords: a11y · performance · checklist
+goal: تختار النمط المناسب للمحتوى، وتراجع أي شغل scroll على الأداء وسهولة الاستخدام قبل ما تسلّمه.
+part: بعدها
+color: c1
+---
+
+## الجدول الكامل
+
+| النمط | بيعمل إيه | الأداة | JS؟ | مناسب لـ |
+| --- | --- | --- | --- | --- |
+| Sticky | Header يثبت ويسلّم | `position: sticky` | لأ | عناوين الأقسام، جداول، sidebars |
+| Scroll snap | لوحات تقف مكانها | `scroll-snap-*` | لأ | carousels، stories، onboarding |
+| Scroll triggered | يظهر لما يدخل | IntersectionObserver | أيوه | landing pages، كروت، أرقام |
+| Infinite scroll | يجيب أكتر قرب الآخر | IntersectionObserver | أيوه | feeds، نتايج بحث |
+| Scroll driven | قيمة ماشية مع الـ scroll | `scroll()` timeline | لأ | progress bar، header بيصغر |
+| Zoom on scroll | صورة تكبر وهي بتعدّي | `view()` timeline | لأ | صور مميزة في مقالة |
+| Parallax | طبقات بسرعات مختلفة | `scroll()` timeline | لأ | hero section |
+| Horizontal scroll | رأسي ← حركة بالعرض | sticky + view-timeline | لأ | عرض مراحل أو منتجات |
+| Scrollytelling | مشهد ثابت، خطوات بتغيّره | sticky + IntersectionObserver | أيوه | قصص وتقارير تفاعلية |
+
+<Diagram
+  title="تختار إزاي؟"
+  height={330}
+  mheight={560}
+  nodes={[
+    { id: "q", t: "عايز إيه؟", c: 1, x: 88, y: 50, mx: 50, my: 5 },
+    { id: "layout", t: "يثبت أو يقف", s: "sticky · snap", c: 2, x: 45, y: 13, mx: 22, my: 40 },
+    { id: "once", t: "يحصل مرة", s: "IntersectionObserver", c: 3, x: 45, y: 50, mx: 78, my: 40 },
+    { id: "follow", t: "يمشي مع الـ scroll", s: "scroll() · view()", c: 4, x: 45, y: 87, mx: 50, my: 70 },
+    { id: "story", t: "قصة بمشهد ثابت", s: "sticky + steps", c: 5, x: 10, y: 50, mx: 50, my: 95 },
+  ]}
+  edges={[
+    { from: "q", to: "layout", t: "شكل", c: 2 },
+    { from: "q", to: "once", t: "حدث", c: 3 },
+    { from: "q", to: "follow", t: "تقدّم", c: 4 },
+    { from: "once", to: "story", t: "+ sticky", c: 5 },
+  ]}
+/>
+
+## راجع قبل ما تسلّم
+
+<Grid2>
+<Card title="⚡ الأداء" c={4}>
+
+حرّك `transform` و `opacity` بس. مفيش شغل تقيل في `scroll` event. استخدم `{ passive: true }` لو مضطر تسمع للـ scroll. وجرّب على موبايل ضعيف من DevTools ← Performance ← CPU throttling.
+
+</Card>
+<Card title="♿ الوصول" c={3}>
+
+`prefers-reduced-motion` بيوقف الحركة. الـ scroller بيتحرك بالكيبورد (`tabindex="0"` لو container). المحتوى يبان من غير JS. ومحدش يخطف الـ scroll أو يغيّر سرعته.
+
+</Card>
+</Grid2>
+
+<Cheat items={[
+  ["الصفحة بتقطّع مع الـ scroll", "شيل الـ scroll listener، واستخدم IntersectionObserver أو scroll timeline، وحرّك transform بس"],
+  ["sticky مش ثابت", "أب عليه overflow، أو ناقص top"],
+  ["snap مانع يوصل لآخر لوحة طويلة", "proximity بدل mandatory"],
+  ["المحتوى فاضي لما الـ JS يتأخر", "الكلاس اللي بيخفي يتضاف بالـ JS"],
+  ["الـ footer مش باين", "زرار حمّل أكتر بدل infinite"],
+  ["Firefox مش بيحرّك", "@supports + حالة نهائية ثابتة، أو polyfill"],
+  ["ناس بتدوخ", "prefers-reduced-motion: reduce يوقف parallax و zoom"],
+  ["الـ scroller مش بيتحرك بالكيبورد", "tabindex=0 و role=region و aria-label"],
+]} />
+
+<Checklist id="scroll-choosing" title="خلّصت الفصل لما" items={["تختار النمط من نوع الحركة: شكل أو حدث أو تقدّم", "تراجع الأداء: transform و opacity ومفيش scroll listener تقيل", "تراجع الوصول: reduced motion والكيبورد ومن غير JS", "تحط fallback للمتصفحات اللي مش بتدعم"]} />
+
+<Quiz>
+<Q n={1} q="header بيصغر كل ما تنزل. أنهي نمط وأداة؟">scroll driven بـ `scroll()` timeline على الـ header.</Q>
+<Q n={2} q="أرقام بتعد لما قسم الإحصائيات يظهر. أنهي؟">scroll triggered بـ IntersectionObserver، وبعدين العد بـ JS أو animation.</Q>
+</Quiz>

@@ -1,0 +1,167 @@
+---
+title: Scroll Triggered و Infinite Scroll — بيحصل لما يدخل
+short: Triggered و Infinite
+order: 3
+label: فصل ٣
+badge: Triggered · فصل ٣
+en: IntersectionObserver · root · rootMargin · threshold · sentinel · useInfiniteQuery
+keywords: IntersectionObserver · sentinel · rootMargin
+goal: تستخدم IntersectionObserver تظهّر عناصر وهي داخلة، وتعمل infinite scroll بـ sentinel، وتعرف عيوبه.
+part: Triggered
+color: c3
+---
+
+## IntersectionObserver في سطرين
+
+بدل ما تسأل كل شوية "العنصر ده ظاهر؟"، بتقول للمتصفح **"قولّي لما يظهر"**:
+
+<File name="observe.ts">
+
+```ts
+const io = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        // العنصر دخل
+      }
+    }
+  },
+  {
+    root: null,              // null = الشاشة. أو عنصر scroller معيّن
+    rootMargin: "0px 0px -10% 0px", // كبّر أو صغّر حدود الـ root
+    threshold: 0.25,         // يتنده لما ربع العنصر يبان
+  },
+);
+io.observe(element);
+```
+
+</File>
+
+<Diagram
+  title="threshold و rootMargin"
+  height={250}
+  mheight={420}
+  nodes={[
+    { id: "el", t: "العنصر", s: "تحت الشاشة", c: 3, x: 85, y: 50, mx: 50, my: 8 },
+    { id: "edge", t: "حد الـ root", s: "+ rootMargin", c: 5, x: 50, y: 50, mx: 50, my: 50 },
+    { id: "cb", t: "الـ callback", s: "isIntersecting = true", c: 1, x: 14, y: 50, mx: 50, my: 92 },
+  ]}
+  edges={[
+    { from: "el", to: "edge", t: "scroll لحد ما يعدّي", c: 3 },
+    { from: "edge", to: "cb", t: "عدّى الـ threshold", c: 5 },
+  ]}
+/>
+
+## Scroll Triggered: يظهر لما يدخل
+
+<ScrollDemo kind="triggered" title="الكروت بتظهر مرة واحدة أول ما تدخل" />
+
+<File name="reveal.ts">
+
+```ts
+const io = new IntersectionObserver(
+  (entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add("is-in");
+      io.unobserve(e.target); // مرة واحدة: مش هيختفي لو رجعت لفوق
+    }
+  },
+  { threshold: 0.35 },
+);
+document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+```
+
+</File>
+
+<File name="reveal.css">
+
+```css
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .5s, transform .5s; }
+.reveal.is-in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+```
+
+</File>
+
+<Box type="warn" title="المحتوى المستخبي لازم يبان من غير JS">
+
+لو الـ JS اتأخر أو وقع، كل الكروت هتفضل `opacity: 0` والصفحة فاضية. الأأمن: الكلاس اللي بيخفي يتضاف بالـ JS نفسه (مثلًا `html.js .reveal`)، فلو مفيش JS المحتوى يبان عادي.
+
+</Box>
+
+## Infinite Scroll: هات أكتر قرب الآخر
+
+<ScrollDemo kind="infinite" title="انزل لتحت… بيجيب بوستات جديدة لوحده" />
+
+الفكرة: عنصر صغير مخفي في آخر اللستة اسمه **sentinel** (الحارس). أول ما يقرب من الشاشة، بنجيب الصفحة اللي بعدها.
+
+<File name="InfiniteList.tsx">
+
+```tsx
+import { useEffect, useRef } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+
+export function InfiniteList() {
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ["posts"],
+    queryFn: ({ pageParam }) => fetch(`/api/posts?cursor=${pageParam}`).then((r) => r.json()),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting && hasNextPage && !isFetchingNextPage) fetchNextPage();
+      },
+      { rootMargin: "0px 0px 400px 0px" }, // ابدأ تجيب قبل الآخر بـ 400px
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  return (
+    <>
+      {data?.pages.flatMap((p) => p.items).map((post) => <article key={post.id}>{post.title}</article>)}
+      <div ref={sentinel} aria-hidden="true" />
+      {isFetchingNextPage && <p role="status">بنحمّل…</p>}
+    </>
+  );
+}
+```
+
+</File>
+
+`rootMargin` الموجب من تحت بيخلّي الطلب يبدأ **قبل** ما المستخدم يوصل للآخر، فميشوفش loading خالص لو النت كويس. ولو عايز تفاصيل `useInfiniteQuery`، في فصل كامل عنه في مذكرة TanStack Query.
+
+<Box type="story" icon="🍞" title="فرن العيش">
+
+الفرّان مبيستناش لحد ما آخر رغيف يتباع عشان يخبز. أول ما يفضل كام رغيف، بيحط الدفعة الجاية. ده الـ `rootMargin`.
+
+</Box>
+
+### عيوب الـ infinite scroll
+
+<Chips items={["الـ footer مبيتوصلّوش", "زرار back بيرجعك لأول اللستة", "صعب على قارئ الشاشة يعرف إن في جديد", "الـ DOM بيكبر لحد ما الصفحة تتقل"]} />
+
+| المشكلة | الحل |
+| --- | --- |
+| الـ footer مستخبي | زرار **"حمّل أكتر"** بدل التحميل التلقائي، أو حط اللينكات المهمة فوق |
+| back بيضيّع المكان | خزّن الصفحات في الكاش (TanStack Query بيعمل ده) و `scrollRestoration` |
+| قارئ الشاشة | `role="status"` للـ loading، وأعلن عدد العناصر الجديدة |
+| الـ DOM التقيل | virtualization (`@tanstack/react-virtual`) بعد كام مية عنصر |
+
+<Checklist id="scroll-triggered" title="خلّصت الفصل لما" items={["تستخدم IntersectionObserver بـ root و rootMargin و threshold", "تعمل reveal بيحصل مرة بـ `unobserve`", "تحمي المحتوى لو الـ JS وقع", "تعمل infinite scroll بـ sentinel و useInfiniteQuery", "تعرف عيوب الـ infinite scroll وحلولها"]} />
+
+<Quiz>
+<Q n={1} q="ليه unobserve في الـ reveal؟">عشان الـ animation تحصل مرة. من غيره ممكن تتكرر أو تشغّل كود من غير لازمة.</Q>
+<Q n={2} q="rootMargin بـ 400px من تحت بيعمل إيه؟">بيعتبر العنصر ظاهر قبل ما يوصل للشاشة بـ 400px، فالتحميل يبدأ بدري.</Q>
+<Q n={3} q="امتى زرار حمّل أكتر أحسن من التلقائي؟">لما في footer مهم، أو المستخدم محتاج يحس بالتحكم، أو قارئ الشاشة.</Q>
+</Quiz>

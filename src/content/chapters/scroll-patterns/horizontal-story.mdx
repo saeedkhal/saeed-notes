@@ -1,0 +1,135 @@
+---
+title: Horizontal Scroll و Scrollytelling — الـ scroll بيحكي
+short: Horizontal و Story
+order: 5
+label: فصل ٥
+badge: الحكي · فصل ٥
+en: sticky + view-timeline · horizontal track · scrollytelling · sticky scene · step observer
+keywords: sticky track · view-timeline · steps
+goal: تحوّل الـ scroll الرأسي لحركة بالعرض، وتعمل قصة المشهد فيها ثابت والخطوات بتغيّره.
+part: الحكي
+color: c5
+---
+
+النمطين دول بيجمعوا اللي فات: **sticky** عشان المشهد يثبت، ومعاه **driven** أو **triggered** عشان يتحرك.
+
+## Horizontal Scroll: انزل لتحت، يمشي بالعرض
+
+<ScrollDemo kind="horizontal" title="الـ scroll الرأسي بيحرّك الكروت بالعرض" />
+
+التركيبة ٣ طبقات:
+
+<Tree>
+
+```text
+.wrap      ← طويل (مثلًا 400vh): ده اللي بيدّي مسافة scroll
+└── .stage ← sticky top:0 وارتفاعه قد الشاشة: بيثبت طول ما الـ wrap معدّي
+    └── .track ← صف كروت عرضه أكبر من الشاشة: بيتحرك translateX
+```
+
+</Tree>
+
+<File name="horizontal.css">
+
+```css
+.wrap { height: 400vh; view-timeline: --h block; }
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  direction: ltr; /* في صفحة RTL الـ track بيتصف من اليمين، فلازم الـ stage نفسه LTR */
+}
+.track {
+  display: flex;
+  width: 400%;
+  animation: slide linear both;
+  animation-timeline: --h;
+  animation-range: contain 0% contain 100%;
+}
+@keyframes slide { to { transform: translateX(-75%); } }
+```
+
+</File>
+
+- `view-timeline: --h` بيدّي اسم للـ timeline بتاع الـ `.wrap`، والـ `.track` (ابنه) بيستخدمه.
+- `contain` = الفترة اللي الـ wrap مالي الشاشة فيها، وهي نفس الفترة اللي الـ stage ثابت فيها. فالحركة بتبدأ أول ما يثبت وبتخلص قبل ما يفك.
+- `direction: ltr` على الـ **stage** مش الـ track: في صفحة عربي، العنصر الأعرض من أبوه بيتصف من اليمين ويطلع لشمال، فالـ track هيبدأ وإنت شايف آخر كارت. وقعنا في دي في الديمو.
+- `-75%` لأن عندنا ٤ كروت: نتحرك ٣ كروت من ٤ عشان آخر كارت يبقى قدامك.
+
+<Box type="warn" title="متخطفش الـ scroll">
+
+الـ horizontal scroll بيغيّر اتجاه حاجة المستخدم متعود عليها. خليه قصير، ووضّح إن في حركة بالعرض (أسهم أو نقط)، واعرض الكروت تحت بعض عادي على الموبايل الصغير أو مع reduced motion.
+
+</Box>
+
+## Scrollytelling: المشهد ثابت والخطوات بتحكي
+
+<ScrollDemo kind="story" title="المشهد ثابت فوق، وكل خطوة بتغيّره" />
+
+بتشوفه في المقالات التفاعلية: رسمة أو خريطة ثابتة، والكلام بيعدّي جنبها أو تحتها، وكل فقرة بتغيّر المشهد.
+
+<File name="story.ts">
+
+```ts
+const scene = document.querySelector<HTMLElement>(".scene")!;
+
+const io = new IntersectionObserver(
+  (entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) scene.dataset.step = (e.target as HTMLElement).dataset.step;
+    }
+  },
+  // خط وهمي في نص الشاشة: الخطوة اللي تعدّيه تبقى الحالية
+  { rootMargin: "-50% 0px -50% 0px" },
+);
+
+document.querySelectorAll(".step").forEach((s) => io.observe(s));
+```
+
+</File>
+
+<File name="story.css">
+
+```css
+.scene { position: sticky; top: 0; height: 60vh; }
+.step { min-height: 80vh; } /* مسافة كفاية بين الخطوات */
+
+.scene[data-step="2"] .bar-2 { height: 100%; background: var(--accent); }
+```
+
+</File>
+
+<Diagram
+  title="مين بيغيّر مين"
+  height={260}
+  mheight={430}
+  nodes={[
+    { id: "step", t: "الفقرة ٢", s: "بتعدّي نص الشاشة", c: 5, x: 85, y: 50, mx: 50, my: 8 },
+    { id: "io", t: "IntersectionObserver", s: "rootMargin -50%", c: 3, x: 50, y: 50, mx: 50, my: 50 },
+    { id: "scene", t: "المشهد الثابت", s: "data-step = 2", c: 4, x: 15, y: 50, mx: 50, my: 92 },
+  ]}
+  edges={[
+    { from: "step", to: "io", t: "عدّى الخط", c: 5 },
+    { from: "io", to: "scene", t: "غيّر الخطوة", c: 3 },
+  ]}
+/>
+
+<Box type="story" icon="🎭" title="مسرح العرايس">
+
+المسرح (المشهد) ثابت قدامك. الراوي (الفقرات) بيحكي، ومع كل جملة العرايس بتتحرك. إنت مش بتتنقل بين مسارح، إنت قاعد في مكانك والحكاية بتتغير.
+
+</Box>
+
+<Box type="tip" title="triggered ولا driven هنا؟">
+
+الديمو ده **triggered**: كل خطوة بتقلب المشهد مرة. لو عايز الرسمة تتحرك بالتدريج بين الخطوات (رقم بيعد مثلًا)، اربط الجزء ده بـ `view()` timeline على الخطوة نفسها.
+
+</Box>
+
+<Checklist id="scroll-story" title="خلّصت الفصل لما" items={["تبني horizontal scroll من wrap و stage و track", "تستخدم view-timeline باسم و `contain` range", "تعرف إمتى horizontal scroll بيضايق المستخدم", "تعمل scrollytelling بمشهد sticky و IntersectionObserver بخط في النص"]} />
+
+<Quiz>
+<Q n={1} q="ليه الـ stage لازم يبقى sticky؟">عشان يفضل ثابت قدامك طول ما الـ wrap الطويل بيعدّي، والكروت هي اللي تتحرك.</Q>
+<Q n={2} q="rootMargin -50% من فوق وتحت بيعمل إيه؟">بيخلّي الـ root خط رفيع في نص الشاشة، فالخطوة اللي تعدّي النص بس هي اللي تتحسب.</Q>
+</Quiz>

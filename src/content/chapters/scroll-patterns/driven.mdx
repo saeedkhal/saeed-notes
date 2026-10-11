@@ -1,0 +1,150 @@
+---
+title: Scroll Driven و Zoom و Parallax — الحركة ماشية مع الـ scroll
+short: Driven و Parallax
+order: 4
+label: فصل ٤
+badge: Driven · فصل ٤
+en: animation-timeline · scroll() · view() · animation-range · @supports fallback
+keywords: scroll() · view() · animation-range
+goal: تربط أي CSS animation بمكان الـ scroll من غير JavaScript، وتعمل progress bar و zoom و parallax.
+part: Driven
+color: c4
+---
+
+## الفكرة: الـ timeline بقى الـ scroll
+
+الـ CSS animation العادية ماشية بالوقت: ثانيتين من 0% لـ 100%. الـ **scroll-driven animation** نفس الـ keyframes بالظبط، بس الـ 0% هو أول الـ scroll، والـ 100% هو آخره.
+
+<Grid2>
+<Card title="📜 scroll()" c={4}>
+
+التقدّم = مكانك في **الـ scroller كله**. من 0 لما تبقى فوق خالص، لـ 1 لما توصل لتحت خالص.
+
+</Card>
+<Card title="👁️ view()" c={5}>
+
+التقدّم = مكان **عنصر معيّن** وهو بيعدّي في الشاشة: من أول ما يدخل لحد ما يخرج.
+
+</Card>
+</Grid2>
+
+## Scroll Driven: progress bar
+
+<ScrollDemo kind="progress" title="الشريط بيتملا مع القراية" />
+
+<File name="progress.css">
+
+```css
+.progress {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 4px;
+  background: #6c4bff;
+  transform-origin: right; /* RTL: يتملا من اليمين */
+  animation: grow linear both;
+  animation-timeline: scroll(root block);
+}
+@keyframes grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+```
+
+</File>
+
+`scroll(root block)` معناها: الـ scroller هو الصفحة (root)، والمحور الرأسي (block). جوه container بيعمل scroll، استخدم `scroll()` من غير parameters، فياخد أقرب scroller.
+
+<Box type="tip" title="ليه linear؟">
+
+مع الـ scroll، الـ easing بيتحسب على **المسافة** مش الوقت. `ease` هيخلّي الشريط يجري في النص ويبطّأ في الأطراف وإنت بتعمل scroll بسرعة ثابتة. `linear` هو اللي بيحس طبيعي غالبًا.
+
+</Box>
+
+## Zoom on scroll: الصورة تكبر وهي داخلة
+
+<ScrollDemo kind="zoom" title="الصورة بتكبر وهي بتعدّي" />
+
+<File name="zoom.css">
+
+```css
+.photo {
+  animation: zoom-in linear both;
+  animation-timeline: view();
+  animation-range: entry 0% cover 50%; /* من أول ما يدخل لحد ما يوصل نص الشاشة */
+}
+@keyframes zoom-in {
+  from { transform: scale(0.55); opacity: 0.35; }
+  to { transform: scale(1); opacity: 1; }
+}
+```
+
+</File>
+
+| الـ range | معناه |
+| --- | --- |
+| `entry` | من أول ما العنصر يلمس الشاشة لحد ما يدخل كله |
+| `exit` | من أول ما يبدأ يخرج لحد ما يختفي |
+| `cover` | من أول ما يلمس لحد ما يختفي خالص |
+| `contain` | الفترة اللي هو فيها جوه الشاشة كله (أو مالي الشاشة كلها لو أطول منها) |
+
+## Parallax: الخلفية أبطأ
+
+<ScrollDemo kind="parallax" title="الشمس والجبال بيتحركوا بسرعات مختلفة" />
+
+الإحساس بالعمق جاي من إن **الطبقات البعيدة بتتحرك أبطأ**. في الديمو: المحتوى بيطلع لفوق بسرعة الـ scroll، والجبال بتنزل شوية (فتبان أبطأ)، والشمس بتنزل أكتر (فتبان أبعد).
+
+<File name="parallax.css">
+
+```css
+.hero { overflow: clip; } /* مش hidden، شوف التحذير تحت */
+.hero .far,
+.hero .near {
+  animation: linear both;
+  animation-timeline: scroll(root);
+  animation-range: 0 400px; /* أول 400px scroll بس، وده طول الـ hero */
+}
+.hero .far { animation-name: far; }
+.hero .near { animation-name: near; }
+@keyframes far { to { transform: translateY(240px); } }
+@keyframes near { to { transform: translateY(100px); } }
+```
+
+</File>
+
+<Box type="warn" title="الـ overflow: hidden بيبوّظ scroll()">
+
+`scroll()` من غير parameters بيدوّر على **أقرب scroll container**. والـ hero عادة عليه `overflow: hidden` عشان الطبقات متطلعش بره، وده بيخلّيه هو نفسه scroll container (حتى لو مش بيتحرك)، فالـ animation تفضل واقفة على 0%. الحل: `overflow: clip` بدل `hidden` (بيقص من غير ما يعمل scroller)، أو اكتب الـ scroller صريح: `scroll(root)`. الفخ ده وقعنا فيه وإحنا بنعمل الديمو اللي فوق.
+
+</Box>
+
+<Box type="story" icon="🚆" title="شباك القطر">
+
+الأعمدة اللي جنب القضبان بتجري قدام عينك، والبيوت اللي بعيد ماشية بالراحة، والقمر كأنه ماشي معاك. الفرق في السرعة هو اللي بيقول لمخك مين قريب ومين بعيد.
+
+</Box>
+
+## لو المتصفح مش بيدعم
+
+الـ scroll-driven animations مدعومة في Chrome و Edge من 2023، وفي Safari الحديث. أما Firefox فكان لسه وراء flag آخر مرة راجعت، فشوف caniuse قبل ما تعتمد عليه. لفّها في `@supports` عشان المتصفح القديم يشوف الحالة النهائية الثابتة:
+
+```css
+@supports (animation-timeline: scroll()) {
+  .progress { animation: grow linear both; animation-timeline: scroll(root block); }
+}
+```
+
+ولو لازم يشتغل في كل حتة، في polyfill رسمي من نفس الفريق (`scroll-timeline` polyfill)، أو ترجع لـ `IntersectionObserver` مع progress تقريبي.
+
+<Box type="warn" title="parallax و الدوخة">
+
+الـ parallax بالذات من أكتر الحاجات اللي بتدوّخ الناس. **لازم** توقفه مع `prefers-reduced-motion: reduce`، ومتعملش فروق سرعة كبيرة.
+
+</Box>
+
+<Checklist id="scroll-driven" title="خلّصت الفصل لما" items={["تفرّق `scroll()` عن `view()`", "تعمل progress bar بـ `animation-timeline`", "تستخدم `animation-range` بـ entry و cover و contain", "تعمل parallax بطبقات بسرعات مختلفة", "تحمي الشغل بـ `@supports` و reduced motion"]} />
+
+<Quiz>
+<Q n={1} q="عايز animation تشتغل وعنصر معيّن بيعدّي الشاشة. scroll ولا view؟">view() لأن التقدّم محسوب على العنصر نفسه.</Q>
+<Q n={2} q="محتاج JS للـ progress bar؟">لأ، `animation-timeline: scroll()` بيعمله بـ CSS بس.</Q>
+<Q n={3} q="ليه linear مع الـ scroll؟">لأن الـ easing بيتطبق على المسافة، فـ ease بيحسّس إن الحركة مش متناسقة.</Q>
+</Quiz>

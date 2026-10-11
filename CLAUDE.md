@@ -48,6 +48,7 @@ public/icons/                  # PWA icons (PNG, rendered from favicon.svg)
 
 `<Hl c="y|p|g|b|o|u">`, `<En>`, `<Box type="idea|warn|tip|story|interview" title icon?>`, `<Grid2><Card title c={1-5}>`, `<Flow items={[{t,s?,c?}, "→", …]} />`, `<Chips items>`, `<File name>` + fenced code, `<Tree>` + ```text fence, `<Checklist id title items>`, `<Quiz><Q n q>answer</Q></Quiz>`, `<Cheat items={[[problem, fix], …]} />`.
 - `<Diagram title? height? mheight? nodes={[{id,t,s?,c?,x,y,mx?,my?}]} edges={[{from,to,t?,c?,dash?,bend?,mbend?}]} />` draws a canvas diagram: boxes, arrows with a label on each, and animated dots. `x/y` are percentages of the canvas. `mx/my/mheight` set the layout below 560px (lay it out vertically). Paired arrows (A→B and B→A) need opposite `bend`. Leave room between boxes for the label pill, otherwise it covers them, so check screenshots at 1400px and 390px.
+- `<ScrollDemo kind="sticky|snap|triggered|infinite|progress|zoom|parallax|horizontal|story" title? />` is a live demo frame you scroll inside. Its CSS is global with an `.sd-` prefix, because the infinite demo adds cards from JS.
 
 - String props (`items`, `q`) support `` `code` `` and Checklist also supports `**bold**`. These are converted by the component, not by Markdown.
 - `Checklist` `id` must be globally unique (`<topic>-w1`…), because it is the localStorage key.
@@ -60,6 +61,7 @@ public/icons/                  # PWA icons (PNG, rendered from favicon.svg)
 - Shiki theme `one-dark-pro`. Code blocks are forced LTR, and the language pill comes from `pre[data-language]`.
 - Theme: tokens on `:root`, dark via `prefers-color-scheme` **and** `[data-theme="dark"]`. When adding colors, update both dark blocks in `global.css`.
 - Links: always build them with `url()` from `src/lib/content.ts`, so a GitHub Pages `base` keeps working.
+- **CSS minifier vs scroll timelines:** the build merges `animation-timeline` into the `animation` shorthand when both are in one rule, and Chrome then drops the whole declaration. Put `animation-timeline`/`animation-range` in a separate, more specific rule (see `ScrollDemo.astro`).
 - pnpm blocks dependency build scripts. Allowed ones are listed under `allowBuilds` in `pnpm-workspace.yaml` (currently esbuild).
 
 ## Verifying UI changes

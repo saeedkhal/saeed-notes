@@ -1,0 +1,507 @@
+---
+/**
+ * ديمو حي لنمط scroll: إطار صغير بتعمل scroll جوّاه وتشوف النمط شغال.
+ * kind بيحدد النمط. الـ CSS global بـ prefix ‎.sd-‎ عشان العناصر اللي الـ JS بيضيفها
+ * (زي كروت الـ infinite scroll) تاخد نفس الشكل.
+ */
+type Kind =
+  | "sticky"
+  | "snap"
+  | "triggered"
+  | "infinite"
+  | "progress"
+  | "zoom"
+  | "parallax"
+  | "horizontal"
+  | "story";
+interface Props {
+  kind: Kind;
+  title?: string;
+}
+const { kind, title } = Astro.props;
+const driven = kind === "progress" || kind === "zoom" || kind === "parallax" || kind === "horizontal";
+const lines = (n: number) => Array.from({ length: n }, (_, i) => 55 + ((i * 37) % 40));
+---
+<figure class="sd" data-sd={kind}>
+  {title && <figcaption>{title}</figcaption>}
+  <div class="sd-frame" tabindex="0" role="region" aria-label={`ديمو: ${title ?? kind}. اعمل scroll جوه الإطار`}>
+    {kind === "sticky" && [1, 2, 3, 4].map((n) => (
+      <section class="sd-sec">
+        <h4 class="sd-pin">{`0${n}`} · قسم {n}</h4>
+        {lines(5).map((w) => <div class="sd-line" style={`width:${w}%`} />)}
+      </section>
+    ))}
+
+    {kind === "snap" && [1, 2, 3, 4].map((n) => (
+      <div class="sd-panel"><span>{n}</span></div>
+    ))}
+
+    {kind === "triggered" && (
+      <>
+        <p class="sd-hint">انزل… الكروت بتظهر أول ما تدخل</p>
+        {[1, 2, 3, 4, 5, 6].map((n) => (
+          <div class="sd-card sd-reveal" data-reveal>كارت {n}</div>
+        ))}
+      </>
+    )}
+
+    {kind === "infinite" && (
+      <>
+        <div class="sd-feed" data-feed>
+          {[1, 2, 3, 4, 5, 6].map((n) => <div class="sd-card">بوست {n}</div>)}
+        </div>
+        <div class="sd-sentinel" data-sentinel>بنحمّل…</div>
+      </>
+    )}
+
+    {kind === "progress" && (
+      <>
+        <div class="sd-progress" aria-hidden="true"><span /></div>
+        {lines(22).map((w) => <div class="sd-line" style={`width:${w}%`} />)}
+      </>
+    )}
+
+    {kind === "zoom" && (
+      <>
+        {lines(8).map((w) => <div class="sd-line" style={`width:${w}%`} />)}
+        <div class="sd-photo sd-zoom"><span class="sd-sun" /><span class="sd-hills" /></div>
+        {lines(10).map((w) => <div class="sd-line" style={`width:${w}%`} />)}
+      </>
+    )}
+
+    {kind === "parallax" && (
+      <>
+        <div class="sd-hero">
+          <span class="sd-sun sd-far" />
+          <span class="sd-hills sd-near" />
+          <strong>عنوان الصفحة</strong>
+        </div>
+        {lines(16).map((w) => <div class="sd-line" style={`width:${w}%`} />)}
+      </>
+    )}
+
+    {kind === "horizontal" && (
+      <>
+        <p class="sd-hint">اعمل scroll لتحت… والكروت تمشي بالعرض</p>
+        <div class="sd-hwrap">
+          <div class="sd-hsticky">
+            <div class="sd-track">
+              {[1, 2, 3, 4].map((n) => <div class="sd-slide">{n}</div>)}
+            </div>
+          </div>
+        </div>
+        <p class="sd-hint">خلصنا ✓</p>
+      </>
+    )}
+
+    {kind === "story" && (
+      <div class="sd-story">
+        <div class="sd-scene" data-scene data-step="1">
+          <div class="sd-bars"><i /><i /><i /></div>
+          <b data-caption>الخطوة ١</b>
+        </div>
+        {[1, 2, 3].map((n) => (
+          <p class="sd-step" data-step-n={n}>
+            {n === 1 && "١. أول عمود هو اللي بيكبر"}
+            {n === 2 && "٢. دلوقتي التاني"}
+            {n === 3 && "٣. والتالت في الآخر"}
+          </p>
+        ))}
+      </div>
+    )}
+  </div>
+  {driven && <p class="sd-nosupport">متصفحك لسه مش بيدعم scroll-driven animations، فالديمو ثابت. جرّبه على Chrome أو Edge أو Safari حديث.</p>}
+</figure>
+
+<style is:global>
+  /*
+   * الـ animation-timeline في rule لوحده أعلى specificity بقصد: الـ CSS minifier بيدمجه جوه
+   * الـ animation shorthand لو في نفس الـ rule، والمتصفح بيرفض السطر كله.
+   */
+  .sd {
+    margin: 1.6em auto;
+    max-width: 380px;
+  }
+  .sd figcaption {
+    font-weight: 800;
+    color: var(--heading);
+    margin: 0 4px 6px;
+    font-size: 0.95rem;
+  }
+  .sd figcaption::after {
+    content: "اعمل scroll جوه الإطار ↓";
+    display: block;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.82em;
+  }
+  .sd-frame {
+    position: relative;
+    height: 280px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg);
+    border: 2px solid color-mix(in srgb, var(--c1) 35%, transparent);
+    border-radius: 16px;
+    padding: 0 14px;
+    scrollbar-width: thin;
+  }
+  .sd-frame:focus-visible {
+    outline: 3px solid var(--c1);
+    outline-offset: 2px;
+  }
+  .sd-line {
+    height: 10px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--muted) 22%, transparent);
+    margin: 12px 0;
+  }
+  .sd-hint {
+    margin: 12px 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+  .sd-card {
+    padding: 22px 14px;
+    margin: 12px 0;
+    border-radius: 12px;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--c5) 10%, var(--bg));
+    border: 1.5px solid color-mix(in srgb, var(--c5) 45%, transparent);
+    color: var(--heading);
+  }
+  .sd-nosupport {
+    display: none;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 6px 4px 0;
+  }
+  @supports not (animation-timeline: scroll()) {
+    .sd-nosupport { display: block; }
+  }
+
+  /* ---------- sticky ---------- */
+  .sd-sec { padding-bottom: 6px; }
+  .sd-pin {
+    position: sticky;
+    top: 0;
+    margin: 0 -14px;
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    background: color-mix(in srgb, var(--c2) 14%, var(--bg));
+    border-bottom: 2px solid var(--c2);
+    color: var(--heading);
+    z-index: 1;
+  }
+
+  /* ---------- snap ---------- */
+  [data-sd="snap"] .sd-frame {
+    scroll-snap-type: y mandatory;
+    padding: 0;
+  }
+  .sd-panel {
+    height: 100%;
+    scroll-snap-align: start;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+  .sd-panel span {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+    border: 2.5px solid var(--c4);
+    background: color-mix(in srgb, var(--c4) 12%, var(--bg));
+    color: var(--c4);
+    font-size: 3.4rem;
+    font-weight: 800;
+  }
+
+  /* ---------- triggered ---------- */
+  .sd-reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .sd-reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ---------- infinite ---------- */
+  .sd-sentinel {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    padding: 14px 0 20px;
+  }
+
+  /* ---------- progress (scroll-driven) ---------- */
+  .sd-progress {
+    position: sticky;
+    top: 0;
+    height: 6px;
+    margin: 0 -14px 6px;
+    background: color-mix(in srgb, var(--muted) 18%, var(--bg));
+    z-index: 1;
+  }
+  .sd-progress span {
+    display: block;
+    height: 100%;
+    background: var(--c1);
+    transform-origin: right;
+    transform: scaleX(0);
+  }
+  @supports (animation-timeline: scroll()) {
+    .sd-progress span { animation: sd-grow linear both; }
+    .sd-frame .sd-progress span { animation-timeline: scroll(); }
+  }
+  @keyframes sd-grow {
+    to { transform: scaleX(1); }
+  }
+
+  /* ---------- zoom (view timeline) ---------- */
+  .sd-photo {
+    position: relative;
+    height: 150px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: linear-gradient(color-mix(in srgb, var(--c5) 22%, var(--bg)), var(--bg));
+    border: 1.5px solid color-mix(in srgb, var(--c3) 40%, transparent);
+  }
+  .sd-sun {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--c4);
+    top: 26px;
+    left: 30%;
+  }
+  .sd-hills {
+    position: absolute;
+    inset: auto -10% -2px;
+    height: 55%;
+    background: color-mix(in srgb, var(--c3) 45%, var(--bg));
+    clip-path: polygon(0 60%, 18% 20%, 38% 55%, 60% 10%, 82% 50%, 100% 25%, 100% 100%, 0 100%);
+  }
+  @supports (animation-timeline: view()) {
+    .sd-zoom { animation: sd-zoom linear both; }
+    .sd-frame .sd-zoom {
+      animation-timeline: view();
+      animation-range: entry 0% cover 50%;
+    }
+  }
+  @keyframes sd-zoom {
+    from { transform: scale(0.55); opacity: 0.35; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  /* ---------- parallax ---------- */
+  .sd-hero {
+    position: relative;
+    height: 170px;
+    margin: 0 -14px 10px;
+    /* clip مش hidden: hidden بيخلّيه scroller، فـ scroll() هيمسك فيه بدل الإطار */
+    overflow: clip;
+    background: linear-gradient(color-mix(in srgb, var(--c1) 20%, var(--bg)), var(--bg));
+    display: grid;
+    place-items: center;
+  }
+  .sd-hero strong {
+    position: relative;
+    font-size: 1.15rem;
+    color: var(--heading);
+  }
+  @supports (animation-timeline: scroll()) {
+    /* الخلفية بتنزل وإنت بتعمل scroll، فتبان أبطأ من المحتوى اللي طالع */
+    .sd-far { animation: sd-far linear both; }
+    .sd-near { animation: sd-near linear both; }
+    .sd-frame .sd-far,
+    .sd-frame .sd-near {
+      animation-timeline: scroll();
+      animation-range: 0 170px;
+    }
+  }
+  @keyframes sd-far { to { transform: translateY(110px); } }
+  @keyframes sd-near { to { transform: translateY(45px); } }
+
+  /* ---------- horizontal ---------- */
+  .sd-hwrap { height: 900px; }
+  .sd-hsticky {
+    direction: ltr; /* في صفحة RTL الـ track بيتصف من اليمين، فالحركة لشمال تبعد عن الكروت */
+    position: sticky;
+    top: 0;
+    height: 276px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+  }
+  .sd-track {
+    display: flex;
+    flex: none; /* من غيرها بيتزنق لعرض الـ stage */
+    width: 400%;
+  }
+  .sd-slide {
+    flex: 0 0 calc(25% - 12px);
+    height: 170px;
+    display: grid;
+    place-items: center;
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: var(--c2);
+    border-radius: 14px;
+    border: 2.5px solid var(--c2);
+    background: color-mix(in srgb, var(--c2) 10%, var(--bg));
+    box-sizing: border-box;
+    margin: 0 6px;
+  }
+  @supports (animation-timeline: scroll()) {
+    /* الـ wrapper الطويل هو الـ timeline: من أول ما يملا الإطار لحد آخره (contain) الكروت تمشي */
+    .sd-hwrap { view-timeline: --sd-h block; }
+    .sd-track { animation: sd-slide linear both; }
+    .sd-frame .sd-track {
+      animation-timeline: --sd-h;
+      animation-range: contain 0% contain 100%;
+    }
+  }
+  @keyframes sd-slide { to { transform: translateX(-75%); } }
+
+  /* ---------- scrollytelling ---------- */
+  .sd-story { padding-bottom: 140px; }
+  .sd-scene {
+    position: sticky;
+    top: 0;
+    margin: 0 -14px;
+    padding: 14px;
+    height: 120px;
+    background: var(--bg);
+    border-bottom: 1.5px dashed color-mix(in srgb, var(--muted) 40%, transparent);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    z-index: 1;
+  }
+  .sd-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 90px;
+  }
+  .sd-bars i {
+    width: 34px;
+    height: 25%;
+    border-radius: 8px 8px 0 0;
+    background: color-mix(in srgb, var(--muted) 30%, var(--bg));
+    transition: height 0.45s ease, background 0.45s ease;
+  }
+  .sd-scene[data-step="1"] .sd-bars i:nth-child(1),
+  .sd-scene[data-step="2"] .sd-bars i:nth-child(2),
+  .sd-scene[data-step="3"] .sd-bars i:nth-child(3) {
+    height: 100%;
+    background: var(--c3);
+  }
+  .sd-scene b { color: var(--c3); }
+  .sd-step {
+    margin: 0;
+    padding: 70px 0;
+    color: var(--muted);
+    font-weight: 700;
+    transition: color 0.3s;
+  }
+  .sd-step.is-active { color: var(--heading); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sd-reveal { opacity: 1; transform: none; transition: none; }
+    .sd-progress span, .sd-zoom, .sd-far, .sd-near, .sd-track { animation: none !important; }
+    .sd-bars i, .sd-step { transition: none; }
+  }
+</style>
+
+<script>
+  const reduce = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function triggered(fig: HTMLElement, frame: HTMLElement) {
+    const items = fig.querySelectorAll<HTMLElement>("[data-reveal]");
+    if (reduce()) return items.forEach((el) => el.classList.add("is-in"));
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          e.target.classList.add("is-in");
+          io.unobserve(e.target); // مرة واحدة بس: ده الفرق بين triggered و driven
+        }
+      },
+      { root: frame, threshold: 0.35 },
+    );
+    items.forEach((el) => io.observe(el));
+  }
+
+  function infinite(fig: HTMLElement, frame: HTMLElement) {
+    const feed = fig.querySelector<HTMLElement>("[data-feed]")!;
+    const sentinel = fig.querySelector<HTMLElement>("[data-sentinel]")!;
+    let count = feed.children.length;
+    let loading = false;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e?.isIntersecting || loading) return;
+        if (count >= 30) {
+          sentinel.textContent = "خلصنا ✓ مفيش بوستات تانية";
+          io.disconnect();
+          return;
+        }
+        loading = true;
+        // كأننا بنجيب صفحة جديدة من الـ API
+        setTimeout(() => {
+          for (let i = 0; i < 6; i++) {
+            const card = document.createElement("div");
+            card.className = "sd-card";
+            card.textContent = `بوست ${++count}`;
+            feed.append(card);
+          }
+          loading = false;
+        }, 450);
+      },
+      { root: frame, rootMargin: "0px 0px 80px 0px" },
+    );
+    io.observe(sentinel);
+  }
+
+  function story(fig: HTMLElement, frame: HTMLElement) {
+    const scene = fig.querySelector<HTMLElement>("[data-scene]")!;
+    const caption = fig.querySelector<HTMLElement>("[data-caption]")!;
+    const steps = [...fig.querySelectorAll<HTMLElement>("[data-step-n]")];
+    const names = ["", "الخطوة ١", "الخطوة ٢", "الخطوة ٣"];
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const n = (e.target as HTMLElement).dataset.stepN!;
+          scene.dataset.step = n;
+          caption.textContent = names[Number(n)] ?? "";
+          steps.forEach((s) => s.classList.toggle("is-active", s === e.target));
+        }
+      },
+      // خط وهمي في نص الجزء اللي تحت المشهد: الخطوة اللي تعدّيه تبقى هي الحالية
+      { root: frame, rootMargin: "-60% 0px -30% 0px" },
+    );
+    steps.forEach((s) => io.observe(s));
+  }
+
+  const boot = () => {
+    for (const fig of document.querySelectorAll<HTMLElement>("figure.sd[data-sd]")) {
+      if (fig.dataset.bound) continue;
+      fig.dataset.bound = "1";
+      const frame = fig.querySelector<HTMLElement>(".sd-frame")!;
+      const kind = fig.dataset.sd;
+      if (kind === "triggered") triggered(fig, frame);
+      if (kind === "infinite") infinite(fig, frame);
+      if (kind === "story") story(fig, frame);
+    }
+  };
+  boot();
+  document.addEventListener("astro:page-load", boot);
+</script>

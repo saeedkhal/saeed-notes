@@ -1,0 +1,90 @@
+---
+title: خريطة الأنماط التسعة
+short: الخريطة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: scroll patterns · layout vs triggered vs driven · compositor · reduced motion
+keywords: layout · triggered · driven · performance
+goal: تقسّم الأنماط التسعة لـ ٣ عائلات، وتعرف كل عائلة بتتعمل بأنهي أداة وليه.
+part: البداية
+color: c1
+---
+
+## ٩ أنماط، ٣ عائلات
+
+الأنماط شكلها مختلف، بس السؤال اللي بيفرّقهم واحد: <Hl c="y">إيه اللي بيحصل لما المستخدم يعمل scroll؟</Hl>
+
+| العائلة | إيه اللي بيحصل | الأنماط | الأداة |
+| --- | --- | --- | --- |
+| **Layout** | العنصر بيتصرّف بشكل خاص وهو بيتحرك | Sticky، Scroll snap | CSS بس |
+| **Triggered** | حاجة **بتحصل مرة** لما عنصر يدخل الشاشة | Fade on enter، Infinite scroll، Scrollytelling | `IntersectionObserver` |
+| **Driven** | قيمة **ماشية مع كل بيكسل** scroll | Progress bar، Zoom، Parallax، Horizontal | CSS scroll-driven animations |
+
+<Diagram
+  title="المستخدم عمل scroll… مين بيرد؟"
+  height={320}
+  mheight={470}
+  nodes={[
+    { id: "scroll", t: "المستخدم بيعمل scroll", c: 1, x: 86, y: 50, mx: 50, my: 7 },
+    { id: "css", t: "CSS layout", s: "sticky · snap", c: 2, x: 30, y: 15, mx: 18, my: 85 },
+    { id: "io", t: "IntersectionObserver", s: "مرة لما يدخل", c: 3, x: 30, y: 50, mx: 50, my: 55 },
+    { id: "tl", t: "scroll timeline", s: "مع كل بيكسل", c: 4, x: 30, y: 85, mx: 82, my: 85 },
+  ]}
+  edges={[
+    { from: "scroll", to: "css", t: "المتصفح لوحده", c: 2 },
+    { from: "scroll", to: "io", t: "عدّى الحد؟", c: 3 },
+    { from: "scroll", to: "tl", t: "progress 0→1", c: 4 },
+  ]}
+/>
+
+## الفرق بين Triggered و Driven
+
+ده أكتر لبس بيحصل، فخليه في دماغك:
+
+<Grid2>
+<Card title="🔔 Triggered" c={3}>
+
+زي **جرس الباب**: بيرن مرة لما حد يعدّي. العنصر بيدخل، الـ animation بتشتغل لآخرها بسرعتها هي، حتى لو المستخدم وقف.
+
+</Card>
+<Card title="🎚️ Driven" c={4}>
+
+زي **مفتاح الصوت**: كل ما تلف أكتر، الصوت يعلى. الـ animation مربوطة بمكان الـ scroll، تقف لما تقف وترجع لما ترجع.
+
+</Card>
+</Grid2>
+
+## ٣ قواعد لكل الأنماط
+
+<Box type="warn" title="١. متسمعش لـ scroll event عشان شغل تقيل">
+
+`window.addEventListener("scroll", ...)` بيضرب عشرات المرات في الثانية على الـ main thread. لو بتحسب layout جوّاه (`getBoundingClientRect`) هتلاقي الصفحة بتقطّع. البديل: `IntersectionObserver` للـ triggered، و scroll-driven animations للـ driven، والاتنين المتصفح بيعملهم بكفاءة أعلى.
+
+</Box>
+
+<Box type="tip" title="٢. حرّك transform و opacity بس">
+
+الخاصيتين دول المتصفح يقدر يحرّكهم على الـ compositor من غير ما يعيد حساب الـ layout. تحريك `top` أو `height` أو `width` مع الـ scroll وصفة للتقطيع.
+
+</Box>
+
+<Box type="idea" title="٣. احترم prefers-reduced-motion">
+
+ناس كتير بيجيلها دوخة من الحركة الكتير، وبيفعّلوا "تقليل الحركة" في الجهاز. كل ديمو في المذكرة دي بيوقف الحركة لو الإعداد ده شغال، واعمل نفس الحكاية في شغلك:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .parallax-layer { animation: none; transition: none; }
+}
+```
+
+</Box>
+
+<Checklist id="scroll-intro" title="خلّصت الفصل لما" items={["تقسّم الـ ٩ أنماط على Layout و Triggered و Driven", "تفرّق triggered عن driven بمثال", "تعرف ليه scroll event للشغل التقيل فكرة وحشة", "تعرف إن transform و opacity هم الأرخص في التحريك", "تحترم prefers-reduced-motion"]} />
+
+<Quiz>
+<Q n={1} q="fade-in لما الكارت يدخل الشاشة: triggered ولا driven؟">triggered: بيحصل مرة، والـ animation بتكمل بسرعتها.</Q>
+<Q n={2} q="شريط بيوضح قريت قد إيه من المقالة؟">driven: قيمته ماشية مع مكان الـ scroll بالظبط.</Q>
+<Q n={3} q="ليه تحريك top مع الـ scroll بيقطّع؟">بيجبر المتصفح يعيد حساب الـ layout كل فريم. transform مش محتاج.</Q>
+</Quiz>

@@ -1,0 +1,42 @@
+---
+title: "Cheat Sheet: الـ ٩ أنماط في صفحة"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: One-page recall for scroll patterns
+keywords: cheatsheet · sticky · timeline · observer
+goal: تفتكر كل نمط والسطر اللي بيعمله.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["Header يثبت وبعدين يسلّم", "`position: sticky; top: 0` جوه section"],
+  ["لوحات تقف مكانها", "`scroll-snap-type: y mandatory` + `scroll-snap-align: start`"],
+  ["header ثابت بيغطي الـ anchor", "`scroll-padding-top`"],
+  ["يظهر مرة لما يدخل", "IntersectionObserver + `unobserve`"],
+  ["هات صفحة جديدة قرب الآخر", "sentinel + `rootMargin` موجب من تحت + useInfiniteQuery"],
+  ["progress bar للقراية", "`animation-timeline: scroll(root block)`"],
+  ["animation وعنصر بيعدّي", "`animation-timeline: view()` + `animation-range`"],
+  ["صورة تكبر وهي داخلة", "view() + `entry 0% cover 50%`"],
+  ["parallax", "طبقات بـ translateY مختلف على نفس scroll()"],
+  ["رأسي ← بالعرض", "wrap طويل + stage sticky + track بـ view-timeline و contain"],
+  ["مشهد ثابت وخطوات", "sticky scene + IntersectionObserver بـ `rootMargin: -50% 0px -50% 0px`"],
+  ["المتصفح مش بيدعم timelines", "`@supports (animation-timeline: scroll())`"],
+  ["الحركة بتدوّخ", "`prefers-reduced-motion: reduce` → animation: none"],
+  ["الـ shorthand لغى الـ timeline", "اكتب `animation-timeline` بعد `animation`"],
+]} />
+
+<Box type="warn" title="آخر فخ: الترتيب">
+
+`animation: grow linear both;` كـ shorthand بيرجّع `animation-timeline` للـ default. لو كتبت الـ timeline **قبل** الـ shorthand، هيتلغي من غير ولا error. اكتبه دايمًا **بعده**.
+
+</Box>
+
+<Checklist id="scroll-cheat" title="خلّصت المذكرة لما" items={["تسمّي الـ ٩ أنماط وعيلة كل واحد", "تكتب sticky و snap من الذاكرة", "تعمل reveal و infinite بـ IntersectionObserver", "تعمل progress و zoom و parallax بـ scroll timelines", "تعمل horizontal scroll و scrollytelling"]} />
+
+<Quiz>
+<Q n={1} q="أنهي أنماط محتاجة JavaScript؟">Triggered و Infinite و Scrollytelling (IntersectionObserver). الباقي CSS بس.</Q>
+<Q n={2} q="ليه الـ timeline بيتلغي ساعات من غير سبب؟">اتكتب قبل الـ animation shorthand، فالـ shorthand رجّعه auto.</Q>
+</Quiz>
