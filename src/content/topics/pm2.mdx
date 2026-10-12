@@ -1,0 +1,24 @@
+---
+title: PM2 من تشغيل Process لحد Cluster
+highlight: PM2
+subtitle: fork · cluster · reload · startup · logs · logrotate
+description: شغّل Node في production، افهم الفرق الحقيقي بين fork وcluster، احفظ الـ process list بعد الـ reboot، وسيطر على الـ logs قبل ما تملى الهارد.
+emoji: ♾️
+order: 22
+tags: [backend, devops]
+note: شرح عملي بأسلوبي مبني على PM2 وNode cluster docs. PM2 بيتغير؛ راجع الـ docs الرسمية قبل نسخ flags إلى production، وجرّب graceful shutdown على تطبيقك.
+---
+
+المذكرة ماشية من السؤال الأساسي: <Hl c="y">الـ process الواحدة هتستغل كام core؟</Hl> بعدين نبني Fork وCluster بإيدنا، ونشوف PM2 بيختصر إيه، وإمتى الـ reload مش مضمون يبقى zero downtime. وفي الآخر نحفظ التشغيل بعد reboot ونمنع ملفات الـ logs تكبر للأبد.
+
+<Box type="story" icon="🍽️" title="تشبيه المذكرة كلها">
+
+المطعم عنده كاونتر واحد. في Fork mode كل جرسون واقف على كاونتر برقم مختلف، ومحتاج مدير صالة يوزع الزباين. في Cluster mode فيه باب واحد، وPM2 يوزع الداخلين على كذا جرسون. كل جرسون له جيبه ودفتره لوحده؛ لو عايزهم يشوفوا نفس الـ session أو cache، حطها في خزنة مشتركة زي Redis.
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+PM2 process manager، مش بديل Docker أو Kubernetes، ومش حل للحسابات الثقيلة داخل request واحدة. الأمثلة ES modules، وملف `package.json` محتاج `"type": "module"`. على Windows وبعض البيئات سلوك توزيع Node cluster يختلف، فاختبر على نظام production.
+
+</Box>

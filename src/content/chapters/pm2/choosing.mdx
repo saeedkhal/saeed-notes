@@ -1,0 +1,87 @@
+---
+title: تختار Fork ولا Cluster؟
+short: المقارنة
+order: 4
+label: فصل ٤
+badge: القرار · فصل ٤
+en: stateless · Redis · WebSocket · cron · worker_threads
+keywords: stateless · sticky sessions · worker_threads · Kubernetes
+goal: تختار mode صح وتتجنب تكرار sessions والcron والـ cache بين workers.
+part: القرار
+color: c4
+---
+
+## المقارنة اللي تهمك
+
+| السؤال | Fork mode | Cluster mode |
+|---|---|---|
+| نفس الـ port؟ | لأ بين نسخ HTTP العادية | أيوه |
+| استغلال cores؟ | يدوي مع ports وLB | workers بسهولة |
+| Node فقط؟ | يشغّل لغات وبرامج مختلفة | لتطبيقات Node الشبكية |
+| reload تدريجي؟ | restart عادي غالبًا | `pm2 reload` |
+| process رئيسية؟ | كل instance تطبيق مستقل | PM2 يدير cluster workers |
+| memory مشتركة؟ | لأ | برضه لأ |
+
+الـ overhead بتاع primary process موجود، لكن القرار الحقيقي مش كام MB زيادة؛ القرار مين هيوزع الشبكة ومين مسؤول عن lifecycle.
+
+## Cluster معناها التطبيق Stateless
+
+كل worker عندها memory مختلفة. الحاجات دي تعمل مشاكل:
+
+<Grid2>
+<Card title="Session أو cache في RAM" c={1}>
+
+المستخدم يسجل دخوله عند worker 1، والطلب التالي يروح worker 2 فمتلاقيش session. انقل الحالة إلى Redis أو database مشتركة.
+
+</Card>
+<Card title="Rate limiter في RAM" c={2}>
+
+كل worker تعد لوحدها؛ الحد الحقيقي يبقى مضروبًا في عدد workers. استخدم store مشتركة.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="Cron داخل التطبيق" c={4}>
+
+الوظيفة تشتغل N مرات، مرة في كل worker. افصل scheduler أو استخدم distributed lock.
+
+</Card>
+<Card title="WebSockets" c={5}>
+
+راجع sticky sessions والـ adapter المشتركة، زي Redis adapter في Socket.IO. connection الحالية مرتبطة بالworker اللي قبلتها.
+
+</Card>
+</Grid2>
+
+## Docker وKubernetes
+
+في VPS واحدة، PM2 Cluster طريق بسيط لاستغلال cores. في Kubernetes، النمط الشائع process واحدة في كل container وreplicas متعددة:
+
+<Flow items={[{"t": "Pod 1", "s": "Node process", "c": 1}, {"t": "Pod 2", "s": "Node process", "c": 2}, {"t": "Pod 3", "s": "Node process", "c": 3}, "←", {"t": "Service", "s": "load balancing", "c": 5}]} />
+
+كده الـ orchestrator يدير health checks وrestarts وrolling updates. Cluster داخل كل container ممكن يبقى قرار مقصود، لكنه يضيف طبقة scaling ومراقبة ثانية. متعملوش تلقائيًا.
+
+## الشغل CPU-heavy
+
+لو request واحدة بتعمل image processing أو loop حسابية تقيلة، إضافة cluster تخلي requests مختلفة تتوزع، لكنها لا تسرّع الطلب الواحد.
+
+استخدم:
+
+- `worker_threads` لتوازي JavaScript CPU work داخل التطبيق.
+- job queue وworker services للشغل الطويل.
+- process منفصلة لو العزل أهم.
+
+<Box type="interview" title="الإجابة العملية">
+
+"VPS عليها API Node وعايز كل cores؟" — Cluster مع app stateless واختبار graceful reload. "Kubernetes؟" — ابدأ process واحدة لكل container وscale replicas. "سكريبت أو Python؟" — Fork.
+
+</Box>
+
+<Checklist id="pm2-choosing" title="خلّصت الفصل لما" items={["تنقل session والcache المشتركة خارج RAM", "تمنع cron من التكرار في كل worker", "تخطط للـ WebSockets والsticky sessions", "تختار process واحدة لكل container كافتراضي", "تستخدم worker_threads للطلب CPU-heavy"]} />
+
+<Quiz>
+<Q n={1} q="عندك ٤ workers وrate limit في RAM قيمته ١٠٠. الحد العالمي مضمون يبقى ١٠٠؟">لأ. كل worker عندها عداد، فمحتاج store مشتركة.</Q>
+<Q n={2} q="Cluster تسرّع تحويل صورة واحدة؟">مش بذاتها. وزّع الحساب على worker_threads أو job workers.</Q>
+<Q n={3} q="ليه Cluster جوه Kubernetes مش أول اختيار؟">لأن Kubernetes أصلًا يدير replicas والتوزيع والـ rolling updates؛ cluster تضيف طبقة إدارة أخرى.</Q>
+</Quiz>

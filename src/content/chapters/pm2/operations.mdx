@@ -1,0 +1,123 @@
+---
+title: شغّل وراقب واعمل Reload
+short: أوامر PM2
+order: 5
+label: فصل ٥
+badge: التشغيل · فصل ٥
+en: start · list · logs · monit · reload · graceful shutdown
+keywords: merge-logs · time · reload · scale
+goal: تقرأ أمر PM2 طويل، وتنقل الإعداد إلى ecosystem file، وتعمل reload بأقل downtime.
+part: التشغيل
+color: c5
+---
+
+## فك الأمر الطويل
+
+<File name="terminal">
+
+```bash
+pm2 start ./bin/www \
+  -i 8 \
+  --merge-logs \
+  --time \
+  --name ".COM::backend"
+```
+
+</File>
+
+معناه:
+
+- `./bin/www`: entry point، شائع في Express Generator.
+- `-i 8`: ثماني instances. لتطبيق Node، `-i` يفعّل Cluster mode.
+- `--merge-logs`: يمنع suffix رقم الـ process، فتكتب instances اللي لها نفس app name في نفس out file ونفس error file.
+- `--time`: يضيف timestamp لكل سطر log.
+- `--name`: اسم التطبيق في PM2.
+
+<Box type="warn" title="merge مش معناها out وerror ملف واحد">
+
+هي تدمج logs بتاعة instances المتعددة حسب النوع، لكنها لا تدمج stdout مع stderr تلقائيًا. لو عايز مسارًا واحدًا للاتنين استخدم إعداد `log_file` بعد ما تفهم أثره على أدوات المراقبة.
+
+</Box>
+
+## الأفضل: Ecosystem file في Git
+
+<File name="ecosystem.config.cjs">
+
+```js
+module.exports = {
+  apps: [{
+    name: ".COM::backend",
+    script: "./bin/www",
+    exec_mode: "cluster",
+    instances: 8,
+    merge_logs: true,
+    time: true,
+    env: {
+      NODE_ENV: "production",
+      PORT: 3000,
+    },
+  }],
+};
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 list
+pm2 logs .COM::backend --lines 100
+pm2 monit
+pm2 describe .COM::backend
+pm2 scale .COM::backend 6
+```
+
+</File>
+
+الملف يخلي الإعداد قابل للمراجعة بدل command ضخم في shell history.
+
+## Restart ولا Reload؟
+
+`pm2 restart` يوقف ويبدأ؛ ممكن يحصل downtime. في Cluster mode، `pm2 reload` يبدأ workers جديدة تدريجيًا ويقفل القديمة، فيقدر يحقق zero-downtime reload.
+
+لكن كلمة "يقدر" مهمة: لو التطبيق مبيقفلش connections أو worker الجديدة مبتعلنش إنها جاهزة، PM2 ممكن ينتظر، والـ reload لو فشل يرجع classic restart.
+
+<File name="server.js">
+
+```js
+import http from "node:http";
+
+const server = http
+  .createServer((req, res) => res.end("ok\n"))
+  .listen(Number(process.env.PORT ?? 3000));
+
+process.on("SIGINT", () => {
+  server.close((error) => {
+    process.exit(error ? 1 : 0);
+  });
+});
+```
+
+</File>
+
+في تطبيق حقيقي اقفل database وqueue consumers، وحدد `kill_timeout`. لو محتاج readiness أدق، استخدم `wait_ready: true` وابعت `process.send("ready")` بعد اكتمال التهيئة؛ راجع PM2 docs للسلوك مع إصدارك.
+
+<File name="terminal">
+
+```bash
+pm2 reload .COM::backend
+pm2 restart .COM::backend
+pm2 stop .COM::backend
+pm2 delete .COM::backend
+```
+
+</File>
+
+<Checklist id="pm2-operations" title="خلّصت الفصل لما" items={["تفك معنى -i وmerge-logs وtime وname", "تنقل الإعداد إلى ecosystem file", "تراقب list وlogs وmonit", "تفرق restart عن reload", "تقفل السيرفر والاتصالات عند SIGINT"]} />
+
+<Quiz>
+<Q n={1} q="`-i 8` مع Node app يشغل أنهي mode؟">Cluster mode بثماني instances.</Q>
+<Q n={2} q="`--merge-logs` يدمج stdout وstderr؟">لأ. يمنع فصل الملف حسب instance ID؛ out وerror يفضلوا نوعين.</Q>
+<Q n={3} q="هل reload مضمون دائمًا بلا downtime؟">لأ. محتاج readiness وgraceful shutdown صح، وقد يعمل fallback إلى restart لو فشل.</Q>
+</Quiz>

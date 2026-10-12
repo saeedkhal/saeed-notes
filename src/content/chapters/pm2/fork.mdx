@@ -1,0 +1,119 @@
+---
+title: Fork mode — كل Process لوحدها
+short: Fork mode
+order: 2
+label: فصل ٢
+badge: أوضاع التشغيل · فصل ٢
+en: child_process.fork · PORT · increment_var · Nginx
+keywords: fork · port · increment_var · load balancer
+goal: تشغّل كذا process مستقلة وتفهم ليه كل HTTP instance محتاجة port مختلف أو load balancer.
+part: الوضعين
+color: c2
+---
+
+## معنى Fork هنا
+
+في PM2، Fork mode يشغّل البرنامج كـ process مستقلة. لتطبيق Node، PM2 يستخدم آلية تشغيل process مناسبة ويديرها، لكن مفيش Node cluster بيوحّد الـ server handle بين النسخ.
+
+لو شغّلت ٣ نسخ من `server.js` وكلهم بيحاولوا يمسكوا port 3000، أول واحدة تكسب والباقي يقع بـ `EADDRINUSE`.
+
+<Box type="warn" title="fork() مش معناه memory مشتركة">
+
+`child_process.fork()` اسمه جاي من API Node، لكنه بيشغّل Node process جديدة بقناة IPC. كل process عندها heap وevent loop وglobals منفصلين.
+
+</Box>
+
+## من غير PM2
+
+<File name="fork-launcher.js">
+
+```js
+import { fork } from "node:child_process";
+
+for (const port of [3001, 3002, 3003]) {
+  const start = () => {
+    const child = fork("./server.js", {
+      env: { ...process.env, PORT: String(port) },
+    });
+
+    child.once("exit", (code) => {
+      console.log(`port ${port} exited with ${code}`);
+      setTimeout(start, 1000);
+    });
+  };
+
+  start();
+}
+```
+
+</File>
+
+كل process على port. العميل محتاج load balancer قدامهم:
+
+<File name="/etc/nginx/conf.d/api.conf">
+
+```nginx
+upstream node_api {
+  server 127.0.0.1:3001;
+  server 127.0.0.1:3002;
+  server 127.0.0.1:3003;
+}
+
+server {
+  listen 80;
+
+  location / {
+    proxy_pass http://node_api;
+  }
+}
+```
+
+</File>
+
+## بـ PM2 وports متزايدة
+
+<File name="ecosystem.fork.config.cjs">
+
+```js
+module.exports = {
+  apps: [{
+    name: "api-fork",
+    script: "server.js",
+    exec_mode: "fork",
+    instances: 3,
+    increment_var: "PORT",
+    env: { PORT: 3001 },
+  }],
+};
+```
+
+</File>
+
+`increment_var` يخلي النسخ تاخد 3001 ثم 3002 ثم 3003. شغّل:
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.fork.config.cjs
+pm2 list
+pm2 logs api-fork
+```
+
+</File>
+
+استخدمنا `.cjs` لأن المشروع ممكن يكون `"type": "module"`، بينما ملف ecosystem هنا مكتوب بـ `module.exports`.
+
+## Fork مناسب لإيه؟
+
+- process واحدة بسيطة أو script.
+- queue consumer وbackground worker مبيفتحش HTTP port.
+- Python أو Bash أو binary؛ Cluster mode خاص بتطبيقات Node الشبكية.
+- Docker/Kubernetes لما كل container يشغّل process واحدة، والـ orchestrator هو اللي يكرر replicas.
+
+<Checklist id="pm2-fork" title="خلّصت الفصل لما" items={["تشرح ليه نفس الـ port يعمل EADDRINUSE", "تشغل ٣ ports بـ increment_var", "تحط Nginx قدام fork instances", "تعرف إن كل process لها memory منفصلة", "تختار fork للـ scripts واللغات الأخرى"]} />
+
+<Quiz>
+<Q n={1} q="٣ fork instances لسيرفر HTTP على port 3000 هتشتغل؟">لأ، إلا لو فيه آلية مشاركة socket خارج Fork mode. بالشكل العادي يحصل EADDRINUSE.</Q>
+<Q n={2} q="increment_var بيعمل إيه؟">يزود قيمة environment variable لكل instance، زي PORT.</Q>
+<Q n={3} q="ليه محتاج Nginx هنا؟">عشان العميل يدخل من باب واحد وNginx يوزع على الـ ports المختلفة.</Q>
+</Quiz>

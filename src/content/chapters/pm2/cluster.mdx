@@ -1,0 +1,107 @@
+---
+title: Cluster mode — باب واحد وWorkers
+short: Cluster mode
+order: 3
+label: فصل ٣
+badge: أوضاع التشغيل · فصل ٣
+en: node:cluster · primary · worker · IPC · shared port
+keywords: cluster · primary · worker · IPC · round robin
+goal: تبني cluster من غير PM2 وتفهم إزاي workers متعددة تسمع على نفس الـ port.
+part: الوضعين
+color: c3
+---
+
+## إزاي نفس الـ port مش بيتخانق؟
+
+Node `cluster` يعمل primary process ويفرّع workers. الـ workers processes منفصلة، لكن cluster ينسّق بينهم ويشارك server handle؛ عشان كده كل worker تقدر تعمل `listen(3000)`.
+
+على الأنظمة المدعومة، Node غالبًا يخلي الـ primary يوزع connections على workers بـ round-robin. Windows له سلوك وقيود مختلفة، فمتبنيش توقعات production من تجربة على نظام تاني.
+
+<Flow items={[{"t": "port 3000", "s": "باب واحد", "c": 1}, "→", {"t": "primary", "s": "يوزع connections", "c": 3}, "→", {"t": "workers", "s": "process لكل نسخة", "c": 5}]} />
+
+## Cluster من غير PM2
+
+<File name="cluster.js">
+
+```js
+import cluster from "node:cluster";
+import os from "node:os";
+
+if (cluster.isPrimary) {
+  const count = os.availableParallelism();
+  console.log(`primary ${process.pid}: ${count} workers`);
+
+  for (let i = 0; i < count; i++) cluster.fork();
+
+  cluster.on("exit", (worker, code) => {
+    console.error(`worker ${worker.process.pid} exited: ${code}`);
+    if (!worker.exitedAfterDisconnect) {
+      setTimeout(() => cluster.fork(), 1000);
+    }
+  });
+} else {
+  await import("./server.js");
+}
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+node cluster.js
+
+for i in {1..8}; do
+  curl --no-keepalive http://localhost:3000
+done
+```
+
+</File>
+
+الـ PID المفروض يتغير بين responses. `--no-keepalive` يساعد التجربة تعمل connections جديدة؛ connection واحدة persistent مش لازم تتنقل بين workers.
+
+## وبـ PM2
+
+مش محتاج تكتب `cluster.js`. ادّي PM2 ملف السيرفر العادي:
+
+<File name="ecosystem.cluster.config.cjs">
+
+```js
+module.exports = {
+  apps: [{
+    name: "api-cluster",
+    script: "server.js",
+    exec_mode: "cluster",
+    instances: "max",
+    env: { PORT: 3000 },
+  }],
+};
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.cluster.config.cjs
+pm2 list
+pm2 scale api-cluster 6
+```
+
+</File>
+
+`max` أو `0` معناهم عدد الـ CPUs المتاحة، و`-1` يعني العدد ناقص واحد. العدد الأكبر مش دايمًا أسرع؛ سيب مساحة للـ OS والـ database والـ reverse proxy، واعمل load test.
+
+## `cluster.fork()` مبنية على إيه؟
+
+هي نفسها تستخدم `child_process.fork()` لتكوين Node processes وقناة IPC. القيمة المضافة من cluster هي إدارة workers ومشاركة server handles وسياسة توزيع connections.
+
+<Hl c="g">Cluster يوزع requests على processes؛ مش بيقسم request واحدة تقيلة على cores.</Hl>
+
+<Checklist id="pm2-cluster" title="خلّصت الفصل لما" items={["تفرق primary عن worker", "تشغّل workers كلها على port واحد", "تلاحظ PIDs مختلفة مع connections جديدة", "تستخدم instances max في PM2", "تعرف إن كل worker لسه process مستقلة"]} />
+
+<Quiz>
+<Q n={1} q="ليه workers تقدر تسمع على نفس port؟">cluster ينسق مشاركة server handle وتوزيع connections.</Q>
+<Q n={2} q="هل worker عندها نفس heap بتاعة أختها؟">لأ. كل واحدة process وmemory مستقلة.</Q>
+<Q n={3} q="instances: max دائمًا أفضل رقم؟">لأ. هو بداية سهلة، لكن الرقم الصح يتحدد بالـ load test وباقي شغل الجهاز.</Q>
+</Quiz>

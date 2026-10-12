@@ -1,0 +1,52 @@
+---
+title: "Cheat Sheet: PM2 في الإنتاج"
+short: Cheat Sheet
+order: 8
+label: الآخر
+badge: الآخر
+en: fork · cluster · reload · save · startup · logrotate
+keywords: pm2 start · reload · resurrect · max_size
+goal: تفتكر قرار الـ mode وأوامر التشغيل والاستمرارية والـ logs بسرعة.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["PM2 default", "Fork mode وinstance واحدة"],
+  ["Node app مع `-i 8`", "Cluster mode بثماني workers"],
+  ["كل cores بسهولة", "`pm2 start app.js -i max`"],
+  ["نفس port", "Cluster؛ Fork instances تحتاج ports مختلفة وLB"],
+  ["برنامج مش Node", "Fork mode"],
+  ["Kubernetes", "ابدأ process واحدة لكل container وscale replicas"],
+  ["request واحدة CPU-heavy", "`worker_threads` أو job queue، مش Cluster وحدها"],
+  ["sessions أو cache في Cluster", "store مشتركة زي Redis"],
+  ["cron جوه app", "هيتكرر لكل worker؛ افصله أو استخدم lock"],
+  ["WebSockets", "راجع sticky sessions وadapter مشتركة"],
+  ["اعرض العمليات", "`pm2 list`"],
+  ["تابع logs", "`pm2 logs <name>`"],
+  ["راقب CPU وRAM", "`pm2 monit`"],
+  ["غيّر عدد workers", "`pm2 scale <name> 6`"],
+  ["إعادة تدريجية", "`pm2 reload <name>` مع graceful shutdown"],
+  ["إعادة عادية", "`pm2 restart <name>`"],
+  ["احفظ القائمة", "`pm2 save`"],
+  ["رجع القائمة يدويًا", "`pm2 resurrect`"],
+  ["اربط PM2 بالإقلاع", "`pm2 startup` من غير sudo، ثم نفّذ الأمر الناتج"],
+  ["fallback مع cron", "`@reboot /absolute/path/pm2 resurrect` لنفس المستخدم"],
+  ["ادمج logs بين instances", "`--merge-logs`، وout/error يفضلوا منفصلين"],
+  ["أضف وقتًا لكل سطر", "`--time`"],
+  ["فضّي logs المدارة", "`pm2 flush`"],
+  ["ثبّت rotation", "`pm2 install pm2-logrotate`"],
+  ["Rotate عند حجم", "`pm2 set pm2-logrotate:max_size 1G`"],
+  ["احتفظ بسبعة قديمة", "`pm2 set pm2-logrotate:retain 7`"],
+  ["اضغط القديمة", "`pm2 set pm2-logrotate:compress true`"],
+  ["Rotate منتصف الليل", "`pm2 set pm2-logrotate:rotateInterval '0 0 * * *'`"],
+  ["راجع إعداد module", "`pm2 conf`"],
+]} />
+
+<Checklist id="pm2-cheat" title="خلّصت المذكرة لما" items={["تختار Fork أو Cluster بسبب واضح", "تشغّل Cluster وتشوف PIDs مختلفة", "تخرج state المشتركة من memory", "تجرب graceful reload", "تعمل save وstartup", "تضبط logrotate وتختبرها على staging"]} />
+
+<Quiz>
+<Q n={1} q="VPS عليها HTTP API stateless و٨ cores؟">Cluster نقطة بداية مناسبة، ثم load test يحدد عدد workers.</Q>
+<Q n={2} q="عملت save من غير startup. إيه الناقص؟">init service تشغّل PM2 بعد reboot.</Q>
+<Q n={3} q="الـ log وصل 1G، أمسحه بـ rm؟">لأ. استخدم flush أو logrotate؛ حذف ملف مفتوح ممكن يسيب المساحة محجوزة.</Q>
+</Quiz>

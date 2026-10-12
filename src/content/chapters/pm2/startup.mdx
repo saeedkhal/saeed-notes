@@ -1,0 +1,119 @@
+---
+title: رجّع التطبيقات بعد Reboot
+short: Save وStartup
+order: 6
+label: فصل ٦
+badge: الاستمرارية · فصل ٦
+en: pm2 save · startup · systemd · resurrect · cron
+keywords: dump.pm2 · systemd · crontab · PM2_HOME
+goal: تحفظ process list وتربطها بإقلاع النظام من غير ما تشغّل تطبيق المستخدم كـ root.
+part: الاستمرار
+color: c1
+---
+
+## `save` تحفظ إيه؟
+
+بعد ما تشغّل التطبيقات بالإعداد الصحيح:
+
+<File name="terminal">
+
+```bash
+pm2 list
+pm2 save
+```
+
+</File>
+
+PM2 تحفظ snapshot للـ process list: الأسماء، العدد، script path والإعدادات اللازمة للـ resurrect. الملف عادةً تحت `~/.pm2/dump.pm2`.
+
+لو غيّرت عدد instances أو حذفت app، نفّذ `pm2 save` تاني؛ وإلا reboot ممكن يرجّع snapshot القديمة.
+
+<Hl c="b">`pm2 save` تحفظ القائمة، لكنها لا تجعل النظام يشغّل PM2 عند الإقلاع. محتاج startup service.</Hl>
+
+## الطريقة الرسمية مع systemd
+
+شغّل الأمر الأول **من غير sudo** وأنت داخل بالمستخدم اللي يشغّل التطبيق:
+
+<File name="terminal">
+
+```bash
+pm2 startup
+```
+
+</File>
+
+PM2 تكتشف init system وتطبع أمرًا شبيهًا بـ:
+
+<File name="terminal">
+
+```bash
+sudo env PATH=$PATH:/home/youruser/.nvm/versions/node/v22/bin \
+  pm2 startup systemd -u youruser --hp /home/youruser
+```
+
+</File>
+
+انسخ الأمر الناتج عندك كما هو ونفّذه؛ الجزء ده يحتاج صلاحية root عشان ينشئ systemd service، لكن الخدمة نفسها مربوطة بـ `youruser`.
+
+<Flow items={[{"t": "pm2 start", "s": "شغّل apps", "c": 1}, "→", {"t": "pm2 save", "s": "احفظ القائمة", "c": 2}, "→", {"t": "pm2 startup", "s": "ولّد service", "c": 3}, "→", {"t": "sudo command", "s": "ثبّت service", "c": 4}]} />
+
+لو حدّثت Node مع nvm، مسار Node يتغير. اعمل:
+
+<File name="terminal">
+
+```bash
+pm2 unstartup
+pm2 startup
+```
+
+</File>
+
+وبعدين نفّذ أمر sudo الجديد واحفظ القائمة.
+
+## بديل Cron لما systemd مش متاح
+
+ده fallback، مش أفضل من service manager:
+
+<File name="terminal">
+
+```bash
+command -v pm2
+crontab -e
+```
+
+</File>
+
+في crontab **لنفس المستخدم**:
+
+<File name="crontab">
+
+```cron
+@reboot /home/youruser/.npm-global/bin/pm2 resurrect
+```
+
+</File>
+
+استخدم المسار اللي طلع فعلًا، وتأكد إن `HOME` و`PM2_HOME` لنفس المستخدم. Cron environment محدودة، عشان كده المسار المطلق مهم.
+
+## متحذفش log شغال بـ `rm`
+
+لو process فاتحة file descriptor وحذفت الملف، ممكن تفضل تكتب في inode محذوف وتستهلك مساحة من غير ملف واضح. استخدم:
+
+<File name="terminal">
+
+```bash
+pm2 flush
+pm2 restart all
+```
+
+</File>
+
+`flush` يفضي logs المدارة. Restart يخلي التطبيق يفتح الملفات من جديد، لكنه يعمل downtime في Fork mode؛ الأفضل log rotation بدل الحذف اليدوي.
+
+<Checklist id="pm2-startup" title="خلّصت الفصل لما" items={["تشغّل التطبيقات ثم pm2 save", "تنفّذ pm2 startup من غير sudo أولًا", "تنسخ أمر sudo الناتج بدل ما تخترعه", "تعيد startup بعد تغيير مسار Node", "تستخدم absolute path في cron fallback", "تستخدم flush أو rotate بدل rm"]} />
+
+<Quiz>
+<Q n={1} q="عملت pm2 save بس. هل التطبيقات هترجع بعد reboot؟">مش إلا لو فيه startup service أو cron يشغّل pm2 resurrect.</Q>
+<Q n={2} q="ليه أمر systemd فيه -u و--hp؟">عشان الخدمة تدير PM2 تحت مستخدم التطبيق وهومه، مش هوم root.</Q>
+<Q n={3} q="غيرت instances من ٤ إلى ٨. لازم save تاني؟">أيوه، عشان snapshot المحفوظة تعكس القائمة الجديدة.</Q>
+</Quiz>

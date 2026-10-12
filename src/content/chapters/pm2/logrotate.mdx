@@ -1,0 +1,111 @@
+---
+title: متسيبش الـ Logs تاكل الهارد
+short: Logrotate
+order: 7
+label: فصل ٧
+badge: الاستمرارية · فصل ٧
+en: pm2-logrotate · max_size · retain · compress · rotateInterval
+keywords: logs · rotate · retain · gzip · timezone
+goal: تثبّت pm2-logrotate وتضبط الحجم والاحتفاظ والضغط والتوقيت بمعنى صحيح.
+part: الاستمرار
+color: c2
+---
+
+## المشكلة
+
+PM2 تكتب logs افتراضيًا تحت `$HOME/.pm2/logs`. لو التطبيق بيطبع كتير، `app-out.log` و`app-error.log` يكبروا لحد ما الهارد يتملي.
+
+الـ rotation يخلي فيه current log يفضل التطبيق يكتب فيه، ونسخ مؤرخة قديمة بعدد محدود. لما trigger يحصل بالحجم أو بالوقت، الأداة تدور الملف وتبدأ current log جديدة.
+
+<Box type="warn" title="التثبيت بـ PM2 مش npm">
+
+`pm2-logrotate` PM2 module، فالأمر الرسمي:
+
+```bash
+pm2 install pm2-logrotate
+```
+
+</Box>
+
+## إعداد عملي
+
+<File name="terminal">
+
+```bash
+pm2 set pm2-logrotate:max_size 1G
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
+pm2 set pm2-logrotate:dateFormat YYYY-MM-DD_HH-mm-ss
+pm2 set pm2-logrotate:workerInterval 30
+pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+pm2 set pm2-logrotate:TZ Asia/Kuwait
+
+pm2 conf
+```
+
+</File>
+
+## كل قيمة معناها إيه؟
+
+<Grid2>
+<Card title="max_size: 1G" c={1}>
+
+لما الفحص يلاقي الملف عدى 1G يعمل rotate. ممكن يتخطى الرقم شوية لأن الفحص دوري، مش byte بbyte.
+
+</Card>
+<Card title="retain: 7" c={2}>
+
+يحتفظ بحد أقصى ٧ ملفات rotated، بالإضافة إلى current log.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="compress: true" c={3}>
+
+يضغط الملفات rotated بـ gzip. لو `false`، الضغط **مقفول**؛ القيمة لا تعني "اضغط بشكل false".
+
+</Card>
+<Card title="workerInterval: 30" c={4}>
+
+يفحص الأحجام كل ٣٠ ثانية. تقليله جدًا يزود الفحص، وتكبيره يسمح بتجاوز أكبر للحجم.
+
+</Card>
+</Grid2>
+
+`rotateInterval: '0 0 * * *'` يعمل forced rotation يوميًا عند منتصف الليل. الـ quotes مهمة عشان shell متفسرش النجوم كأسماء ملفات. ده trigger زمني منفصل عن `max_size`.
+
+`TZ: Asia/Kuwait` يحدد timezone المستخدمة في الجدولة واسم الملف حسب دعم module. لو مش موجودة، الافتراضي timezone النظام.
+
+## مثال شكل الملفات
+
+لو التطبيق اسمه `app`:
+
+<Tree>
+
+```text
+~/.pm2/logs/
+├── app-out.log
+├── app-out__2026-10-12_00-00-00.log.gz
+├── app-out__2026-10-11_00-00-00.log.gz
+├── app-error.log
+└── app-error__2026-10-12_00-00-00.log.gz
+```
+
+</Tree>
+
+اسم الملف الفعلي والفاصل يتأثران بإصدار module والإعداد، فاعتمد على النتيجة عندك، مش الاسم الحرفي في الرسم.
+
+<Box type="tip" title="اختبر بإعداد صغير مؤقتًا">
+
+على staging، حط `max_size 1K` واطبع logs، وتأكد إن rotation والضغط والretain حصلوا. بعد الاختبار رجّع إعداد production.
+
+</Box>
+
+<Checklist id="pm2-logrotate" title="خلّصت الفصل لما" items={["تثبت module بأمر pm2 install", "تفرق current log عن rotated logs", "تعرف إن retain لا يحسب current file", "تفعّل الضغط بـ true", "تحط cron expression بين quotes", "تراجع الإعداد بـ pm2 conf"]} />
+
+<Quiz>
+<Q n={1} q="retain 7 معناها إجمالي ٧ مع current؟">لأ. حتى ٧ rotated files، وفوقهم current file.</Q>
+<Q n={2} q="compress false يعمل ضغط؟">لأ. يعطّل gzip. استخدم true للتفعيل.</Q>
+<Q n={3} q="ليه الملف ممكن يعدي 1G قبل rotation؟">لأن worker تفحص كل فترة؛ trigger يحصل وقت الفحص التالي.</Q>
+</Quiz>

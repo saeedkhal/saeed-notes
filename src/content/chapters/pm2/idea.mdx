@@ -1,0 +1,77 @@
+---
+title: Process واحدة مش كل الجهاز
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: process · event loop · CPU core · concurrency · parallelism
+keywords: process · core · event loop
+goal: تفرق بين إن Node يخدم طلبات كتير وبين إنه يشغّل JavaScript على كل أنوية الجهاز.
+part: البداية
+color: c1
+---
+
+## Node سريع، بس الـ process ليها حدود
+
+كود JavaScript بتاع process واحدة بيتنفذ على event loop رئيسية. Node يقدر يستنى I/O كتير من غير thread لكل request، لكن ده مش معناه إن نفس الكود بيتنفذ بالتوازي على ٨ cores.
+
+<Grid2>
+<Card title="Concurrency" c={2}>
+
+طلبات كتير شغالة في نفس الفترة؛ Node يبدأ I/O ويرجع يكمل غيره لحد النتيجة.
+
+</Card>
+<Card title="Parallelism" c={4}>
+
+شغل بيتنفذ فعلًا في نفس اللحظة على أكتر من core. محتاج processes أو worker threads.
+
+</Card>
+</Grid2>
+
+لو السيرفر فيه ٨ cores وشغّلت `node server.js` مرة، عندك process واحدة. نظام التشغيل وNode ممكن يستخدموا threads داخلية لحاجات معينة، لكن كود JavaScript الرئيسي مش هيتوزع تلقائيًا على الثمانية.
+
+<Hl c="y">PM2 يقدر يشغّل نسخ متعددة من التطبيق؛ هو مش بيحوّل الـ process الواحدة إلى multi-threaded.</Hl>
+
+## سيرفر هنستخدمه في كل التجارب
+
+<File name="server.js">
+
+```js
+import http from "node:http";
+
+const port = Number(process.env.PORT ?? 3000);
+
+http
+  .createServer((req, res) => {
+    res.end(`pid=${process.pid} port=${port}\n`);
+  })
+  .listen(port, () => {
+    console.log(`pid ${process.pid} listening on ${port}`);
+  });
+```
+
+</File>
+
+كل response يطبع PID. لما نكرر `curl`، تغيير الرقم يثبت إن الطلبات وصلت إلى processes مختلفة.
+
+## PM2 مسؤول عن إيه؟
+
+PM2 يشغّل التطبيق، يراقبه، يعيده لو وقع، يجمع metadata وlogs، ويقدر يحفظ process list ويرجعها بعد reboot. عنده طريقتان للتنفيذ:
+
+<Flow items={[{"t": "Fork mode", "s": "process مستقلة", "c": 2}, "→", {"t": "أو", "c": 5}, "→", {"t": "Cluster mode", "s": "workers على port واحد", "c": 4}]} />
+
+الـ default هو Fork mode. استخدام `-i` مع Node app يدخل Cluster mode تلقائيًا، لكن في ecosystem file اكتب `exec_mode` صراحةً عشان النية تبقى واضحة.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"Node single-threaded، يبقى إزاي بيخدم ألف request؟" — event loop تعمل concurrency للـ I/O. ده مختلف عن تشغيل JavaScript بالتوازي على كل cores.
+
+</Box>
+
+<Checklist id="pm2-idea" title="خلّصت الفصل لما" items={["تفرق concurrency عن parallelism", "تعرف إن process Node واحدة مش بتستهلك كل cores لكود JavaScript", "تشغل server.js وتشوف PID", "تقول إن PM2 process manager مش runtime"]} />
+
+<Quiz>
+<Q n={1} q="لو عندك ٨ cores وشغّلت node server.js مرة، كام process للتطبيق؟">واحدة. Node مش بيكرر التطبيق تلقائيًا.</Q>
+<Q n={2} q="انتظار ١٠٠٠ database query محتاج ١٠٠٠ core؟">لأ. event loop تقدر تعمل concurrency للـ I/O.</Q>
+<Q n={3} q="إيه الـ default في PM2؟">Fork mode وعادة instance واحدة لو محددتش غير كده.</Q>
+</Quiz>
