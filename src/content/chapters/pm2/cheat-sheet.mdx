@@ -1,7 +1,7 @@
 ---
 title: "Cheat Sheet: PM2 في الإنتاج"
 short: Cheat Sheet
-order: 8
+order: 9
 label: الآخر
 badge: الآخر
 en: fork · cluster · reload · save · startup · logrotate
@@ -31,6 +31,12 @@ color: dark
   ["احفظ القائمة", "`pm2 save`"],
   ["رجع القائمة يدويًا", "`pm2 resurrect`"],
   ["اربط PM2 بالإقلاع", "`pm2 startup` من غير sudo، ثم نفّذ الأمر الناتج"],
+  ["تأكد من service", "`systemctl status pm2-<username>`"],
+  ["شخّص فشل الإقلاع", "`journalctl -u pm2-<username> --since boot`"],
+  ["بعد تغيير app list", "`pm2 save` تاني"],
+  ["بعد تغيير Node مع nvm", "`pm2 unstartup` ثم `pm2 startup`"],
+  ["بعد تحديث PM2 عالميًا", "`pm2 update` لتحديث الـ daemon"],
+  ["env بعد reboot", "ecosystem أو مصدر ثابت، مش `export` في SSH"],
   ["fallback مع cron", "`@reboot /absolute/path/pm2 resurrect` لنفس المستخدم"],
   ["ادمج logs بين instances", "`--merge-logs`، وout/error يفضلوا منفصلين"],
   ["أضف وقتًا لكل سطر", "`--time`"],
@@ -43,7 +49,7 @@ color: dark
   ["راجع إعداد module", "`pm2 conf`"],
 ]} />
 
-<Checklist id="pm2-cheat" title="خلّصت المذكرة لما" items={["تختار Fork أو Cluster بسبب واضح", "تشغّل Cluster وتشوف PIDs مختلفة", "تخرج state المشتركة من memory", "تجرب graceful reload", "تعمل save وstartup", "تضبط logrotate وتختبرها على staging"]} />
+<Checklist id="pm2-cheat" title="خلّصت المذكرة لما" items={["تختار Fork أو Cluster بسبب واضح", "تشغّل Cluster وتشوف PIDs مختلفة", "تخرج state المشتركة من memory", "تجرب graceful reload", "تعمل save وstartup وتختبر reboot", "تضبط logrotate وتختبرها على staging"]} />
 
 <Quiz>
 <Q n={1} q="VPS عليها HTTP API stateless و٨ cores؟">Cluster نقطة بداية مناسبة، ثم load test يحدد عدد workers.</Q>

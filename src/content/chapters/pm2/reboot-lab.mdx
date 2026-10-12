@@ -1,0 +1,216 @@
+---
+title: Lab — اختبر رجوع التطبيق بعد Reboot
+short: Reboot Lab
+order: 7
+label: فصل ٧
+badge: الاستمرار · فصل ٧
+en: systemctl · dump.pm2 · pm2 update · environment variables
+keywords: pm2-username · reboot · pm2 update · env
+goal: تنفّذ startup وsave بالترتيب، وتثبت إن نفس المستخدم والـ environment رجعوا بعد reboot.
+part: الاستمرار
+color: c2
+---
+
+## النتيجة اللي عايزينها
+
+بعد ما السيرفر يعمل reboot، عايزين:
+
+1. systemd تشغّل PM2 daemon تحت مستخدم التطبيق.
+2. PM2 تقرأ `~/.pm2/dump.pm2`.
+3. التطبيقات ترجع بنفس الأسماء والعدد والمسارات.
+4. الـ environment المطلوبة تبقى موجودة.
+
+<Hl c="y">`startup` يشغّل PM2 مع النظام. `save` تقول لـ PM2 أنهي apps ترجع. واحدة من غير الثانية مش كفاية.</Hl>
+
+## جهّز التطبيق واحفظه
+
+نفّذ الخطوات بنفس المستخدم اللي التطبيق هيشتغل باسمه، مش root:
+
+<File name="terminal">
+
+```bash
+whoami
+pm2 start ecosystem.config.cjs
+pm2 list
+pm2 save
+```
+
+</File>
+
+`pm2 save` تكتب snapshot في `~/.pm2/dump.pm2`. راجع إن القائمة الحالية هي اللي فعلًا عايز ترجع بعد reboot؛ متحفظش process تجريبية بالغلط.
+
+<Box type="warn" title="كل مستخدم له PM2 مختلفة">
+
+لو عملت `pm2 save` كمستخدم `ubuntu`، وبعدين أنشأت startup service لمستخدم `root`، عندك هومان و`PM2_HOME` وprocess lists مختلفين. الأوامر تنجح، لكن التطبيق المطلوب مش هيرجع.
+
+</Box>
+
+## أنشئ Startup service
+
+شغّل الأمر الأول من غير sudo:
+
+<File name="terminal">
+
+```bash
+pm2 startup
+```
+
+</File>
+
+هيطبع أمرًا مخصوصًا لجهازك، قريب من:
+
+<File name="terminal">
+
+```bash
+sudo env PATH=$PATH:/home/ubuntu/.nvm/versions/node/v22/bin \
+  pm2 startup systemd -u ubuntu --hp /home/ubuntu
+```
+
+</File>
+
+انسخ الناتج عندك بالحرف. متنسخش المثال؛ مسار Node واسم المستخدم والـ home مختلفين من جهاز للتاني.
+
+الخدمة غالبًا اسمها `pm2-<username>`. افحص:
+
+<File name="terminal">
+
+```bash
+sudo systemctl status pm2-ubuntu
+sudo systemctl is-enabled pm2-ubuntu
+```
+
+</File>
+
+بدّل `ubuntu` باسم المستخدم الحقيقي.
+
+## اعمل الاختبار الحقيقي
+
+متعتبرش الإعداد ناجحًا لمجرد إن `systemctl status` أخضر. اختبر reboot في وقت آمن:
+
+<File name="terminal">
+
+```bash
+sudo reboot
+```
+
+</File>
+
+بعد رجوع السيرفر:
+
+<File name="terminal">
+
+```bash
+pm2 list
+pm2 describe .COM::backend
+curl http://localhost:3000
+```
+
+</File>
+
+لو الـ list فاضية، قارن مستخدم الـ service بالمستخدم الحالي، وافحص:
+
+<File name="terminal">
+
+```bash
+systemctl cat pm2-$(whoami)
+journalctl -u pm2-$(whoami) --since boot
+ls -l ~/.pm2/dump.pm2
+```
+
+</File>
+
+## أي تغيير محتاج Save جديدة
+
+بعد add أوdelete أوscale أوتغيير ecosystem:
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 delete old-worker
+pm2 scale .COM::backend 8
+pm2 save
+```
+
+</File>
+
+آخر `save` هي snapshot اللي reboot الجاي يرجعها.
+
+## Node وPM2 والـ PATH
+
+مع nvm، systemd service تحتفظ بمسار نسخة Node وقت إنشاء الخدمة. بعد تغيير Node:
+
+<File name="terminal">
+
+```bash
+pm2 unstartup
+pm2 startup
+# نفّذ أمر sudo الجديد
+pm2 save
+```
+
+</File>
+
+ولو حدّثت حزمة PM2 العالمية، حدّث الـ daemon اللي شغالة:
+
+<File name="terminal">
+
+```bash
+pm2 update
+pm2 list
+```
+
+</File>
+
+راجع release notes قبل تحديث production، واختبر إن apps رجعت سليمة.
+
+## Environment تفضل بعد Reboot
+
+متصدقش إن متغيرًا عملته `export` في جلسة SSH هيفضل موجودًا في systemd. حط القيم غير السرية في ecosystem:
+
+<File name="ecosystem.config.cjs">
+
+```js
+module.exports = {
+  apps: [{
+    name: ".COM::backend",
+    script: "./bin/www",
+    exec_mode: "cluster",
+    instances: 4,
+    env_production: {
+      NODE_ENV: "production",
+      PORT: 3000,
+      SERVERHTTPS: "true",
+    },
+  }],
+};
+```
+
+</File>
+
+وشغّل البيئة المقصودة:
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.config.cjs --env production
+pm2 save
+```
+
+</File>
+
+الأسرار زي private keys متتحطش في Git. استخدم secret manager أو ملف محمي يقرأه التطبيق وقت التشغيل، وتأكد إن مستخدم الـ service عنده صلاحية القراءة. لو التطبيق بيقرأ `.env`، استخدم مسارًا ثابتًا و`cwd` واضحًا؛ systemd مش شرط تبدأ من نفس فولدر جلسة SSH.
+
+<Box type="interview" title="تشخيص سريع">
+
+"التطبيق شغال قبل reboot ومش موجود بعده" — افحص بالترتيب: هل service enabled؟ هل هي لنفس المستخدم؟ هل `dump.pm2` موجودة وحديثة؟ هل مسار Node لسه صحيح؟ وهل الـ env والـ cwd متاحين من systemd؟
+
+</Box>
+
+<Checklist id="pm2-reboot-lab" title="خلّصت الفصل لما" items={["تنفّذ start ثم save بنفس مستخدم التطبيق", "تنسخ أمر startup الناتج من جهازك", "تفحص service بـ systemctl", "تعمل reboot تجريبي وتختبر endpoint", "تعمل save بعد أي تغيير في القائمة", "تعيد startup بعد تغيير Node", "تحفظ env خارج جلسة SSH"]} />
+
+<Quiz>
+<Q n={1} q="service شغالة لكن pm2 list فاضية بعد reboot. أول حاجة تشك فيها؟">إن save والخدمة اتعملوا بمستخدمين مختلفين، أو dump.pm2 قديمة أو غير موجودة.</Q>
+<Q n={2} q="حدّثت Node بـ nvm. ليه startup تتعمل تاني؟">لأن systemd service فيها PATH ومسار Node القديم.</Q>
+<Q n={3} q="عملت export لمتغير في SSH. هل systemd هتشوفه بعد reboot؟">مش مضمون وغالبًا لأ. حطه في ecosystem أو مصدر env/secret ثابت يقرأه التطبيق.</Q>
+</Quiz>
