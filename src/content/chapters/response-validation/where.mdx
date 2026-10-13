@@ -1,0 +1,113 @@
+---
+title: الـ safeParse في الـ API ولا الـ UI؟
+short: API ولا UI
+order: 8
+label: فصل ٨
+badge: الاختيار · فصل ٨
+en: API layer · throw · isPending · isError · InvalidApiResponseError
+keywords: الـ API layer · الـ UI تعرض بس · خطأ مخصص · logger مركزي
+goal: تحط التحقق من الـ API response في الـ API layer، وتخلي الـ UI يتعامل مع pending وerror وdata، وترمى خطأ واضح لما الشكل غلط.
+part: الاختيار
+color: c3
+---
+
+## المكان المعتاد هو الـ API layer
+
+الجزء ده مكانه بيعتمد على إنت عايز تعمل إيه بالـ validation error. في الحالة المعتادة مع React وTanStack Query، الأفضل تعمل الـ validation في الـ API layer، مش في الـ UI.
+
+<File name="users.api.ts">
+
+```ts
+import { userSchema } from "./users.schema";
+
+export async function getUser() {
+  const response = await fetch("/api/user");
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch user");
+  }
+
+  const data: unknown = await response.json();
+
+  const result = userSchema.safeParse(data);
+
+  if (!result.success) {
+    console.error("Invalid API response:", result.error);
+
+    throw new Error("INVALID_API_RESPONSE");
+  }
+
+  return result.data;
+}
+```
+
+</File>
+
+إيه اللي حصل هنا؟
+
+- **الـ API رجعت الداتا.**
+- **عملنا validation بـ `safeParse`.**
+- **لو الداتا غير صحيحة، رمينا Error.**
+- **لو صحيحة، رجعنا `result.data`، وTypeScript عارف نوعها بالفعل.**
+
+<Hl c="y">استخدمنا `throw` بدل `return` في حالة الخطأ، عشان TanStack Query تعتبر الـ request فاشلة، مش ناجحة ببيانات ناقصة.</Hl>
+
+## الـ UI بيعرض النتيجة بس
+
+<File name="UsersList.tsx">
+
+```tsx
+const userQuery = useQuery({
+  queryKey: ["user"],
+  queryFn: getUser,
+});
+
+if (userQuery.isPending) {
+  return <p>Loading...</p>;
+}
+
+if (userQuery.isError) {
+  return <p>تعذر تحميل بيانات المستخدم</p>;
+}
+
+return <h1>{userQuery.data.name}</h1>;
+```
+
+</File>
+
+الـ UI مش محتاج يعرف تفاصيل Zod أو يفحص الداتا بنفسه. هو بيتعامل مع النتيجة النهائية:
+
+- **`isPending`:** بيحمّل.
+- **`isError`:** حصل خطأ في الـ request أو الـ validation.
+- **`data`:** داتا اتعملها validation بنجاح.
+
+## إمتى safeParse في الـ UI؟
+
+غالبًا مش هتحتاج. الـ UI المفروض يستهلك داتا موثوقة من الـ API layer.
+
+ممكن تستخدمه في الـ UI لو بتتعامل مع مصدر بيانات محلي أو خارجي بشكل منفصل، زي بيانات جاية من `localStorage` أو إدخال المستخدم قبل عرضها.
+
+## مين مسؤول عن إيه؟
+
+| المسؤولية | مكانها |
+| --- | --- |
+| التحقق من الـ API response | API layer |
+| تحويل أخطاء الـ validation إلى errors يفهمها التطبيق | API layer أو طبقة مركزية للأخطاء |
+| عرض رسالة الخطأ المناسبة للشاشة | UI |
+| تسجيل تفاصيل الخطأ ومراقبته | Error logging / monitoring layer |
+
+<Box type="tip" title="في production">
+
+`console.error` في المثال للتوضيح فقط. في production الأفضل Error Logger مركزي، وتتجنب تسجيل بيانات حساسة من الـ response.
+
+لو عايز تفرّق في الـ UI بين خطأ السيرفر وخطأ الـ validation، اعمل `InvalidApiResponseError` مخصص بدل `new Error("INVALID_API_RESPONSE")`، عشان تقدر تحدد نوع الخطأ وتتعامل معاه بشكل واضح.
+
+</Box>
+
+<Checklist id="respval-where" title="خلّصت الفصل لما" items={["تحط `safeParse` بتاع الـ API response في `users.api.ts`", "ترمي خطأ لما الشكل غلط عشان الـ query تفشل", "تخلي الـ UI يفرّق بين `isPending` و`isError` و`data` بس", "تستخدم `safeParse` في الـ UI لمصدر محلي زي `localStorage` لو محتاج", "تعمل `InvalidApiResponseError` لو عايز تفرّق نوع الخطأ"]} />
+
+<Quiz>
+<Q n={1} q="ليه `throw` مش `return` لما `safeParse` يفشل؟">عشان TanStack Query تعتبر الطلب فاشل، مش ناجح بداتا ناقصة.</Q>
+<Q n={2} q="الـ UI يفحص Zod بنفسه؟">لأ. يستهلك داتا اتفحصت في الـ API layer، ويعرض loading أو error أو الداتا.</Q>
+<Q n={3} q="إمتى `safeParse` في الـ UI؟">مع مصدر منفصل زي `localStorage` أو إدخال المستخدم قبل العرض.</Q>
+</Quiz>

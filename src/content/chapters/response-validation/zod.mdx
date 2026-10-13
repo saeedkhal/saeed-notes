@@ -1,0 +1,87 @@
+---
+title: الحل — TypeScript والـ Zod
+short: الـ Zod
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: Zod · z.infer · unknown · parse · ZodError · HTTP error
+keywords: schema مرة واحدة · z.infer · unknown مش any · تلات احتمالات
+goal: تعرّف الـ schema مرة واحدة، وتشتق منها النوع، وتراجع الـ response بـ parse قبل ما الداتا تطلع من الـ API layer.
+part: البداية
+color: c2
+---
+
+## TypeScript والـ Zod شغلهم مختلف
+
+- **TypeScript:** بيساعدك تكتب كود آمن، ويكتشف أخطاء الأنواع أثناء التطوير.
+- **Zod:** بيفحص الداتا الفعلية وقت التشغيل ويتأكد إنها مطابقة للـ schema.
+
+التثبيت:
+
+<File name="terminal">
+
+```bash
+pnpm add zod
+```
+
+</File>
+
+## الـ schema والنوع من مكان واحد
+
+<File name="users.schema.ts">
+
+```ts
+import { z } from "zod";
+
+export const userSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
+});
+
+export type User = z.infer<typeof userSchema>;
+```
+
+</File>
+
+<Hl c="y">الـ schema تتعرّف مرة واحدة، والنوع يتشتق منها بـ `z.infer`، من غير ما تكتب النوع مرتين.</Hl>
+
+## الـ schema في الـ API layer
+
+<File name="users.api.ts">
+
+```ts
+export const getUser = async (): Promise<User> => {
+  const response = await fetch("/api/user");
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch user");
+  }
+
+  const data: unknown = await response.json();
+
+  return userSchema.parse(data);
+};
+```
+
+</File>
+
+دلوقتي عندنا ٣ احتمالات:
+
+- **الـ API رجعت داتا صحيحة:** الدالة بترجع `User`.
+- **الـ API رجعت داتا غير مطابقة:** `parse()` بترمي `ZodError`.
+- **الـ HTTP request فشل:** بنرمي خطأ خاص بالـ request.
+
+<Box type="warn" title="unknown مش any">
+
+استخدمنا `unknown` بدل `any`، لأننا مش عايزين نتعامل مع الداتا باعتبارها آمنة قبل ما نعمل validation.
+
+</Box>
+
+<Checklist id="respval-zod" title="خلّصت الفصل لما" items={["تفرّق بين شغل TypeScript وشغل Zod", "تكتب schema وتطلع النوع بـ `z.infer`", "تخلي `response.json()` من نوع `unknown` قبل `parse`", "تعرف التلات احتمالات: داتا صحيحة، ZodError، وخطأ HTTP"]} />
+
+<Quiz>
+<Q n={1} q="ليه `z.infer` بدل ما تكتب `type User` لوحده؟">عشان النوع يطلع من نفس الـ schema، ومتكتبش التعريف مرتين.</Q>
+<Q n={2} q="ليه `const data: unknown` مش `any`؟">عشان متعاملش مع الداتا على إنها آمنة قبل الـ validation.</Q>
+<Q n={3} q="`parse` بتعمل إيه لو الداتا مش مطابقة؟">بترمي `ZodError`.</Q>
+</Quiz>

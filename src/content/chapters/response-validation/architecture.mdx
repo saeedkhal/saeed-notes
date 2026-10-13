@@ -1,0 +1,51 @@
+---
+title: نطبّق ده فين في الـ architecture؟
+short: المكان
+order: 5
+label: فصل ٥
+badge: المكان · فصل ٥
+en: feature folder · schema · api · queries · ui
+keywords: schema · api · queries · ui · الـ API layer
+goal: تفصل الـ schema والـ API والـ query والـ UI، وتخلي التحقق من الـ response في الـ API layer بس.
+part: المكان
+color: c5
+---
+
+## افصل الـ validation عن الـ UI وعن الـ hooks
+
+في React، الأفضل تفصل الـ API validation عن الـ UI وعن الـ Query hooks.
+
+مثال على feature اسمها `users`:
+
+<Tree>
+
+```text
+src/
+└── features/
+    └── users/
+        ├── api/
+        │   ├── users.api.ts
+        │   └── users.schema.ts
+        ├── model/
+        │   └── users.queries.ts
+        └── ui/
+            └── UsersList.tsx
+```
+
+</Tree>
+
+## مسؤولية كل ملف
+
+- **`users.schema.ts`:** تعريف الـ schemas والـ inferred types.
+- **`users.api.ts`:** تنفيذ الـ HTTP request والتحقق من الـ response.
+- **`users.queries.ts`:** تعريف `queryKey` و`useQuery` وإعدادات الـ caching.
+- **`UsersList.tsx`:** عرض البيانات وحالات الـ loading والـ error.
+
+<Hl c="g">الـ API layer هي المكان المناسب للتحقق من الـ response.</Hl> كده كل المستهلكين للدالة بياخدوا داتا تم التحقق منها، بدل ما كل Component يعمل validation بنفسه.
+
+<Checklist id="respval-arch" title="خلّصت الفصل لما" items={["تحط الـ schema في `users.schema.ts`", "تحط الـ request والـ validation في `users.api.ts`", "تحط `useQuery` في `users.queries.ts`", "تخلي الـ UI تعرض loading وerror من غير ما تفحص الداتا"]} />
+
+<Quiz>
+<Q n={1} q="مين اللي بيعمل validation للـ response؟">الـ API layer، في `users.api.ts`، مش كل Component لوحده.</Q>
+<Q n={2} q="`users.queries.ts` بيعمل إيه؟">تعريف `queryKey` و`useQuery` وإعدادات الـ caching.</Q>
+</Quiz>

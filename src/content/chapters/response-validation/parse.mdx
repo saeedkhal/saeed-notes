@@ -1,0 +1,56 @@
+---
+title: parse ولا safeParse؟
+short: parse ولا safeParse
+order: 7
+label: فصل ٧
+badge: الاختيار · فصل ٧
+en: parse · safeParse · ZodError · throw · fallback
+keywords: parse بيرمي · safeParse بيرجع نتيجة · الافتراضي parse
+goal: تختار `parse` لما عدم التطابق معناه إن الـ query فشلت، و`safeParse` لما عايز تتحكم في الخطأ بنفسك.
+part: الاختيار
+color: c2
+---
+
+## الاختيارين في Zod
+
+`parse` بيرجع الداتا لو صحيحة، ويرمي `ZodError` لو غير صحيحة:
+
+<File name="parse.ts">
+
+```ts
+userSchema.parse(data);
+```
+
+</File>
+
+`safeParse` مش بيرمي Exception تلقائيًا. بيرجع نتيجة فيها `success`:
+
+<File name="safe-parse.ts">
+
+```ts
+const result = userSchema.safeParse(data);
+
+if (!result.success) {
+  console.error(result.error);
+  return;
+}
+
+console.log(result.data);
+```
+
+</File>
+
+## أنهي واحد مع TanStack Query؟
+
+بالنسبة للـ API layer مع TanStack Query، الميل لـ `parse()` لما يكون عدم تطابق الـ response مع الـ contract معناه إن الـ query فشلت فعلًا. ده بيخلّي الخطأ يوصل مباشرةً إلى `isError`.
+
+أما `safeParse()` فمفيد لما تكون عايز تتحكم في الخطأ بنفسك، أو تعمل fallback آمن، أو تتعامل مع أجزاء من الداتا بشكل منفصل.
+
+<Hl c="p">الاختيار الافتراضي: `parse()` في دوال الـ API.</Hl> اعمل handling مركزي للـ errors والـ logging، وسيب كل شاشة تعرض رسالة مناسبة لسياقها.
+
+<Checklist id="respval-parse" title="خلّصت الفصل لما" items={["تعرف إن `parse` بيرمي `ZodError`", "تعرف إن `safeParse` بيرجع `success` من غير throw", "تستخدم `parse` في الـ API layer لما فشل العقد يعني فشل الـ query", "تستخدم `safeParse` لو عايز fallback أو تحكم يدوي"]} />
+
+<Quiz>
+<Q n={1} q="ليه `parse` أنسب كاختيار افتراضي مع TanStack Query؟">لأن الـ throw بيدخّل الـ query في `isError` لما الـ response مش مطابق للعقد.</Q>
+<Q n={2} q="إمتى `safeParse`؟">لما عايز تتحكم في الخطأ، أو تعمل fallback، أو تتعامل مع أجزاء من الداتا لوحدها.</Q>
+</Quiz>

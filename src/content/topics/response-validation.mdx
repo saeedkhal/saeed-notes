@@ -1,0 +1,24 @@
+---
+title: الـ Response Validation — typing والـ errors
+highlight: Response Validation
+subtitle: TypeScript · Zod · parse · safeParse · TanStack Query · API layer
+description: إمتى نطبّق typing وإمتى runtime validation على الـ response الراجع من الـ API، وإزاي نعرض الـ error لو الداتا مش زي المتوقع، والفرق بين الـ API layer والـ UI.
+emoji: 🛡️
+order: 26
+tags: [frontend]
+note: تنسيق لمناقشة عن React وTypeScript وTanStack Query وZod. مفيش أدوات ولا خطوات زيادة على اللي اتقال في المناقشة.
+---
+
+المذكرة دي بتفصّل <Hl c="y">تلات حاجات</Hl> بتتلخبط على بعض في الـ Frontend، خصوصًا مع React وTypeScript وTanStack Query:
+
+- **الـ Typing:** إيه نوع الداتا اللي الكود متوقع يتعامل معاها؟
+- **الـ Runtime Validation:** هل الداتا اللي رجعت من الـ API مطابقة فعلًا للنوع المتوقع؟
+- **الـ Error Handling:** هنعمل إيه لو الداتا مش مطابقة؟
+
+<Box type="idea" title="قبل ما تبدأ">
+
+- **الـ setup اللي المذكرة ماشية عليه:** React، وTypeScript، وTanStack Query، وZod.
+- **القاعدة:** الـ validation بتاع الـ response مكانه الـ API layer، والـ UI بيعرض الرسالة بس.
+- **الاختيار الافتراضي:** `parse()` في دوال الـ API، عشان الـ query تدخل `isError`.
+
+</Box>

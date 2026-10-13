@@ -1,0 +1,41 @@
+---
+title: الـ typing بتاع الـ Query
+short: الـ Query
+order: 6
+label: فصل ٦
+badge: المكان · فصل ٦
+en: inference · useQuery · queryFn · generic
+keywords: الاستنتاج لوحده · useQuery generic مش validation
+goal: تسيب TanStack Query تستنتج نوع `data` من دالة الـ API، وتعرف إن الـ generic لوحده مش runtime validation.
+part: المكان
+color: c1
+---
+
+## النوع يتستنتج من الدالة
+
+<File name="users.queries.ts">
+
+```ts
+export const useUserQuery = (id: number) =>
+  useQuery({
+    queryKey: ["users", id],
+    queryFn: () => getUser(id),
+  });
+```
+
+</File>
+
+طالما `getUser()` بترجع `Promise<User>` بعد الـ validation، فإن TanStack Query هتستنتج إن `data` نوعها `User` تلقائيًا.
+
+<Hl c="b">مش محتاج تكتب `useQuery&lt;User&gt;` إلا لو عندك سبب محدد.</Hl> الأفضل عادةً إن الـ TypeScript inference يشتغل لوحده، وإن الـ API function هي اللي تضمن نوع الداتا.
+
+## الـ generic لوحده مش فحص
+
+أما لو كتبت `useQuery<User>` مع API بترجع JSON غير متحقق منه، فأنت كده بتحدد النوع المتوقع للـ compiler، لكنك لسه ما ضمنتش صحة الـ response الفعلية.
+
+<Checklist id="respval-query" title="خلّصت الفصل لما" items={["تسيب `data` تتستنتج من `getUser` بعد الـ validation", "متكتبش `useQuery<User>` من غير سبب", "تعرف إن الـ generic بيكلّم الكومبايلر ومش بيتأكد من الـ JSON"]} />
+
+<Quiz>
+<Q n={1} q="ليه `data` تبقى `User` من غير ما تكتب generic على `useQuery`؟">لأن `getUser` بترجع `Promise<User>` بعد الـ validation، والـ inference بياخد النوع ده.</Q>
+<Q n={2} q="`useQuery<User>` على JSON متفحصش. كده الـ response مضمون؟">لأ. ده نوع للكومبايلر بس، مش runtime validation.</Q>
+</Quiz>

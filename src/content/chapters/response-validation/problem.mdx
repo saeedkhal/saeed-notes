@@ -1,0 +1,79 @@
+---
+title: المشكلة — TypeScript مش بيراجع الـ API
+short: المشكلة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: typing · runtime validation · error handling · Promise · JSON · compile time
+keywords: تلات حاجات مختلفة · النوع مش validation · JSON من بره
+goal: تفرّق بين الـ typing والـ runtime validation والـ error handling، وتعرف ليه TypeScript لوحده مش بيتأكد من الـ response.
+part: البداية
+color: c1
+---
+
+## تلات حاجات مختلفة
+
+في React مع TypeScript وTanStack Query، لازم نفرّق بين تلات حاجات:
+
+- **الـ Typing:** إيه نوع الداتا اللي الكود متوقع يتعامل معاها؟
+- **الـ Runtime Validation:** هل الداتا اللي رجعت من الـ API مطابقة فعلًا للنوع المتوقع؟
+- **الـ Error Handling:** هنعمل إيه لو الداتا مش مطابقة؟
+
+## TypeScript مش بيعمل validation للـ API
+
+تخيّل إن عندك API بترجع بيانات المستخدم بالشكل ده:
+
+<File name="user.ts">
+
+```ts
+type User = {
+  id: number;
+  name: string;
+  email: string;
+};
+```
+
+</File>
+
+وعندك الـ API request:
+
+<File name="get-user.ts">
+
+```ts
+const getUser = async (): Promise<User> => {
+  const response = await fetch("/api/user");
+
+  return response.json();
+};
+```
+
+</File>
+
+هنا أنت بتقول لـ TypeScript إن الدالة بترجع `User`، لكن هل TypeScript اتأكد إن الـ API رجعت فعلًا `id` من نوع number و`name` من نوع string؟
+
+<Hl c="y">لأ. الـ `Promise&lt;User&gt;` وعد للكومبايلر، مش فحص للداتا.</Hl>
+
+الـ API ممكن ترجع:
+
+<File name="wrong.json">
+
+```json
+{
+  "id": "wrong-id",
+  "name": null,
+  "email": 123
+}
+```
+
+</File>
+
+ومع ذلك، TypeScript مش هيكتشف المشكلة وقت تشغيل البرنامج. الـ JSON بيانات خارجية، وTypeScript بيعمل type checking وقت التطوير والـ compilation، مش runtime validation.
+
+<Hl c="p">الحل إننا نستخدم Runtime Schema Validation.</Hl>
+
+<Checklist id="respval-problem" title="خلّصت الفصل لما" items={["تفرّق بين Typing وRuntime Validation وError Handling", "تشرح ليه `Promise<User>` مش بيتأكد من شكل الـ JSON", "تعرف إن TypeScript بيراجع وقت الـ compilation مش وقت التشغيل"]} />
+
+<Quiz>
+<Q n={1} q="كتبت `getUser` ترجع `Promise<User>` وبتعمل `return response.json()`. TypeScript اتأكد من الـ response؟">لأ. النوع وعد للكومبايلر. الـ JSON من بره، والفحص وقت التشغيل مش بيحصل لوحده.</Q>
+<Q n={2} q="الـ API رجّعت `id` كنص و`name` بقيمة null. TypeScript هيمسك الغلط وقت التشغيل؟">لأ. الـ type checking وقت التطوير والـ compilation، مش runtime validation.</Q>
+</Quiz>

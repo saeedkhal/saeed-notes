@@ -1,0 +1,65 @@
+---
+title: عرض الـ error لو الـ response مش متوقع
+short: عرض الـ error
+order: 3
+label: فصل ٣
+badge: الـ errors · فصل ٣
+en: network · HTTP · validation · business · isError · logging
+keywords: أربعة أنواع أخطاء · isError · متعرضش تفاصيل الـ schema
+goal: تفرّق بين أنواع الأخطاء، وتخلي خطأ الـ validation يوصل لـ isError، وتعرض للمستخدم رسالة عامة مش تفاصيل الـ schema.
+part: الـ errors
+color: c3
+---
+
+## نوعين… أربعة أخطاء
+
+لازم نفرّق بين أنواع الأخطاء، لأن التعامل مش واحد:
+
+| نوع الخطأ | مثال | التعامل المناسب |
+| --- | --- | --- |
+| Network error | السيرفر مش متاح | رسالة اتصال أو إعادة المحاولة |
+| HTTP error | `401` أو `500` | التعامل مع الـ status code |
+| Validation error | `id` رجع string بدل number | تسجيل الخطأ ومراقبته، ورسالة مناسبة للمستخدم حسب الشاشة |
+| Business error | المستخدم مش مسموح له ينفذ العملية | رسالة مفهومة للمستخدم |
+
+## TanStack Query بتاخد الـ throw
+
+لو بنستخدم TanStack Query، فالـ validation error اللي بترميه `parse()` هيخلي الـ Query تدخل حالة `error` تلقائيًا.
+
+<File name="UsersList.tsx">
+
+```tsx
+const userQuery = useQuery({
+  queryKey: ["user"],
+  queryFn: getUser,
+});
+
+if (userQuery.isPending) {
+  return <div>Loading...</div>;
+}
+
+if (userQuery.isError) {
+  return <div>Failed to load user</div>;
+}
+
+return <div>{userQuery.data.name}</div>;
+```
+
+</File>
+
+ده كفاية عشان تمنع عرض الداتا غير الصحيحة.
+
+<Box type="warn" title="متعرضش تفاصيل الـ schema">
+
+في production الأفضل إنك ما تعرضش تفاصيل الـ schema الداخلية للمستخدم. لو الـ API رجعت `id` غلط، المستخدم مش محتاج يشوف رسالة زي `Expected number, received string at id`.
+
+الأفضل تعرض رسالة عامة مناسبة، وتبعت تفاصيل الخطأ للـ logging أو الـ monitoring.
+
+</Box>
+
+<Checklist id="respval-errors" title="خلّصت الفصل لما" items={["تفرّق بين network وHTTP وvalidation وbusiness error", "تعرف إن `parse` اللي بترمي خطأ بتدخّل الـ query في `isError`", "تعرض رسالة عامة للمستخدم وتبعت التفاصيل للـ logging"]} />
+
+<Quiz>
+<Q n={1} q="خطأ الـ validation هيوصل للشاشة إزاي مع TanStack Query؟">`parse()` بترمي `ZodError`، فالـ query بتدخل `isError`، والـ UI بيعرض حالة الخطأ.</Q>
+<Q n={2} q="المستخدم يشوف `Expected number, received string at id`؟">لأ. رسالة عامة للشاشة، وتفاصيل الخطأ للـ logging أو الـ monitoring.</Q>
+</Quiz>
