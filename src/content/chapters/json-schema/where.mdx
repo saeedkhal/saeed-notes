@@ -1,0 +1,316 @@
+---
+title: بتتستخدم فين؟ — OpenAPI والـ editors والـ LLMs
+short: بتتستخدم فين؟
+order: 11
+label: فصل ١١
+badge: التطبيق · فصل ١١
+en: OpenAPI 3.1 · OpenAPI 3.0 · nullable · SchemaStore · json.schemas · yaml-language-server · structured outputs · tool calling · strict mode · MongoDB $jsonSchema · RJSF · contract testing · Schema Registry
+keywords: OpenAPI · autocomplete للـ config · LLM structured outputs · MongoDB · forms · contract tests · Kafka
+goal: تعرف كل الأماكن اللي نفس الـ JSON Schema بتشتغل فيها، والفروق اللي لازم تاخد بالك منها في كل مكان.
+part: التطبيق
+color: c1
+---
+
+## الفكرة: schema واحدة، استخدامات كتير
+
+<Chips items={["API validation", "OpenAPI docs", "TS types", "editor autocomplete", "config validation", "LLM structured outputs", "tool calling", "MongoDB validator", "forms", "contract tests", "Kafka events"]} />
+
+<Hl c="y">ده أكبر سبب تختار JSON Schema: بتكتب العقد مرة، وأدوات كتير بتفهمه من غير ما تترجمه.</Hl>
+
+## OpenAPI
+
+الـ OpenAPI بتوصف الـ API كله: الـ paths والـ methods والـ responses. وجوّاها، **شكل الـ bodies** مكتوب JSON Schema:
+
+<File name="openapi.yaml">
+
+```yaml
+openapi: 3.1.0
+info: { title: Koshary API, version: 1.0.0 }
+servers: [{ url: "https://api.koshary.example" }]
+paths:
+  /orders:
+    post:
+      operationId: createOrder
+      summary: طلب جديد
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrder" }
+      responses:
+        "201": { description: created }
+        "400": { description: validation error }
+components:
+  schemas:
+    CreateOrder:
+      type: object
+      required: [customer, items]
+      additionalProperties: false
+      properties:
+        customer: { type: string, minLength: 2 }
+        notes: { type: [string, "null"], maxLength: 200 }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/Item" }
+    Item:
+      type: object
+      required: [sku, qty]
+      properties:
+        sku: { enum: [koshary-small, koshary-large] }
+        qty: { type: integer, minimum: 1, examples: [2] }
+```
+
+</File>
+
+| الحاجة | OpenAPI 3.0 | OpenAPI 3.1 |
+|---|---|---|
+| الـ JSON Schema | نسخة معدّلة من draft-04/05 | متوافقة مع 2020-12 بالكامل |
+| يسمح بـ null | `nullable: true` | `type: [string, "null"]` |
+| المثال | `example` (واحد) | `examples` (array)، و`example` deprecated |
+| الـ `exclusiveMinimum` | boolean | رقم |
+| الـ `const`، `if/then`، `prefixItems`، `$defs` | مش موجودين | موجودين |
+| keywords جنب `$ref` | بتتجاهل | بتتطبق |
+| تحدد الـ dialect | لأ | `jsonSchemaDialect` في الـ root |
+
+- **الملف ده عدّى من `redocly lint`:** بـ warning واحد بس إن مفيش `license`.
+- **في 3.1 تقدر تاخد `order.json` من الـ Lab وتحطه زي ما هو** تحت `components/schemas`.
+- **الـ `discriminator` و`xml`:** keywords خاصة بـ OpenAPI، مش من JSON Schema.
+- **الأدوات:** Swagger UI وRedoc للـ docs، وgenerators للـ clients، وFastify بيطلّع OpenAPI من الـ route schemas بـ `@fastify/swagger`. راجع الـ docs لدعم 3.1 في كل أداة.
+- **لو الأداة لسه 3.0:** Zod 4 بيطلّع `target: "openapi-3.0"` (فصل ١٠).
+
+## Autocomplete للـ config files
+
+الـ VS Code (وغيره) بيقرا JSON Schema ويديك **autocomplete** و**hover docs** و**خط أحمر** تحت الغلط وإنت بتكتب.
+
+<File name="config.json">
+
+```json
+{
+  "$schema": "./config.schema.json",
+  "port": 3000,
+  "db": { "url": "postgres://localhost/app" }
+}
+```
+
+</File>
+
+- **الـ `$schema` جوه ملف JSON:** VS Code بيستخدمه على طول. ممكن يبقى path محلي أو URL.
+- **خلي بالك:** لو الـ schema فيها `additionalProperties: false`، لازم تسمح بـ `"$schema": { "type": "string" }` في الـ properties، وإلا الحقل ده نفسه هيبقى غلط.
+- **في YAML:** بـ extension الـ YAML بتاع Red Hat، حط comment في أول الملف:
+
+<File name="docker-compose.yml">
+
+```yaml
+# yaml-language-server: $schema=https://json.schemastore.org/docker-compose.json
+services:
+  web:
+    image: nginx
+```
+
+</File>
+
+- **من غير ما تكتب حاجة:** موقع **SchemaStore** فيه schemas لمئات الملفات المشهورة (`package.json`، `tsconfig.json`، `.eslintrc`، GitHub workflows، `docker-compose`…)، وVS Code بيطابقها بالاسم أوتوماتيك. عشان كده بتلاقي autocomplete في `tsconfig.json` من غير أي إعداد.
+- **أو من الـ settings:**
+
+<File name=".vscode/settings.json">
+
+```json
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["config/*.json"],
+      "url": "./schemas/config.schema.json"
+    }
+  ]
+}
+```
+
+</File>
+
+## Validate الـ config وقت الـ startup
+
+الـ autocomplete بيساعد وإنت بتكتب، بس **السيرفر نفسه** لازم يرفض config غلط قبل ما يبدأ:
+
+<File name="load-config.js">
+
+```js
+import { readFileSync } from "node:fs";
+import Ajv from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+
+const read = (f) => JSON.parse(readFileSync(new URL(f, import.meta.url), "utf8"));
+
+const ajv = new Ajv({ allErrors: true, useDefaults: true });
+addFormats(ajv);
+const validate = ajv.compile(read("./config.schema.json"));
+
+const config = read("./config.json");
+if (!validate(config)) {
+  console.error("config.json فيه مشاكل:");
+  for (const e of validate.errors) console.error(" ", e.instancePath || "/", e.message, e.params.additionalProperty ?? "");
+  process.exit(1);
+}
+console.log("config تمام", config);
+```
+
+</File>
+
+مع config فيه `"port": "3000"` و`"logLevel": "verbose"` و`poolmax` (typo):
+
+<File name="output">
+
+```text
+config.json فيه مشاكل:
+  /port must be integer
+  /logLevel must be equal to one of the allowed values
+  /db must NOT have additional properties poolmax
+```
+
+</File>
+
+- **الـ typo اتلقط:** `poolmax` بدل `poolMax`. من غير `additionalProperties: false` كان هيتجاهل بهدوء، والـ pool هيشتغل بالـ default وإنت فاكر إنه 20.
+- **ولما الـ config صح:** `useDefaults` حط `logLevel: 'info'` و`poolMax: 10` من الـ schema.
+- **نفس الفكرة لـ env vars:** حطهم في object وراجعهم بـ `coerceTypes: true`.
+
+## الـ LLMs: structured outputs والـ tool calling
+
+الـ LLM APIs بتستخدم JSON Schema في مكانين:
+
+<Grid2>
+<Card title="Structured outputs" c={1}>
+
+بتبعت schema مع الـ request، والموديل **مُجبر** يرد بـ JSON مطابق ليها. في OpenAI ده `response_format` من نوع `json_schema` ومعاه `strict: true`. راجع الـ docs للشكل بالظبط.
+
+</Card>
+<Card title="Tool / function calling" c={2}>
+
+كل tool ليها `parameters` (أو `input_schema` في Anthropic، أو `inputSchema` في MCP) مكتوبة JSON Schema. الموديل بيقرا الـ `description` بتاع كل حقل عشان يعرف يملاه إزاي.
+
+</Card>
+</Grid2>
+
+<File name="review.schema.json">
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sentiment": { "type": "string", "enum": ["positive", "neutral", "negative"] },
+    "score": { "type": "integer", "minimum": 1, "maximum": 5, "description": "تقييم من 1 لـ 5" },
+    "dish": { "type": ["string", "null"], "description": "اسم الأكلة لو اتذكرت، وإلا null" }
+  },
+  "required": ["sentiment", "score", "dish"],
+  "additionalProperties": false
+}
+```
+
+</File>
+
+- **الـ strict mode في OpenAI ليه قيود:** كل الحقول لازم تبقى في `required`، و`additionalProperties: false` إجباري في كل object، والـ root لازم object. الحقل "الاختياري" بيتعمل بـ `type: [string, "null"]` زي `dish` فوق.
+- **وفيه keywords مش مدعومة أو ليها حدود:** في الـ strict mode، والقايمة بتتغير. راجع الـ docs قبل ما تعتمد على `pattern` أو `format` أو `oneOf`.
+- **اكتب `description` كويس:** دي الـ prompt بتاع كل حقل.
+- **Zod أسهل هنا:** `z.toJSONSchema` بيطلّع `additionalProperties: false` وrequired، والـ SDKs بتقبل Zod مباشرة. راجع الـ docs.
+
+<Box type="warn" title="راجع رد الموديل برضه">
+
+حتى مع structured outputs، **اعمل validation على الرد**: لو مش شغال strict، أو الموديل رفض يرد (refusal)، أو الرد اتقطع بسبب `max_tokens`، أو بتستخدم موديل مش بيدعم الـ feature. ده مثال متجرّب على ٣ ردود:
+
+</Box>
+
+<File name="check-llm.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+import { readFileSync } from "node:fs";
+
+const validate = new Ajv({ allErrors: true }).compile(JSON.parse(readFileSync("./review.schema.json", "utf8")));
+
+// ردود جاية من الموديل (نص)
+const replies = [
+  '{"sentiment":"positive","score":5,"dish":"كشري"}',
+  '{"sentiment":"Positive","score":"5"}',
+  'أكيد! ده الـ JSON: {"sentiment":"positive"}',
+];
+
+for (const text of replies) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    console.log("مش JSON أصلًا");
+    continue;
+  }
+  console.log(validate(data) ? "تمام" : validate.errors.map((e) => `${e.instancePath || "/"} ${e.message}`).join(" | "));
+}
+```
+
+</File>
+
+<File name="output">
+
+```text
+تمام
+/ must have required property 'dish' | /sentiment must be equal to one of the allowed values | /score must be integer
+مش JSON أصلًا
+```
+
+</File>
+
+- **لو فشل:** ابعت الـ errors للموديل تاني في رسالة ("صلّح دول") وجرّب مرة أو اتنين، وبعدين fallback.
+
+## MongoDB: الـ validator جوه الداتابيز
+
+<File name="mongosh">
+
+```js
+db.createCollection("orders", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["customer", "total", "status"],
+      properties: {
+        customer: { bsonType: "string", minLength: 2 },
+        total: { bsonType: "int", minimum: 0 },
+        status: { enum: ["new", "paid", "shipped"] },
+      },
+    },
+  },
+  validationLevel: "strict",  // أو "moderate": سيب الـ documents القديمة الغلط
+  validationAction: "error",  // أو "warn": اكتب في الـ log بس
+});
+```
+
+</File>
+
+- **الـ `$jsonSchema`:** مبني على draft-04، ومعاه `bsonType` عشان أنواع زي `int` و`long` و`decimal` و`date` و`objectId`.
+- **مش كل الـ keywords موجودة:** حسب الـ docs مفيش `$ref` ولا `$schema` ولا `default` ولا `definitions` ولا `format` ولا `id`. راجع الـ docs للنسخة بتاعتك.
+- **الفايدة:** آخر خط دفاع. حتى لو script قديم أو حد من الـ shell كتب في الـ collection، الـ document الغلط بيترفض.
+- **الـ `moderate`:** بيطبق الـ validation على الـ inserts وعلى تعديل الـ documents اللي هي أصلًا valid بس. مفيد وإنت بتضيف validation على collection قديمة.
+- **ملحوظة أمانة:** المثال ده مكتوب من الـ docs ومتجرّبش هنا، لأن MongoDB 8 مرضيش يشتغل على الـ kernel بتاع جهاز التجربة.
+
+## حاجات تانية بتستخدمها
+
+- **الـ forms:** `react-jsonschema-form` (RJSF) و`JSON Forms` بيبنوا form كاملة من schema، ومعاها `uiSchema` للشكل.
+- **الـ contract testing:** في الـ tests، اعمل validate لكل response على الـ schema بتاعة الـ OpenAPI. لو حد غيّر الـ API وكسر العقد، الـ test يقع. وPostman فيه `pm.response.to.have.jsonSchema(schema)`.
+- **الـ Kafka Schema Registry:** (Confluent وغيره) بيدعم Avro وProtobuf وJSON Schema، وبيرفض schema جديدة لو بتكسر الـ compatibility (BACKWARD / FORWARD / FULL).
+- **الـ Kubernetes CRDs:** بتوصف الـ custom resources بـ `openAPIV3Schema`، وهي subset من JSON Schema.
+- **الـ Helm:** ملف `values.schema.json` بيتراجع عليه الـ `values.yaml` وقت `helm install`.
+- **الـ VS Code extensions:** الـ settings اللي بتعرّفها في `contributes.configuration` بتتكتب JSON Schema.
+- **الـ docs generators:** أدوات بتحوّل الـ schema لصفحة docs فيها كل حقل ووصفه.
+
+<Box type="story" icon="🪪" title="الفورم اللي بيتصوّر نسخ">
+
+نفس **فورم الحكومة** بيتطبع نسخة للمواطن عشان يملاه (الـ editor autocomplete والـ forms)، ونسخة للموظف عشان يراجع (الـ validator)، ونسخة في الأرشيف (الـ OpenAPI docs)، ونسخة للمكتب التاني اللي هيستلم الملف (الـ Kafka consumer). **ورقة واحدة، وكل واحد بيستخدمها لحاجته.**
+
+</Box>
+
+<Checklist id="jsonschema-where" title="خلّصت الفصل لما" items={["تكتب `components/schemas` في OpenAPI 3.1", "تعرف فروق OpenAPI 3.0 و3.1 (nullable، examples، type array)", "تضيف `$schema` لملف JSON وcomment للـ YAML عشان autocomplete", "تعرف SchemaStore و`json.schemas`", "تعمل validation للـ config وقت الـ startup", "تكتب schema لـ structured outputs وتعرف قيود الـ strict mode", "تراجع رد الـ LLM حتى مع structured outputs", "تعرف `$jsonSchema` في MongoDB وحدوده", "تعرف RJSF وcontract tests وSchema Registry"]} />
+
+<Quiz>
+<Q n={1} q="schema فيها `nullable: true`، شغالة في OpenAPI 3.0. نقلتها لـ 3.1، إيه اللي يتغير؟">في 3.1 مفيش `nullable`، اكتب `type` array فيها `"null"`. وكمان `example` يبقى `examples`.</Q>
+<Q n={2} q="ليه config.json فيه `$schema` ممكن يفشل في الـ validation بتاعتك؟">لأن الـ schema فيها `additionalProperties: false` ومش معرّفة `$schema` كـ property. ضيفها كـ string.</Q>
+<Q n={3} q="في OpenAI strict mode، عايز حقل اختياري. تعمل إيه؟">حطه في required برضه، وخلي الـ type يقبل null، والموديل يرجّع null لو مفيش قيمة.</Q>
+<Q n={4} q="ليه تحط `$jsonSchema` في MongoDB لو الـ API بيعمل validation أصلًا؟">آخر خط دفاع ضد أي حد بيكتب في الداتابيز من غير الـ API: scripts، migrations، shell، أو service تانية.</Q>
+</Quiz>

@@ -1,0 +1,120 @@
+---
+title: الإصدارات — من draft-04 لحد 2020-12
+short: الـ drafts
+order: 7
+label: فصل ٧
+badge: الـ keywords · فصل ٧
+en: $schema · draft-04 · draft-06 · draft-07 · 2019-09 · 2020-12 · definitions · prefixItems · exclusiveMinimum · dependencies
+keywords: الـ drafts · إيه اللي اتغير · الفروق اللي بتعض · مين بيدعم إيه
+goal: تعرف إنت شغال بأنهي draft، وإيه الفروق اللي بتكسر الـ schemas وإنت بتنقلها بين الأدوات.
+part: الـ keywords
+color: c2
+---
+
+## ليه فيه إصدارات أصلًا؟
+
+الـ JSON Schema اتطورت على مراحل اسمها **drafts**. كل draft بيضيف keywords، وساعات بيغيّر معنى keyword قديم. عشان كده:
+
+- **الـ `$schema` مهم:** هو اللي بيقول للـ validator يفسّر الـ keywords بأنهي قواعد.
+- **الأدوات مش كلها ماشية مع آخر draft:** في أدوات لسه على draft-07، وفي حاجات (زي OpenAPI 3.0) ماشية على نسخة معدّلة من draft قديم.
+- **نفس الـ schema ممكن يتفهم مختلف:** `items` في draft-07 غير `items` في 2020-12.
+
+<Hl c="y">قبل ما تكتب schema، اعرف الأداة اللي هتقراها بتدعم أنهي draft.</Hl>
+
+## الإصدارات باختصار
+
+| الـ draft | الـ `$schema` | أهم اللي جه فيه |
+|---|---|---|
+| draft-04 | `http://json-schema.org/draft-04/schema#` | `id` من غير `$`، `exclusiveMinimum` boolean، `definitions` |
+| draft-06 | `http://json-schema.org/draft-06/schema#` | `$id`، `const`، `contains`، `propertyNames`، `examples`، `exclusiveMinimum` رقم، و`true`/`false` كـ schema |
+| draft-07 | `http://json-schema.org/draft-07/schema#` | `if`/`then`/`else`، `readOnly`/`writeOnly`، `$comment`، `contentMediaType` |
+| 2019-09 | `https://json-schema.org/draft/2019-09/schema` | `$defs`، `unevaluatedProperties`، `dependentRequired`/`dependentSchemas`، `$anchor`، `minContains`، `deprecated`، vocabularies، وkeywords جنب `$ref` |
+| 2020-12 | `https://json-schema.org/draft/2020-12/schema` | `prefixItems`، `items` اتغير معناه، `$dynamicRef`، والـ `format` اتقسم annotation وassertion |
+
+- **لاحظ الـ URL:** القديمة `http://json-schema.org/draft-07/schema#` بـ `#` في الآخر، والجديدة `https://json-schema.org/draft/2020-12/schema` من غيرها.
+- **draft-05 مش موجود فعليًا:** اتنشر كتعديلات بسيطة على 04 ومتعتبرش إصدار مستقل.
+- **بعد 2020-12:** المشروع بيشتغل على إصدار ثابت جديد، بس 2020-12 هو اللي الأدوات متفقة عليه دلوقتي. راجع الـ docs.
+
+## الفروق اللي بتعض
+
+<Grid2>
+<Card title="definitions ← $defs" c={1}>
+
+draft-07: `"definitions": {...}` و`"$ref": "#/definitions/x"`.
+2019-09+: `"$defs": {...}` و`"$ref": "#/$defs/x"`.
+أغلب الأدوات لسه بتفهم الاتنين.
+
+</Card>
+<Card title="items array ← prefixItems" c={2}>
+
+draft-07: `"items": [A, B]` + `"additionalItems": false`.
+2020-12: `"prefixItems": [A, B]` + `"items": false`.
+الشكل القديم في Ajv2020: `data/items must be object,boolean`.
+
+</Card>
+<Card title="exclusiveMinimum: boolean ← رقم" c={3}>
+
+draft-04: `"minimum": 0, "exclusiveMinimum": true`.
+draft-06+: `"exclusiveMinimum": 0`.
+القديم في Ajv2020: `data/exclusiveMinimum must be number`.
+
+</Card>
+<Card title="dependencies ← اتنين" c={4}>
+
+draft-07: `dependencies` بياخد array أو schema.
+2019-09+: `dependentRequired` للـ array و`dependentSchemas` للـ schema.
+
+</Card>
+<Card title="id ← $id" c={5}>
+
+draft-04: `"id"`. من draft-06: `"$id"`. لو object عندك فيه حقل اسمه `id` عادي، draft-04 كان بيتلخبط.
+
+</Card>
+<Card title="$ref وجيرانه" c={1}>
+
+draft-07: أي keyword جنب `$ref` يتجاهل (حسب الـ spec).
+2019-09+: بيتطبقوا مع بعض.
+
+</Card>
+</Grid2>
+
+## مين بيدعم إيه
+
+- **Ajv:** `import Ajv from "ajv"` للـ draft-07 (وبيدعم draft-06 لو ضفت الـ meta-schema بتاعه). `ajv/dist/2019.js` للـ 2019-09. `ajv/dist/2020.js` للـ 2020-12. وdraft-04 محتاج package منفصلة اسمها `ajv-draft-04`.
+- **Fastify:** بيستخدم Ajv 8 بـ draft-07 by default. جرّبنا `prefixItems` في route schema ورمى `strict mode: unknown keyword: "prefixItems"`. تقدر تغيّر الـ Ajv instance بتاعه، راجع الـ docs.
+- **OpenAPI 3.0:** نسخة معدّلة من draft-04/05، فيها `nullable` ومفيهاش `const` ولا `type` array. **OpenAPI 3.1:** متوافقة مع 2020-12 بالكامل (فصل ١١).
+- **Zod 4:** `z.toJSONSchema` بيطلّع 2020-12 by default، ومعاه `target: "draft-7"` و`"draft-4"` و`"openapi-3.0"`.
+- **ts-json-schema-generator:** بيطلّع draft-07 بـ `definitions` (اتجرّبت، فصل ١٠).
+- **Python `jsonschema`:** بيدعم من draft-03 لحد 2020-12، وبتختار الـ class زي `Draft202012Validator`.
+- **MongoDB `$jsonSchema`:** draft-04 بتصرف، ومش بيدعم كل الـ keywords (فصل ١١).
+
+<Box type="warn" title="الـ $schema والـ class لازم يتفقوا">
+
+لو حطيت `"$schema": "https://json-schema.org/draft/2020-12/schema"` واستخدمت `import Ajv from "ajv"` (draft-07)، هتاخد:
+
+`no schema with key or ref "https://json-schema.org/draft/2020-12/schema"`
+
+والعكس نفس الكلام: schema بـ draft-07 جوه `Ajv2020` بترمي `no schema with key or ref "http://json-schema.org/draft-07/schema#"`. الـ error ده معناه إن الـ draft مش متسجل في الـ instance، مش إن الـ schema غلط.
+
+</Box>
+
+## تختار أنهي draft؟
+
+- **مشروع جديد ومفيش قيود:** 2020-12. ده اللي OpenAPI 3.1 وأغلب الأدوات الجديدة ماشية عليه.
+- **الأداة بتدعم draft-07 بس:** (زي Fastify by default أو أدوات قديمة) اكتب draft-07 ومتستخدمش `prefixItems` ولا `unevaluatedProperties` ولا `$defs`.
+- **OpenAPI 3.0 لسه:** اكتب الـ subset بتاعها (`nullable`، `example`، مفيش `type` array).
+- **عندك schemas قديمة:** فيه أدوات بتعمل migration أوتوماتيك بين الـ drafts. راجع الـ docs، وشغّل الـ tests بعدها.
+
+<Box type="story" icon="📜" title="طبعات الفورم">
+
+الـ drafts زي **طبعات فورم الحكومة**. طبعة ٢٠١٩ فيها خانة "الرقم القومي" جنب الاسم، وطبعة ٢٠٢٠ نقلتها تحت. لو الموظف ماسك تعليمات طبعة ٢٠١٩ وإنت جايبله طبعة ٢٠٢٠، هيدوّر في المكان الغلط. عشان كده أول سطر في الورقة (`$schema`) بيقول "دي طبعة كام".
+
+</Box>
+
+<Checklist id="jsonschema-drafts" title="خلّصت الفصل لما" items={["تقرا الـ `$schema` وتعرف ده draft كام", "تعرف إيه اللي جه في 06 و07 و2019-09 و2020-12", "تحوّل `definitions` لـ `$defs` و`items` array لـ `prefixItems`", "تحوّل `exclusiveMinimum: true` لرقم", "تعرف إن Fastify وts-json-schema-generator على draft-07", "تفهم error `no schema with key or ref`", "تختار الـ draft المناسب لمشروعك"]} />
+
+<Quiz>
+<Q n={1} q="نقلت schema من draft-07 لـ Ajv2020 وفيها `items: [A, B]`. إيه اللي هيحصل؟">هيرمي `schema is invalid: data/items must be object,boolean`. حوّلها لـ `prefixItems: [A, B]` و`items: false`.</Q>
+<Q n={2} q="Fastify رفض `unevaluatedProperties`. ليه؟">لأن Fastify by default على draft-07، والـ keyword ده من 2019-09. يا تغيّر الـ Ajv instance يا تكتب draft-07.</Q>
+<Q n={3} q="OpenAPI 3.1 ولا 3.0 أقرب للـ JSON Schema؟">3.1، متوافقة مع 2020-12. الـ 3.0 نسخة معدّلة من draft قديم وفيها `nullable`.</Q>
+</Quiz>

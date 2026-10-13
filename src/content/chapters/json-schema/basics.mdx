@@ -1,0 +1,203 @@
+---
+title: الأساسيات — الـ type والـ properties والـ required
+short: الأساسيات
+order: 3
+label: فصل ٣
+badge: الـ keywords · فصل ٣
+en: type · integer · null · properties · required · additionalProperties · enum · const · title · description · default · examples
+keywords: الـ types السبعة · required · additionalProperties · enum · const · annotations
+goal: تكتب schema لأي object عادي بإيدك، وتعرف بالظبط كل keyword أساسي بيقبل إيه وبيرفض إيه.
+part: الـ keywords
+color: c3
+---
+
+## الـ `type`: سبع أنواع بس
+
+الـ JSON فيه ٦ أنواع، والـ JSON Schema زوّدت `integer`:
+
+| الـ type | بيقبل | بيرفض |
+|---|---|---|
+| `string` | `"كشري"` | `5`، `null` |
+| `number` | `5`، `5.5`، `-2e3` | `"5"` |
+| `integer` | `5`، `5.0` | `5.5`، `"5"` |
+| `boolean` | `true`، `false` | `"true"`، `0` |
+| `null` | `null` | `""`، `0` |
+| `object` | `{"a": 1}` | `[]`، `null` |
+| `array` | `[1, 2]` | `{}` |
+
+- **الـ `integer` بالقيمة مش بالشكل:** `5.0` بيعدّي كـ integer لأنه رياضيًا رقم صحيح. اتجرّبت في Ajv وطلعت `true`.
+- **الـ `null` نوع لوحده:** `"type": "string"` مش بيقبل `null`. لو عايز تسمح بيه لازم تقول كده صراحة.
+- **الـ array مش object:** مع إن `typeof [] === "object"` في JavaScript، الـ JSON Schema بتفرق بينهم.
+
+## أكتر من type
+
+اكتب `type` كـ array:
+
+<File name="nullable.json">
+
+```json
+{ "type": ["string", "null"] }
+```
+
+</File>
+
+- **بيقبل:** `"Saeed"` و`null`.
+- **بيرفض:** `5` برسالة `must be string,null`.
+- **ده بديل `nullable: true`:** اللي كان في OpenAPI 3.0. في JSON Schema الحقيقية مفيش keyword اسمه `nullable` (فصل ١١).
+
+<Box type="warn" title="أرقام كبيرة؟ خلي بالك">
+
+الـ JSON Schema بتراجع **بعد** الـ `JSON.parse`. لو بعتلك id زي `9007199254740993`، الـ JavaScript هيقربه لـ `9007199254740992` قبل ما الـ schema تشوفه. الـ schema مش هتلحق دي. للـ ids الكبيرة استخدم `string` بـ `pattern` زي `^[0-9]+$`.
+
+</Box>
+
+## الـ `properties` والـ `required`
+
+<File name="product.json">
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "price": { "type": "number" },
+    "inStock": { "type": "boolean" }
+  },
+  "required": ["name", "price"]
+}
+```
+
+</File>
+
+- **الـ `properties`:** بتوصف كل حقل **لو موجود**. حقل مش موجود؟ مفيش مشكلة.
+- **الـ `required`:** array بأسماء الحقول اللي لازم تبقى موجودة. Ajv بيرد بـ `must have required property 'price'`.
+- **موجود يعني موجود:** `"price": null` يعتبر موجود، وبعدين بيفشل في الـ `type`. والـ `required` مش بيمنع `""` ولا `0`.
+- **الـ `required` بره الـ `properties`:** غلطة مشهورة إنك تكتب `"required": true` جوه الحقل. ده كان draft-03 وخلاص مبقاش موجود.
+
+<Box type="tip" title="عايز string مش فاضية؟">
+
+الـ `required` بيقول "الـ key موجود" بس. عشان تمنع `""` زوّد `"minLength": 1` على الحقل، ولو عايز تمنع المسافات بس استخدم `"pattern": "\\S"`.
+
+</Box>
+
+## الـ `additionalProperties`: الحقول الزيادة
+
+الـ default إن **أي حقل زيادة مسموح**. ده خطر لما الـ body بيتحفظ زي ما هو:
+
+<File name="mass-assignment.js">
+
+```js
+// اليوزر بعت { "name": "Saeed", "isAdmin": true }
+await db.users.update(id, req.body); // 😱 بقى admin
+```
+
+</File>
+
+عندك ٣ اختيارات:
+
+<Grid2>
+<Card title="false: اقفل الباب" c={1}>
+
+`"additionalProperties": false` ← أي حقل مش في `properties` (أو `patternProperties`) يفشّل الـ validation برسالة `must NOT have additional properties`، والـ `params.additionalProperty` فيه اسمه.
+
+</Card>
+<Card title="schema: اسمح بشرط" c={2}>
+
+`"additionalProperties": { "type": "string" }` ← الحقول الزيادة مسموحة بس لازم قيمتها string. مفيد للـ labels والـ metadata.
+
+</Card>
+<Card title="true / مش موجود: مفتوح" c={3}>
+
+ده الـ default. مفيد لما الـ API لازم يتحمل حقول جديدة من غير ما يكسر، زي webhook من service تانية.
+
+</Card>
+<Card title="map كامل" c={4}>
+
+object من غير `properties` و`"additionalProperties": { "type": "integer" }` ← ده `Record<string, number>`. مثلًا عدد كل صنف في المخزن.
+
+</Card>
+</Grid2>
+
+- **للـ input اللي بيتحفظ:** `false` غالبًا هو الصح.
+- **للـ responses اللي بتستقبلها من حد تاني:** سيبها مفتوحة، عشان لما يضيف حقل ميكسرش عندك.
+- **فيه فخ كبير مع `allOf`:** هتشوفه في فصل ٥.
+
+## الـ `enum` والـ `const`
+
+<File name="order-status.json">
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": { "enum": ["new", "paid", "shipped", "cancelled"] },
+    "apiVersion": { "const": "v2" },
+    "priority": { "enum": [1, 2, 3, null] }
+  }
+}
+```
+
+</File>
+
+- **الـ `enum`:** القيمة لازم تساوي واحدة من القايمة بالظبط. الرسالة `must be equal to one of the allowed values` والقايمة في `params.allowedValues`.
+- **ينفع أنواع مختلفة:** `[1, 2, 3, null]` مسموح.
+- **المقارنة deep equality:** ينفع تحط objects وarrays جوه الـ `enum`.
+- **الـ `const`:** قيمة واحدة بس. مفيد جدًا كـ "discriminator" في الـ unions (فصل ٥). الرسالة `must be equal to constant`.
+- **الـ case بيفرق:** `"Paid"` مش زي `"paid"`.
+
+## الـ annotations: الوصف والتوثيق
+
+<File name="annotated.json">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/signup.json",
+  "title": "Signup",
+  "description": "البيانات المطلوبة لإنشاء حساب جديد",
+  "$comment": "الـ comment ده للمطورين بس ومش بيظهر لليوزر",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "readOnly": true },
+    "password": { "type": "string", "minLength": 8, "writeOnly": true },
+    "plan": {
+      "description": "خطة الاشتراك",
+      "enum": ["free", "pro"],
+      "default": "free",
+      "examples": ["pro"]
+    },
+    "referrer": { "type": "string", "deprecated": true }
+  },
+  "required": ["password"]
+}
+```
+
+</File>
+
+- **الـ `title` والـ `description`:** للـ docs والـ editors (بتظهر في الـ hover في VS Code) وللـ LLMs كمان.
+- **الـ `default`:** القيمة اللي المفروض تتفهم لو الحقل مش موجود. Ajv مش بيحطها إلا بـ `useDefaults`.
+- **الـ `examples`:** array من أمثلة. في OpenAPI 3.0 كان `example` مفرد.
+- **الـ `readOnly` / `writeOnly`:** الـ server بيرجّعه بس / الـ client بيبعته بس. معلومة للأدوات، ومش بيمنعوا حاجة في Ajv لوحده.
+- **الـ `deprecated`:** بيعلّم الحقل إنه هيتشال. الـ editors بتشطب عليه.
+- **الـ `$comment`:** ملاحظة للمطورين جوه الـ schema.
+
+## الـ `$schema` والـ `$id`
+
+- **الـ `$schema`:** أول سطر، بيحدد الـ draft. الـ validator بيعرف منه يفسّر الـ keywords إزاي. اكتبه دايمًا في الـ root.
+- **الـ `$id`:** URI فريد للـ schema. **مش لازم يبقى URL حقيقي بيفتح**، هو مجرد اسم. بيستخدمه الـ `$ref` وكمان `ajv.getSchema(id)`.
+- **الـ `$id` بيحدد الـ base:** أي `$ref` relative جوه الـ schema بيتحسب بالنسبة له، زي `"$ref": "money.json"`.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إيه الفرق بين `required: ['x']` و`properties: { x: { type: 'string' } }`؟" الإجابة: <Hl c="o">الـ properties بتحدد شكل الحقل لو ظهر، والـ required بيحدد إنه لازم يظهر.</Hl> الاتنين مستقلين، وغالبًا محتاجهم مع بعض.
+
+</Box>
+
+<Checklist id="jsonschema-basics" title="خلّصت الفصل لما" items={["تعرف الـ 7 types وإن `5.0` integer", "تسمح بـ `null` بـ `type` array", "تفرق بين `properties` و`required`", "تختار `additionalProperties` false أو schema أو مفتوح", "تستخدم `enum` و`const`", "تكتب annotations: title وdescription وdefault وexamples وreadOnly وdeprecated", "تعرف إن `$id` اسم مش لازم يفتح"]} />
+
+<Quiz>
+<Q n={1} q='schema فيها `type: integer`. القيمة `3.0` و`"3"`؟'>`3.0` valid لأنها رياضيًا integer. `"3"` invalid لأنها string، إلا لو شغّلت `coerceTypes`.</Q>
+<Q n={2} q="حقل `name` في `required`، واليوزر بعت `name: null`. إيه اللي هيحصل؟">الـ required هيعدّي لأن الـ key موجود، بس الـ type هيفشل لو `type: string` من غير null.</Q>
+<Q n={3} q="ليه `additionalProperties: false` مهم في body بتاع update؟">عشان يمنع mass assignment، يعني حد يبعت حقول زي `isAdmin` أو `balance` وتتحفظ على طول.</Q>
+<Q n={4} q="إزاي تعبّر عن `Record<string, boolean>`؟">`type: object` من غير properties، ومعاها `additionalProperties` فيها `type: boolean`.</Q>
+</Quiz>

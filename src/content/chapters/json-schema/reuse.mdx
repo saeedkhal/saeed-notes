@@ -1,0 +1,258 @@
+---
+title: إعادة الاستخدام — الـ $defs والـ $ref والملفات
+short: الـ $ref والـ $defs
+order: 6
+label: فصل ٦
+badge: الـ keywords · فصل ٦
+en: $defs · $ref · $id · JSON Pointer · addSchema · getSchema · recursive · $anchor · $dynamicRef
+keywords: $defs · $ref · ملفات منفصلة · recursive · $anchor · $dynamicRef
+goal: متكررش نفس الـ schema مرتين، وتقسّم الـ schemas على ملفات، وتكتب schema لشجرة.
+part: الـ keywords
+color: c1
+---
+
+## الـ `$defs` والـ `$ref` جوه نفس الملف
+
+<File name="order.json">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://koshary.example/schemas/order.json",
+  "type": "object",
+  "properties": {
+    "shipping": { "$ref": "#/$defs/address" },
+    "billing": { "$ref": "#/$defs/address" }
+  },
+  "required": ["shipping"],
+  "$defs": {
+    "address": {
+      "type": "object",
+      "properties": {
+        "city": { "type": "string" },
+        "street": { "type": "string" }
+      },
+      "required": ["city", "street"],
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+</File>
+
+- **الـ `$defs`:** مخزن للـ schemas اللي هتتكرر. مش بيعمل validation لوحده، هو مجرد مكان.
+- **الـ `$ref`:** "روح طابق الـ schema اللي هناك". القيمة URI، والجزء بعد `#` اسمه **JSON Pointer**.
+- **الـ `#/$defs/address`:** يعني من الـ root، ادخل `$defs`، وبعدين `address`.
+- **الـ error بيبان في مكانه:** `/shipping must have required property 'street'`.
+- **في draft-07:** كان اسمه `definitions`. لسه شغال في أغلب الأدوات، بس الاسم الرسمي في 2020-12 هو `$defs`.
+
+<Box type="tip" title="JSON Pointer وأسماء فيها /">
+
+لو اسم الـ key فيه `/` بيتكتب `~1`، ولو فيه `~` بيتكتب `~0`. يعني الـ path `/paths/~1users` معناه key اسمه `/users`. هتشوف ده كتير في OpenAPI.
+
+</Box>
+
+## ملفات منفصلة
+
+كل schema في ملف، وكل ملف ليه `$id`. الـ `$ref` بيشاور على الـ `$id`:
+
+<Tree>
+
+```text
+reuse/
+├─ schemas/
+│  ├─ money.json      ← $id: .../schemas/money.json
+│  └─ product.json    ← $ref: "money.json"
+└─ index.js
+```
+
+</Tree>
+
+<File name="schemas/money.json">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://koshary.example/schemas/money.json",
+  "type": "object",
+  "properties": {
+    "amount": { "type": "integer", "minimum": 0 },
+    "currency": { "enum": ["EGP", "USD"] }
+  },
+  "required": ["amount", "currency"],
+  "additionalProperties": false
+}
+```
+
+</File>
+
+<File name="schemas/product.json">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://koshary.example/schemas/product.json",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "minLength": 2 },
+    "price": { "$ref": "money.json" },
+    "oldPrice": { "$ref": "money.json" },
+    "address": { "$ref": "#/$defs/address" }
+  },
+  "required": ["name", "price"],
+  "$defs": {
+    "address": {
+      "type": "object",
+      "properties": {
+        "city": { "type": "string" },
+        "street": { "type": "string" }
+      },
+      "required": ["city", "street"]
+    }
+  }
+}
+```
+
+</File>
+
+<File name="index.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+import { readFileSync, readdirSync } from "node:fs";
+
+const ajv = new Ajv({ allErrors: true });
+
+// حمّل كل الملفات مرة واحدة، والـ $id بتاع كل ملف هو اسمه
+for (const file of readdirSync("./schemas")) {
+  ajv.addSchema(JSON.parse(readFileSync(`./schemas/${file}`, "utf8")));
+}
+
+const validateProduct = ajv.getSchema("https://koshary.example/schemas/product.json");
+
+const ok = validateProduct({ name: "كشري كبير", price: { amount: 4500, currency: "EGP" } });
+console.log(ok);
+
+validateProduct({ name: "كشري", price: { amount: -5, currency: "EUR" }, address: { city: "Cairo" } });
+for (const e of validateProduct.errors) console.log(e.instancePath, e.message);
+```
+
+</File>
+
+<File name="output">
+
+```text
+true
+/price/amount must be >= 0
+/price/currency must be equal to one of the allowed values
+/address must have required property 'street'
+```
+
+</File>
+
+- **الـ `"$ref": "money.json"` relative:** بيتحسب بالنسبة للـ `$id` بتاع الملف اللي هو فيه، فبقى `https://koshary.example/schemas/money.json`.
+- **الـ `addSchema`:** بيسجّل الـ schema بالـ `$id` بتاعها من غير ما يعملها compile.
+- **الـ `getSchema(id)`:** بيعمل compile أول مرة ويخزّن الـ function، والمرات اللي بعدها بيرجّعها على طول.
+- **الـ `$id` مش لازم يفتح:** Ajv **مش بيعمل download** لأي URL. لو مسجّلتش الـ schema، هتاخد `can't resolve reference https://... from id #`.
+
+<Box type="warn" title="متخليش الـ validator يجيب schemas من النت">
+
+Ajv عنده option اسمه `loadSchema` مع `compileAsync` بيخليك تحمّل schemas من URL. <Hl c="o">متشغّلوش على `$ref` جاي من يوزر</Hl>: ممكن يخلي السيرفر يكلم أي URL (SSRF)، أو يحمّل schema ضخمة، أو يتعطل لو السيرفر التاني وقع. خلي الـ schemas ملفات جوه الـ repo، وسجّلها كلها وقت الـ startup.
+
+</Box>
+
+## الـ schemas المتداخلة (recursive)
+
+شجرة categories، أو comments فيها replies، أو ملف فيه folders:
+
+<File name="tree.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+
+const ajv = new Ajv({ allErrors: true });
+
+const validate = ajv.compile({
+  $id: "https://koshary.example/schemas/category.json",
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    children: { type: "array", items: { $ref: "#" } },
+  },
+  required: ["name"],
+});
+
+const menu = {
+  name: "الأكل",
+  children: [{ name: "كشري", children: [{ title: "صغير" }] }],
+};
+
+console.log(validate(menu), validate.errors[0].instancePath, validate.errors[0].message);
+```
+
+</File>
+
+<File name="output">
+
+```text
+false /children/0/children/0 must have required property 'name'
+```
+
+</File>
+
+- **الـ `"$ref": "#"`:** يعني "الـ schema دي كلها من الـ root"، فكل child هو category.
+- **الغلط اتلقط على عمق ٣:** والـ `instancePath` بيقولك بالظبط فين.
+- **حط حد للعمق أو الحجم:** الـ schema نفسها مش بتحدد عمق أقصى، فحد ممكن يبعت شجرة عمقها ١٠٠ ألف. حط `maxItems` على الـ `children` وlimit على حجم الـ body (فصل ١٢).
+
+## الـ `$ref` جنب keywords تانية
+
+- **في 2019-09 و2020-12:** ينفع تكتب `{ "$ref": "#/$defs/name", "maxLength": 5 }`، والاتنين بيتطبقوا.
+- **في draft-07:** الـ spec بتقول أي keyword جنب `$ref` **يتجاهل**. Ajv بيطبقهم برضه (اتجرّبت)، بس validators تانية لأ. متعتمدش عليها في draft-07، واستخدم `allOf: [{ $ref }, { maxLength }]`.
+
+## الـ `$anchor`: اسم بدل path
+
+<File name="anchor.json">
+
+```json
+{
+  "$id": "https://koshary.example/schemas/contact.json",
+  "type": "object",
+  "properties": {
+    "phone": { "$ref": "#egPhone" }
+  },
+  "$defs": {
+    "phone": {
+      "$anchor": "egPhone",
+      "type": "string",
+      "pattern": "^01[0125][0-9]{8}$"
+    }
+  }
+}
+```
+
+</File>
+
+- **الـ `$anchor`:** اسم ثابت للـ subschema. لو نقلتها مكان تاني جوه الملف، الـ `$ref` مش هيبوظ.
+- **في Ajv 8.20 مع strict:** اتجرّب ورمى `strict mode: unknown keyword: "$anchor"`. اشتغل لما ضفنا `ajv.addKeyword("$anchor")` قبل الـ compile، والـ ref اتحل صح. راجع الـ docs لأن ده ممكن يتصلح.
+- **الـ `$id` جوه subschema:** نفس الفكرة، بيدي subschema اسم URI خاص بيها. نادرًا ما هتحتاجه.
+
+## الـ `$dynamicRef` في سطرين
+
+- **الفكرة:** "generic" schemas. مثلًا schema لـ list عامة، وكل حد يستخدمها يحدد نوع العناصر، زي `List<T>`.
+- **في 2019-09 كان اسمه `$recursiveRef`:** واتغير لـ `$dynamicRef` و`$dynamicAnchor` في 2020-12.
+- **في الشغل اليومي:** نادرًا ما هتحتاجه. وجرّبنا مثال generic list في Ajv 8.20 والعناصر اتراجعت على الـ schema الغلط، فلو محتاجه اختبره كويس على الـ validator بتاعك.
+
+<Box type="story" icon="🏢" title="فورم العمارة">
+
+`$defs` زي **دُرج النماذج** عند البواب: فيه نموذج "عنوان" واحد. كل ما فورم محتاج عنوان، بدل ما يطبع خانات العنوان من الأول، بيكتب "شوف نموذج العنوان". ولو غيّرت النموذج، كل الفورمز اتحدثت مع بعض.
+
+</Box>
+
+<Checklist id="jsonschema-reuse" title="خلّصت الفصل لما" items={["تستخدم `$defs` و`$ref: #/$defs/x`", "تفهم JSON Pointer وإن `/` بتتكتب `~1`", "تقسّم الـ schemas على ملفات بـ `$id` و`addSchema` و`getSchema`", "تعرف إن Ajv مش بيحمّل URLs وإن ده أأمن", "تكتب recursive schema بـ `$ref: #` وتحط حدود", "تعرف الفرق في keywords جنب `$ref` بين draft-07 و2020-12", "تعرف `$anchor` و`$dynamicRef` موجودين لإيه"]} />
+
+<Quiz>
+<Q n={1} q="كتبت `$ref: user.json` وAjv قال can't resolve reference. ليه؟">لأنك مسجّلتش schema بالـ `$id` ده بـ `addSchema`، وAjv مش بيحمّل من النت.</Q>
+<Q n={2} q="شجرة comments recursive. إيه الخطر؟">حد يبعت عمق ضخم أو عدد عناصر ضخم. حط `maxItems` وlimit على حجم الـ body.</Q>
+<Q n={3} q="الـ `definitions` ولا `$defs`؟">في 2019-09 و2020-12 الاسم الرسمي `$defs`. الـ `definitions` بتاعة draft-07 وما قبلها.</Q>
+</Quiz>

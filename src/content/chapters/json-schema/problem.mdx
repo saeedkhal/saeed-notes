@@ -1,0 +1,136 @@
+---
+title: المشكلة — الـ JSON ملوش عقد
+short: المشكلة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: no types at runtime · trust boundary · fail fast · contract · garbage in
+keywords: الـ JSON ملوش types · الـ TS بيختفي · حدود الثقة · fail fast
+goal: تفهم ليه البيانات اللي جاية من بره خطر، وليه TypeScript لوحده مش كفاية، وإمتى تحتاج JSON Schema.
+part: البداية
+color: c1
+---
+
+## الـ JSON بيقبل أي حاجة
+
+الـ JSON مجرد **نص**. الـ `JSON.parse` بيتأكد إن الأقواس والفواصل مظبوطة وبس. مش بيسأل عن المعنى خالص:
+
+- **مفيش types متفق عليها:** `"30"` و`30` الاتنين JSON سليم، بس واحد string والتاني number.
+- **مفيش حقول إجبارية:** `{}` JSON سليم برضه، حتى لو الكود مستني `name` و`email`.
+- **مفيش منع لحقول زيادة:** حد يبعتلك `"isAdmin": true` جوه الـ body، والـ parser هيقبله.
+- **مفيش حدود:** اسم طوله ١٠ ميجا، أو `qty: -5`، أو array فيها مليون عنصر.
+
+<File name="surprise.js">
+
+```js
+const body = JSON.parse('{"price": "100", "qty": 2}');
+
+console.log(body.price * body.qty); // 200 ← اشتغلت بالصدفة
+console.log(body.price + body.qty); // "1002" ← مصيبة
+console.log(body.discount.value);   // TypeError: Cannot read properties of undefined
+```
+
+</File>
+
+<Hl c="y">الـ JSON السليم syntax مش معناه JSON سليم في المعنى.</Hl>
+
+## طب والـ TypeScript؟
+
+الـ TypeScript بيراجع الكود **وقت الكتابة**، وبعد الـ compile الـ types كلها بتتمسح. يعني:
+
+<File name="types-vanish.ts">
+
+```ts
+interface Order {
+  price: number;
+  qty: number;
+}
+
+// الـ TS مصدّقك على كلمتك، ومش بيراجع حاجة
+const order = JSON.parse(rawBody) as Order;
+
+order.price.toFixed(2); // لو price جت string ← TypeError وقت التشغيل
+```
+
+</File>
+
+- **الـ `as Order` كذبة مهذبة:** إنت بتقول للـ compiler "صدقني"، وهو بيصدقك.
+- **الـ `JSON.parse` بيرجّع `any`:** فالـ type safety بتقف عند أول بيانات جاية من بره.
+- **الـ types مش موجودة في الـ JavaScript النهائي:** مفيش حاجة اسمها `Order` وقت التشغيل عشان تراجع عليها.
+
+<Box type="story" icon="🚪" title="بواب العمارة">
+
+الـ TypeScript زي **ورقة مكتوب فيها أسماء السكان** متعلقة جوه الأسانسير. مفيدة جدًا للسكان نفسهم، بس محدش بيقراها وهو داخل من باب العمارة.
+
+اللي محتاجه هو **بواب** قاعد على الباب نفسه، معاه الكشف، وبيسأل كل واحد داخل: "إنت رايح لمين؟". ده الـ validator. والكشف اللي معاه هو الـ JSON Schema.
+
+</Box>
+
+## حدود الثقة (trust boundaries)
+
+أي مكان البيانات بتدخل فيه سيستمك **من مصدر إنت مش متحكم فيه 100%** هو trust boundary. هنا لازم تراجع:
+
+<Diagram title="كل الأبواب بتعدي على نفس البواب" height={360} mheight={560} nodes={[{id:"api",t:"API body",s:"من الـ client",x:10,y:12,mx:20,my:8,c:1},{id:"wh",t:"Webhook",s:"Stripe / GitHub",x:10,y:38,mx:72,my:8,c:2},{id:"cfg",t:"Config file",s:"JSON / YAML",x:10,y:64,mx:20,my:26,c:3},{id:"llm",t:"LLM output",s:"structured",x:10,y:90,mx:72,my:26,c:4},{id:"v",t:"Validator",s:"Ajv + schema",x:50,y:51,mx:50,my:54,c:5},{id:"app",t:"الكود بتاعك",s:"بيانات مضمونة",x:88,y:28,mx:25,my:88,c:1},{id:"err",t:"400 / reject",s:"error واضح",x:88,y:76,mx:75,my:88,c:3}]} edges={[{from:"api",to:"v"},{from:"wh",to:"v"},{from:"cfg",to:"v"},{from:"llm",to:"v"},{from:"v",to:"app",t:"valid"},{from:"v",to:"err",t:"invalid",dash:true}]} />
+
+- **الـ API requests:** الـ body والـ query والـ headers. أي حد يقدر يبعت أي حاجة بـ `curl`.
+- **الـ webhooks:** service تانية بتبعتلك events. ممكن تغيّر شكلها في version جديد من غير ما تاخد بالك.
+- **ملفات الـ config:** يوزر بيكتب `"port": "3000"` أو بيغلط في اسم key.
+- **رسايل الـ queue:** service قديمة لسه بتبعت الشكل القديم في Kafka أو RabbitMQ.
+- **ردود الـ LLM:** الموديل ممكن يرجّع field ناقص أو type غلط حتى لو طلبت منه JSON.
+- **بيانات قديمة في الداتابيز:** document في MongoDB اتكتب من سنتين بشكل مختلف.
+- **الـ localStorage والـ URL params:** على الـ frontend، أي حاجة اليوزر يقدر يعدّلها.
+
+## Fail fast: ارفض عند الباب
+
+لو البيانات الغلط عدّت من الباب، الغلط بيظهر **بعيد عن سببه**:
+
+<Flow items={[{"t": "body فيه qty: \"2\"", "c": 1}, "→", {"t": "اتحفظ في DB", "s": "كـ string", "c": 2}, "→", {"t": "job الفواتير", "s": "بعد أسبوع", "c": 3}, "→", {"t": "total = \"1002\"", "s": "فاتورة غلط", "c": 4}, "→", {"t": "debugging يومين", "c": 5}]} />
+
+- **ارفض بدري:** الـ request يرجع `400` ومعاه رسالة بتقول `/qty must be integer`.
+- **الغلط قريب من سببه:** اللي بعت الغلط هو اللي بيعرف على طول، مش إنت بعد أسبوع.
+- **الكود اللي جوه يبقى أبسط:** مش محتاج `if (typeof x === "number")` في كل function، لأن الباب ضمنلك الشكل.
+
+<Box type="tip" title="Parse, don't validate">
+
+فيه مبدأ مشهور: بدل ما تفضل تسأل "هو الـ field ده موجود؟" في كل حتة، **راجع مرة واحدة عند الباب** وحوّل البيانات لشكل مضمون، وبعد كده اتعامل معاها على إنها سليمة. الـ JSON Schema مع validator هي الطريقة اللي بتعمل بيها ده مع أي JSON.
+
+</Box>
+
+## الحلول اللي قدامك
+
+<Grid2>
+<Card title="if يدوي" c={1}>
+
+`if (typeof body.name !== "string")` في كل حتة. بيشتغل لأول ٣ حقول، وبعدين بيبقى كود طويل ومتكرر وناقص، ومحدش بيكتب رسالة error كويسة.
+
+</Card>
+<Card title="مكتبة في لغة واحدة" c={2}>
+
+زي Zod أو Joi أو Yup. ممتازة جوه TypeScript/JavaScript، بس الـ schema **كود**، فمش هتشاركها مع service مكتوبة بـ Python أو Go بسهولة.
+
+</Card>
+<Card title="JSON Schema" c={3}>
+
+الـ schema نفسها **JSON**. أي لغة تقراها، وفيه validators لكل اللغات تقريبًا. وبتستخدمها OpenAPI والـ editors والـ LLM APIs وMongoDB.
+
+</Card>
+<Card title="Protobuf / Avro" c={4}>
+
+formats binary ليها schema إجبارية. ممتازة بين الـ services الداخلية، بس مش JSON، والـ browser والـ APIs العامة غالبًا عايزين JSON.
+
+</Card>
+</Grid2>
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"عندنا TypeScript في الـ backend، محتاجين validation ليه؟" الإجابة: <Hl c="b">لأن الـ TypeScript بيضمن إن الكود متسق مع نفسه، مش إن البيانات اللي جاية من بره متسقة مع الكود.</Hl> الـ types بتختفي وقت التشغيل، و`JSON.parse` بيرجّع `any`. لازم runtime validation على كل trust boundary.
+
+</Box>
+
+<Checklist id="jsonschema-problem" title="خلّصت الفصل لما" items={["تشرح ليه `JSON.parse` بينجح مع بيانات غلط", "تشرح ليه `as Order` مش validation", "تعدّ 5 أمثلة على trust boundaries", "تشرح فكرة fail fast وفايدتها", "تقارن بين if يدوي وZod والـ JSON Schema والـ Protobuf"]} />
+
+<Quiz>
+<Q n={1} q="الـ API بتاعك مكتوب بـ TypeScript strict. محتاج validation للـ body؟">آه. الـ types بتتمسح بعد الـ compile، و`req.body` جاي من بره ومش مضمون. الـ TypeScript مش بيشوف البيانات وقت التشغيل.</Q>
+<Q n={2} q="ليه أرفض الـ request عند الباب بدل ما أصلّح البيانات جوه؟">عشان الغلط يظهر قريب من سببه، واللي بعته يعرف على طول، والكود الداخلي يفضل بسيط وواثق في شكل البيانات.</Q>
+<Q n={3} q="ميزة JSON Schema الأهم عن Zod؟">إنها JSON مش كود، فتتشارك بين أي لغات، وبتستخدمها أدوات كتير زي OpenAPI والـ editors والـ LLM APIs.</Q>
+</Quiz>

@@ -1,0 +1,52 @@
+---
+title: JSON Schema — عقد مكتوب للـ JSON بتاعك
+highlight: JSON Schema
+subtitle: type · required · additionalProperties · oneOf · $ref · 2020-12 · Ajv · Zod · OpenAPI · structured outputs
+description: إيه هي الـ JSON Schema، وإزاي بتفرض typing وشكل ثابت على أي JSON داخل لسيستمك، وإمتى تستخدمها وإمتى لأ، وإزاي تشغّلها بجد بـ Ajv وFastify وتربطها بـ TypeScript وZod وOpenAPI.
+emoji: 📐
+order: 25
+tags: [backend, frontend]
+note: شرح بأسلوبي. الكود اتجرّب على Node 26 وajv 8.20 وajv-formats 3 وzod 4.6 وtypebox 1.3 وfastify 5.12 وexpress 5.3، والـ errors اللي في المذكرة طالعة من التشغيل بجد. الـ options بتتغير بين الإصدارات، فراجع الـ docs قبل ما تنسخ حاجة على production.
+---
+
+المذكرة دي بتجاوب على <Hl c="y">أربع أسئلة</Hl> عن الـ JSON Schema: هي إيه؟ بتحل مشكلة إيه؟ أستخدمها إمتى؟ وليه هي بالذات؟
+
+المشكلة باختصار:
+
+- **الـ JSON ملوش عقد:** أي حد يقدر يبعتلك `{"age": "30"}` بدل `{"age": 30}`، والـ parser هيقبله عادي.
+- **الـ TypeScript مش هيلحقك:** الـ types بتختفي بعد الـ compile، فوقت التشغيل مفيش حد بيراجع.
+- **الغلط بيتأخر:** البيانات الغلط بتعدّي من الباب، وتنفجر بعدين في مكان بعيد خالص (`undefined is not a function` في الـ service الرابعة).
+- **الحدود كتير:** API bodies، وwebhooks، وملفات config، ورسايل queue، وردود الـ LLM. كل دول بيانات **جاية من بره** ومش مضمونة.
+
+<Hl c="p">الحل: تكتب "العقد" مرة واحدة كـ JSON Schema، وvalidator يراجع كل JSON داخل على العقد ده عند الباب، قبل ما يلمس الكود بتاعك.</Hl>
+
+<Box type="story" icon="📋" title="تشبيه المذكرة كلها">
+
+تخيّل **شباك في مصلحة حكومية**. الموظف قدامه **فورم** مطبوع: الاسم (حروف بس)، الرقم القومي (١٤ رقم بالظبط)، تاريخ الميلاد، وخانة "الحالة الاجتماعية" فيها ٤ اختيارات بس.
+
+الفورم ده هو الـ **JSON Schema**: ورقة بتوصف شكل البيانات المقبولة. الموظف اللي بيراجع الورقة قبل ما يختمها هو الـ **validator** (زي Ajv). لو الرقم القومي ١٣ رقم، يرجّعلك الورقة ويقولك **فين الغلط بالظبط**، من غير ما الطلب يدخل جوه ويضيّع وقت حد.
+
+والأحلى؟ نفس الفورم بيتطبع ويتوزع على الناس، فاللي بيملا عارف المطلوب من الأول. ده بالظبط اللي بيحصل لما الـ schema تبقى documentation وautocomplete في الـ editor.
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+- **الكود كله Node.js:** بـ ESM (`import`)، والـ validator الأساسي هو `ajv` ومعاه `ajv-formats`.
+- **الـ draft اللي هنمشي عليه:** `2020-12`، وده آخر إصدار ثابت، وهو اللي OpenAPI 3.1 متوافقة معاه.
+- **فيه Lab كامل:** API صغير بـ Express بيعمل validation للطلبات في فصل ٩.
+- **عشان تجرّب أي مثال:** اعمل فولدر صغير ونزّل الحاجات دي:
+
+</Box>
+
+<File name="terminal">
+
+```bash
+mkdir schema-lab && cd schema-lab && pnpm init
+pnpm pkg set type=module
+pnpm add ajv ajv-formats
+# للفصول اللي بعد كده
+pnpm add zod typebox fastify express
+```
+
+</File>

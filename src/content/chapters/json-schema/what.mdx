@@ -1,0 +1,156 @@
+---
+title: يعني إيه JSON Schema؟
+short: هي إيه؟
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: schema · instance · validator · keywords · assertions · annotations · vocabularies · boolean schema
+keywords: schema وinstance · validator · assertions · annotations · أول مثال
+goal: تعرف الـ JSON Schema بتتكون من إيه، والفرق بين الـ schema والـ instance والـ validator، وتشغّل أول validation بإيدك.
+part: البداية
+color: c2
+---
+
+## الفكرة في سطر
+
+الـ **JSON Schema** هي <Hl c="g">JSON document بيوصف شكل JSON تاني</Hl>: نوعه إيه، فيه حقول إيه، إيه الإجباري، وإيه الحدود.
+
+- **الـ schema:** الوصف نفسه، يعني "الفورم" اللي فيه الشروط.
+- **الـ instance:** الـ JSON اللي عايز تراجعه، يعني "الورقة اللي اليوزر ملاها".
+- **الـ validator:** المكتبة اللي بتاخد الاتنين وترد بـ valid أو invalid ومعاها قايمة errors. في Node أشهرها `ajv`.
+- **الـ specification:** الـ standard نفسه منشور على `json-schema.org`، وليه إصدارات اسمها drafts (فصل ٧).
+
+## أول schema
+
+<File name="user.schema.json">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/user.json",
+  "title": "User",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "name": { "type": "string", "minLength": 2, "maxLength": 50 },
+    "email": { "type": "string", "format": "email" },
+    "role": { "enum": ["admin", "user", "guest"], "default": "user" }
+  },
+  "required": ["id", "name", "email"],
+  "additionalProperties": false
+}
+```
+
+</File>
+
+اقراها كأنها جملة عادية:
+
+- **الـ `type: "object"`:** الـ JSON لازم يبقى object، مش array ولا string.
+- **الـ `properties`:** لو فيه `id` لازم يبقى integer من 1 وطالع، ولو فيه `name` لازم string من 2 لـ 50 حرف.
+- **الـ `required`:** الـ `id` والـ `name` والـ `email` لازم يبقوا موجودين.
+- **الـ `additionalProperties: false`:** ممنوع أي حقل مش مذكور في `properties`.
+- **الـ `$schema`:** بيقول الـ schema دي مكتوبة بأنهي draft.
+- **الـ `$id`:** اسم فريد للـ schema (URI)، بنستخدمه في الـ `$ref` بعدين (فصل ٦).
+
+## نشغّلها بـ Ajv
+
+<File name="first.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+import { readFileSync } from "node:fs";
+
+const schema = JSON.parse(readFileSync("./user.schema.json", "utf8"));
+
+const ajv = new Ajv({ allErrors: true });
+addFormats(ajv); // من غيرها Ajv مش هيعرف "email"
+
+const validate = ajv.compile(schema); // بيحوّل الـ schema لـ function
+
+const bad = { id: "1", name: "S", email: "not-an-email", role: "boss", isAdmin: true };
+
+if (!validate(bad)) {
+  for (const e of validate.errors) console.log(e.instancePath || "(root)", e.message);
+}
+```
+
+</File>
+
+الـ output الحقيقي:
+
+<File name="output">
+
+```text
+(root) must NOT have additional properties
+/id must be integer
+/name must NOT have fewer than 2 characters
+/email must match format "email"
+/role must be equal to one of the allowed values
+```
+
+</File>
+
+- **الـ `instancePath`:** مكان الغلط في الـ JSON بصيغة JSON Pointer، زي `/items/0/qty`.
+- **الـ `message`:** الرسالة بالإنجليزي، وفيه `keyword` و`params` لو عايز تبني رسالتك بنفسك (فصل ٨).
+- **الـ `allErrors: true`:** خلّاه يجمع كل الأخطاء. من غيره بيقف عند أول غلط.
+
+<Box type="warn" title="الـ import بيفرق">
+
+الـ `import Ajv from "ajv"` بيديك Ajv بتاع **draft-07**. عشان `2020-12` لازم `ajv/dist/2020.js`. لو الـ `$schema` جوه الملف مش متوافق مع الـ class، هتاخد error زي ده:
+
+`no schema with key or ref "https://json-schema.org/draft/2020-12/schema"`
+
+</Box>
+
+## الـ keywords نوعين
+
+كل حاجة جوه الـ schema اسمها **keyword**. والـ keywords نوعين:
+
+<Grid2>
+<Card title="Assertions: بتقرر" c={1}>
+
+بتقول valid ولا لأ: `type`، `required`، `minLength`، `pattern`، `enum`، `maximum`. لو الشرط اتكسر، الـ validation بتفشل.
+
+</Card>
+<Card title="Annotations: بتوصف" c={2}>
+
+معلومات بس، مش بتفشّل حاجة: `title`، `description`، `default`، `examples`، `deprecated`، `readOnly`، `writeOnly`، `$comment`. بتستخدمها الأدوات زي الـ docs والـ editors والـ form generators.
+
+</Card>
+</Grid2>
+
+- **مثال مهم:** الـ `default` annotation، يعني Ajv **مش هيحطه** في البيانات إلا لو فعّلت `useDefaults` (فصل ٨).
+- **والـ `format`:** في `2020-12` هو annotation بالـ standard، بس Ajv بيعامله كـ assertion لو ضفت `ajv-formats` (فصل ٤).
+
+## حاجات مش واخد بالك منها
+
+- **الـ schema الفاضية `{}`:** بتقبل **أي** JSON. كل keyword بيضيّق، ومن غير keywords مفيش قيود.
+- **الـ `true` و`false`:** ينفعوا يبقوا schema كاملة. `true` زي `{}` بتقبل أي حاجة، و`false` بترفض أي حاجة.
+- **الـ keyword بيطبق على نوعه بس:** `minLength` على number مش بيعمل حاجة، و`properties` على string مش بتعمل حاجة. عشان كده دايمًا اكتب `type`.
+- **الـ `properties` لوحدها مش بتخلي الحقل إجباري:** لازم `required`.
+- **الـ keywords غير المعروفة:** الـ standard بيقول تتجاهل. بس Ajv في الـ `strict` mode (الـ default) بيرمي error، وده بيلقط الـ typos:
+
+<File name="typo.js">
+
+```js
+new Ajv().compile({ type: "string", minLenght: 3 });
+// Error: strict mode: unknown keyword: "minLenght"
+```
+
+</File>
+
+## الـ vocabularies
+
+من `2019-09` الـ spec اتقسمت لمجموعات keywords اسمها **vocabularies**: `core` (زي `$id` و`$ref`)، و`applicator` (زي `properties` و`allOf`)، و`validation` (زي `type` و`minimum`)، و`unevaluated`، و`format-annotation`، و`content`، و`meta-data`.
+
+- **الفايدة:** أداة تقدر تقول "أنا بدعم الـ vocabularies دي بس"، وحد يقدر يعمل vocabulary خاص بيه.
+- **في الشغل اليومي:** غالبًا مش هتحتاج تفكر فيها. افتكر بس إن `format` ليه vocabulary annotation وvocabulary assertion منفصلين.
+
+<Checklist id="jsonschema-what" title="خلّصت الفصل لما" items={["تفرق بين الـ schema والـ instance والـ validator", "تقرا schema وتترجمها لجملة عادية", "تشغّل `ajv.compile` وتطبع الـ errors", "تعرف إن `ajv` لوحده draft-07 و`ajv/dist/2020.js` للـ 2020-12", "تفرق بين assertions وannotations", "تعرف إن `{}` و`true` بيقبلوا أي حاجة"]} />
+
+<Quiz>
+<Q n={1} q="schema فيها `properties` بـ name وemail بس من غير `required`. الـ `{}` valid؟">آه valid. الـ `properties` بتقول شكل الحقل لو موجود، لكن مش بتخليه إجباري. لازم `required`.</Q>
+<Q n={2} q='حطيت `default: "user"` وAjv مرجّعش role في البيانات. ليه؟'>لأن `default` annotation بس. Ajv بيحطه فقط لو `useDefaults: true`.</Q>
+<Q n={3} q='الـ schema `{ type: "number", minLength: 3 }` على `5`؟'>valid. الـ `minLength` بيطبق على strings بس. وAjv بيطبع warning: `strict mode: missing type "string" for keyword "minLength"`.</Q>
+</Quiz>

@@ -1,0 +1,313 @@
+---
+title: الـ validation بجد — Ajv من جوه
+short: الـ Ajv
+order: 8
+label: فصل ٨
+badge: التطبيق · فصل ٨
+en: Ajv · compile once · allErrors · strict · coerceTypes · removeAdditional · useDefaults · errors · ajv-errors · ajv-i18n · standalone
+keywords: compile مرة واحدة · الـ options · شكل الـ errors · رسايل بالعربي · standalone · لغات تانية
+goal: 'تشغّل Ajv صح في production: instance واحد، compile مرة واحدة، options مفهومة، وerrors نضيفة لليوزر.'
+part: التطبيق
+color: c3
+---
+
+## Ajv بيشتغل إزاي؟
+
+الـ **Ajv** (Another JSON Validator) هو أشهر وأسرع validator في JavaScript. السر في السرعة إنه بيحوّل الـ schema لـ **كود JavaScript** مرة واحدة، وبعدين كل validation مجرد function call.
+
+<Flow items={[{"t": "schema JSON", "c": 1}, "→", {"t": "ajv.compile()", "s": "بيولّد كود JS", "c": 2}, "→", {"t": "validate()", "s": "function عادية", "c": 3}, "→", {"t": "true / false", "s": "+ validate.errors", "c": 4}]} />
+
+- **الـ compile غالي:** بيحلل الـ schema ويولّد كود ويعمله `new Function`.
+- **الـ validate رخيص جدًا:** مجرد `if`s متولدة.
+- **يبقى القاعدة:** <Hl c="g">instance واحد للتطبيق كله، وcompile مرة واحدة وقت الـ startup.</Hl>
+
+## الغلطة المشهورة: compile جوه الـ handler
+
+<File name="bad-handler.js">
+
+```js
+app.post("/users", (req, res) => {
+  // @diff -
+  const validate = new Ajv().compile({ type: "object" /* ... */ }); // ❌ كل request
+  if (!validate(req.body)) return res.status(400).json(validate.errors);
+  // ...
+});
+```
+
+</File>
+
+قسنا الفرق على schema صغيرة (object فيه حقلين):
+
+| الطريقة | الوقت لكل request |
+|---|---|
+| `ajv.compile(schema جديدة)` جوه الـ handler | حوالي `0.9ms` |
+| `validate` متعملها compile مرة واحدة | أقل من ميكروثانية |
+
+- **وفيه مشكلة أكبر من السرعة:** Ajv بيخزّن كل schema اتعملها compile في cache جوه الـ instance. لو كل request بيعمل object schema جديد، الـ cache بيكبر. جرّبنا 500 compile لـ object جديد بنفس المحتوى والـ cache وصل `508` entry. ده **memory leak**.
+- **ولو نفس الـ object:** Ajv بيرجّع نفس الـ function من الـ cache (`f1 === f2` طلعت `true`).
+- **الحل:** اعمل compile في أول الملف أو استخدم `addSchema` + `getSchema(id)`.
+
+## الـ options المهمة
+
+<File name="ajv.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+
+export const ajv = new Ajv({
+  allErrors: true,       // اجمع كل الأخطاء مش أول واحد بس
+  strict: true,          // الـ default: ارمي error على keywords غلط
+  coerceTypes: false,    // الـ default: متحوّلش types
+  useDefaults: false,    // الـ default: متحطش الـ default
+  removeAdditional: false, // الـ default: متمسحش حقول
+});
+addFormats(ajv);
+```
+
+</File>
+
+<Grid2>
+<Card title="allErrors" c={1}>
+
+الـ default `false`: بيقف عند أول غلط. `true` بيجمع كله، وده أحسن لليوزر في الـ forms. **بس** خلي بالك منه مع الـ input الضخم أو الـ regex الخطيرة (فصل ١٢).
+
+</Card>
+<Card title="strict" c={2}>
+
+الـ default `true`: بيرمي error على keyword مش معروف (`minLenght`)، أو format مش متسجل، أو حاجات ملخبطة. وفيه أجزاء منه (`strictTypes`، `strictTuples`) بتطبع warning بس. **سيبه شغال**.
+
+</Card>
+<Card title="coerceTypes" c={3}>
+
+`true` بيحوّل `"2"` لـ `2` و`"true"` لـ `true` **جوه الـ data نفسها**. مفيد للـ query string والـ env vars بس. و`"array"` كمان بيحوّل قيمة واحدة لـ array.
+
+</Card>
+<Card title="useDefaults" c={4}>
+
+`true` بيحط قيمة الـ `default` في الحقول الناقصة **جوه الـ object نفسه**. يعني بيغيّر الـ input بتاعك (mutation).
+
+</Card>
+<Card title="removeAdditional" c={5}>
+
+`true`: بيمسح الحقول الزيادة **بس** في الأماكن اللي فيها `additionalProperties: false`. `"all"`: بيمسحها في كل حتة. `"failing"`: بيمسح اللي فشل في الـ additionalProperties schema.
+
+</Card>
+<Card title="حاجات تانية" c={1}>
+
+`validateFormats: false` يقفل الـ formats. `multipleOfPrecision` لمشكلة الكسور. `discriminator: true` للـ unions. `$data: true` عشان keyword ياخد قيمته من حقل تاني. راجع الـ docs.
+
+</Card>
+</Grid2>
+
+## مثال: query string
+
+<File name="options.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+
+const schema = {
+  type: "object",
+  properties: {
+    page: { type: "integer", minimum: 1, default: 1 },
+    active: { type: "boolean" },
+    sort: { enum: ["new", "price"], default: "new" },
+  },
+  additionalProperties: false,
+};
+
+// زي query string: كل القيم strings
+const query = { page: "2", active: "true", debug: "1" };
+
+const ajv = new Ajv({ coerceTypes: true, useDefaults: true, removeAdditional: true });
+const validate = ajv.compile(schema);
+
+console.log(validate(query), query);
+console.log(validate({ page: "abc" }), validate.errors[0].instancePath, validate.errors[0].message);
+```
+
+</File>
+
+<File name="output">
+
+```text
+true { page: 2, active: true, sort: 'new' }
+false /page must be integer
+```
+
+</File>
+
+- **الـ `page` و`active`:** اتحولوا لـ number وboolean.
+- **الـ `sort`:** اتحط من الـ `default`.
+- **الـ `debug`:** اتمسح بهدوء بدل ما يفشّل الـ request.
+- **الـ `"abc"`:** مينفعش يبقى integer، فبرضه فشل. الـ coercion مش بيقبل أي حاجة.
+
+<Box type="warn" title="الـ options دي بتغيّر البيانات">
+
+`coerceTypes` و`useDefaults` و`removeAdditional` **بيعدّلوا الـ object اللي بعته**. ده معناه:
+
+- **لو نفس الـ object مستخدم في حتة تانية:** هيتغير هناك كمان.
+- **لو الـ object جاي frozen:** هتاخد error.
+- **الـ `removeAdditional` بيخبّي الغلط:** اليوزر بعت `emial` بدل `email`؟ الحقل هيتمسح بهدوء، وهيفضل فاكر إنه بعت الإيميل. للـ APIs العامة، **الرفض أوضح من المسح**.
+- **ومتشغّلش `coerceTypes` على JSON body:** الـ JSON عنده types حقيقية، فلو جه `"30"` يبقى ده غلط عند اللي بعت.
+
+</Box>
+
+## شكل الـ errors
+
+كل error فيه:
+
+| الحقل | مثال | معناه |
+|---|---|---|
+| `instancePath` | `/items/0/qty` | مكان الغلط في الـ data (JSON Pointer)، وفاضي للـ root |
+| `schemaPath` | `#/properties/items/items/properties/qty/type` | مكان القاعدة في الـ schema |
+| `keyword` | `type` | أنهي keyword فشل |
+| `params` | `{ "type": "integer" }` | تفاصيل: `missingProperty`، `additionalProperty`، `limit`، `allowedValues`… |
+| `message` | `must be integer` | رسالة بالإنجليزي |
+
+- **الـ `required` بيقول المكان غلط شوية:** الـ `instancePath` بيبقى الـ **parent**، واسم الحقل في `params.missingProperty`. نفس الكلام في `additionalProperties` مع `params.additionalProperty`. هتعالج ده في الـ Lab.
+- **الـ `ajv.errorsText(validate.errors)`:** بيجمعهم في سطر واحد، زي `data/id must be integer, data/name must NOT have fewer than 2 characters`. كويس للـ logs.
+- **الـ `validate.errors` بيتمسح مع كل call:** لو هتحتاجه بعدين، خد نسخة قبل ما تنادي `validate` تاني.
+- **متبعتش `schemaPath` لليوزر في API عام:** بيكشف تفاصيل الـ schema الداخلية من غير فايدة.
+
+## رسايل بالعربي
+
+<File name="i18n.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+import ajvErrors from "ajv-errors";
+import localize from "ajv-i18n";
+
+const ajv = new Ajv({ allErrors: true });
+ajvErrors(ajv); // بيضيف keyword اسمه errorMessage
+
+const validate = ajv.compile({
+  type: "object",
+  properties: {
+    phone: {
+      type: "string",
+      pattern: "^01[0125][0-9]{8}$",
+      errorMessage: "رقم الموبايل لازم يبقى 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015",
+    },
+    age: { type: "integer", minimum: 18 },
+  },
+  required: ["phone"],
+});
+
+validate({ phone: "123", age: 10 });
+
+// ترجم رسايل Ajv العادية بس، وسيب رسايلك زي ما هي
+const builtIn = validate.errors.filter((e) => e.keyword !== "errorMessage");
+localize.ar(builtIn);
+
+for (const e of validate.errors) console.log(e.instancePath, e.message);
+```
+
+</File>
+
+<File name="output">
+
+```text
+/phone رقم الموبايل لازم يبقى 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015
+/age  يجب أن يكون >= 18
+```
+
+</File>
+
+- **الـ `ajv-errors`:** بيخليك تكتب رسالتك جوه الـ schema بـ `errorMessage`. لازم `allErrors: true`.
+- **الـ `ajv-i18n`:** بيترجم رسايل Ajv العادية لـ لغات كتير منها `ar`، وبيعدّل الـ array نفسها.
+- **الفخ:** لو شغّلت `localize.ar` على كل الـ errors، هيترجم رسالتك انت كمان لجملة عامة. عشان كده فلترنا.
+- **أو ابني الرسالة بنفسك:** من `keyword` و`params`. ده أحسن لو الـ frontend هو اللي بيترجم.
+
+## Standalone: من غير Ajv وقت التشغيل
+
+تقدر تولّد كود الـ validation وقت الـ build، وتشغّله من غير ما تعمل compile وقت الـ startup:
+
+<File name="build-validators.js">
+
+```js
+import { writeFileSync } from "node:fs";
+import Ajv from "ajv/dist/2020.js";
+import standaloneCode from "ajv/dist/standalone/index.js";
+
+const ajv = new Ajv({ code: { source: true } });
+const validate = ajv.compile({
+  type: "object",
+  properties: { name: { type: "string", minLength: 2 } },
+  required: ["name"],
+});
+
+writeFileSync("validate-user.cjs", standaloneCode(ajv, validate));
+```
+
+</File>
+
+<File name="use.js">
+
+```js
+import validate from "./validate-user.cjs";
+
+console.log(validate({ name: "Saeed" }), validate({}), validate.errors?.[0].message);
+// true false must have required property 'name'
+```
+
+</File>
+
+- **الفايدة:** startup أسرع (serverless، edge)، ومفيش `new Function` وقت التشغيل، وده مهم لو عندك Content Security Policy بتمنع `eval`.
+- **الملف لسه محتاج `ajv` في الـ dependencies:** بيعمل `require` لـ functions صغيرة زي `ucs2length`.
+- **جرّبنا `esm: true`:** الملف طلع فيه `require` جوه ESM ورمى `require is not defined in ES module scope`. فطلّعناه `.cjs`، وده اشتغل. راجع الـ docs لأن ده ممكن يتصلح.
+
+## لغات تانية
+
+نفس الـ schema JSON تشتغل في أي لغة، وده أهم ميزة. مثال بـ Python:
+
+<File name="validate.py">
+
+```python
+from jsonschema import Draft202012Validator
+
+schema = {
+    "type": "object",
+    "properties": {"name": {"type": "string", "minLength": 2}, "age": {"type": "integer"}},
+    "required": ["name"],
+}
+v = Draft202012Validator(schema)
+for err in v.iter_errors({"name": "S", "age": "30"}):
+    print(list(err.path), err.message)
+```
+
+</File>
+
+<File name="output">
+
+```text
+['name'] 'S' is too short
+['age'] '30' is not of type 'integer'
+```
+
+</File>
+
+- **Python:** `jsonschema` (اتجرّبت بـ 4.26)، وفيه `fastjsonschema` لو محتاج سرعة.
+- **Go:** `santhosh-tekuri/jsonschema`.
+- **Java:** `networknt/json-schema-validator`.
+- **.NET:** `JsonSchema.Net`.
+- **Rust:** الـ crate اسمها `jsonschema`.
+- **PHP:** `opis/json-schema`.
+- **عشان تختار:** موقع `json-schema.org` فيه صفحة tools ونتايج test suite رسمية بتوضح كل validator بيدعم إيه. راجع الـ docs.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"الـ validation بقت bottleneck في الـ API. إيه أول حاجة تبص عليها؟" الإجابة: <Hl c="b">اتأكد إن الـ compile بيحصل مرة واحدة مش مع كل request.</Hl> بعدها: `allErrors` على input ضخم، والـ `pattern` الخطيرة، وحجم الـ body.
+
+</Box>
+
+<Checklist id="jsonschema-ajv" title="خلّصت الفصل لما" items={["تعمل Ajv instance واحد وcompile مرة واحدة", "تشرح ليه compile جوه الـ handler بطيء وبيعمل memory leak", "تعرف كل option: allErrors وstrict وcoerceTypes وuseDefaults وremoveAdditional", "تعرف إن الـ options دي بتعدّل الـ data", "تقرا `instancePath` و`keyword` و`params` في الـ errors", "تكتب رسايل عربي بـ `ajv-errors` أو `ajv-i18n`", "تولّد standalone validator", "تعرف validators في Python وGo وJava"]} />
+
+<Quiz>
+<Q n={1} q="الـ memory بتاعة السيرفر بتزيد مع الوقت والـ validation في الكود كده: `ajv.compile({...})` جوه الـ handler. ليه؟">كل request بيعمل schema object جديد، وAjv بيخزّن كل compile في الـ cache بتاعه. اعمل compile مرة واحدة بره الـ handler.</Q>
+<Q n={2} q="ينفع `coerceTypes: true` على JSON body؟">يشتغل، بس غالبًا غلط. الـ JSON عنده types حقيقية، فلو جه `"30"` ده bug عند الـ client. استخدمه للـ query string والـ env vars.</Q>
+<Q n={3} q="الـ `required` error فيه `instancePath` فاضي. إزاي أعرف الحقل الناقص؟">من `params.missingProperty`.</Q>
+<Q n={4} q="ليه ممكن تستخدم standalone code؟">startup أسرع ومفيش `new Function` وقت التشغيل، فمناسب للـ serverless وللـ CSP اللي بتمنع eval.</Q>
+</Quiz>

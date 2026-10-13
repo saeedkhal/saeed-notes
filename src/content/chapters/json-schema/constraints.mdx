@@ -1,0 +1,248 @@
+---
+title: القيود — الـ strings والأرقام والـ arrays والـ objects
+short: القيود
+order: 4
+label: فصل ٤
+badge: الـ keywords · فصل ٤
+en: minLength · pattern · format · ajv-formats · minimum · exclusiveMinimum · multipleOf · prefixItems · contains · uniqueItems · patternProperties · propertyNames · dependentRequired
+keywords: strings · format · أرقام · arrays · tuples · objects · dependencies
+goal: تحط حدود دقيقة على كل نوع، وتعرف فخاخ الـ format والـ pattern والـ multipleOf.
+part: الـ keywords
+color: c4
+---
+
+## الـ strings
+
+<File name="username.json">
+
+```json
+{
+  "type": "string",
+  "minLength": 3,
+  "maxLength": 20,
+  "pattern": "^[a-z0-9_]+$"
+}
+```
+
+</File>
+
+- **الـ `minLength` / `maxLength`:** بيعدّوا **حروف Unicode** (code points)، مش الـ `.length` بتاع JavaScript. الـ emoji `😀` طوله `2` في JS، بس Ajv بيعتبره حرف واحد، فبيفشل في `minLength: 2`.
+- **الـ `pattern`:** regex بصيغة ECMA-262 (زي JavaScript). جرّبنا `"Ab"` وطلع خطأين: `must NOT have fewer than 3 characters` و`must match pattern "^[a-z0-9_]+$"`.
+- **الـ backslash في JSON:** لازم يتكتب مرتين، يعني `\d` تبقى `"\\d"`.
+
+<Box type="warn" title="الـ pattern مش anchored">
+
+الـ `pattern` بيدوّر على تطابق **في أي حتة** في النص. `"pattern": "[a-z]+"` بيقبل `"123abc456"` (اتجرّبت وطلعت `true`). لو عايز النص كله يطابق، لازم <Hl c="o">`^` في الأول و`$` في الآخر</Hl>.
+
+</Box>
+
+## الـ `format`: أهم فخ في الـ strings
+
+الـ `format` بيقول إن الـ string شكلها معروف: `email`، `uri`، `date`، `date-time`، `time`، `uuid`، `ipv4`، `ipv6`، `hostname`، `duration`، `regex`، `json-pointer`…
+
+- **في الـ standard (2019-09 و2020-12):** الـ `format` **annotation بس** by default. يعني validator ماشي بالـ spec بالحرف ممكن يقبل `"not-an-email"` عادي.
+- **في Ajv:** الـ formats مش جوه Ajv نفسه. لو كتبت `format: "email"` من غير `ajv-formats` و`strict` شغال، هيرمي:
+
+<File name="output">
+
+```text
+unknown format "email" ignored in schema at path "#"
+```
+
+</File>
+
+- **الحل:** `pnpm add ajv-formats` و`addFormats(ajv)`، وساعتها Ajv بيعامل الـ format كـ assertion.
+- **تقدر تختار formats معينة:** `addFormats(ajv, ["date", "email"])`.
+- **تقدر تقفلها خالص:** `new Ajv({ validateFormats: false })`، فالـ format يبقى توثيق بس.
+
+<File name="formats.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+
+const ajv = new Ajv({ allErrors: true });
+addFormats(ajv);
+
+const validate = ajv.compile({
+  type: "object",
+  properties: {
+    d: { type: "string", format: "date" },
+    t: { type: "string", format: "time" },
+    u: { type: "string", format: "uuid" },
+    e: { type: "string", format: "email" },
+  },
+});
+
+console.log(validate({ d: "2026-02-30", t: "10:00:00", u: "123", e: "a@b" }));
+for (const e of validate.errors) console.log(e.instancePath, e.message);
+```
+
+</File>
+
+<File name="output">
+
+```text
+false
+/d must match format "date"
+/t must match format "time"
+/u must match format "uuid"
+/e must match format "email"
+```
+
+</File>
+
+- **الـ `date` بيفهم التقويم:** `2026-02-30` مرفوض لأن فبراير مفيهوش ٣٠.
+- **الـ `time` محتاج timezone:** `10:00:00` مرفوض، و`10:00:00Z` مقبول في ajv-formats.
+- **الـ `email` تقريبي:** `a@b` مرفوض و`a@b.c` مقبول. مفيش regex بيضمن إن الإيميل موجود فعلًا، فابعت رسالة تأكيد.
+- **راجع الـ docs:** ajv-formats عنده mode اسمه `fast` وmode اسمه `full`، وبيفرقوا في الدقة.
+
+<Box type="tip" title="محتوى encoded جوه string">
+
+فيه annotations اسمها `contentEncoding` (زي `base64`) و`contentMediaType` (زي `application/json`). بتوصف إن الـ string جواها حاجة تانية. Ajv مش بيراجعهم by default، فلو مهمين اعمل decode وvalidate بنفسك.
+
+</Box>
+
+## الأرقام
+
+<File name="price.json">
+
+```json
+{
+  "type": "number",
+  "exclusiveMinimum": 0,
+  "maximum": 100,
+  "multipleOf": 0.5
+}
+```
+
+</File>
+
+- **الـ `minimum` / `maximum`:** شامل، يعني `>=` و`<=`.
+- **الـ `exclusiveMinimum` / `exclusiveMaximum`:** رقم، ومش شامل، يعني `>` و`<`. هنا `0` مرفوض برسالة `must be > 0`.
+- **الـ `multipleOf`:** لازم يقبل القسمة. `0.3` مرفوض برسالة `must be multiple of 0.5`.
+- **في draft-04 كانت boolean:** `"exclusiveMinimum": true` جنب `minimum`. في 2020-12 ده بيدي error: `schema is invalid: data/exclusiveMinimum must be number`.
+
+<Box type="warn" title="الـ multipleOf مع الكسور العشرية">
+
+جرّبنا `"multipleOf": 0.01` على `19.99` وطلع **invalid**! السبب إن الـ floating point مش دقيق (`19.99 / 0.01` مش رقم صحيح بالظبط). الحلول:
+
+- **الأحسن:** خزّن الفلوس كـ integer بالقروش (`1999`) واستخدم `"type": "integer"`.
+- **أو في Ajv:** `new Ajv({ multipleOfPrecision: 6 })`، وساعتها `19.99` بيعدّي.
+
+</Box>
+
+## الـ arrays
+
+<File name="arrays.json">
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true
+    },
+    "location": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "number", "minimum": -90, "maximum": 90 },
+        { "type": "number", "minimum": -180, "maximum": 180 }
+      ],
+      "items": false,
+      "minItems": 2
+    },
+    "roles": {
+      "type": "array",
+      "contains": { "const": "owner" },
+      "minContains": 1,
+      "maxContains": 1
+    }
+  }
+}
+```
+
+</File>
+
+- **الـ `items`:** schema كل عنصر في الـ array لازم يطابقها.
+- **الـ `minItems` / `maxItems`:** عدد العناصر. حط `maxItems` دايمًا على input جاي من بره.
+- **الـ `uniqueItems`:** ممنوع التكرار، والمقارنة deep، يعني `[{"a":1},{"a":1}]` مرفوضة.
+- **الـ `prefixItems`:** tuple، كل مكان ليه schema. `[30, 31]` تمام.
+- **الـ `items: false` بعد `prefixItems`:** معناها ممنوع عناصر بعد الـ tuple. `[30, 31, 5]` بيترفض بـ `must NOT have more than 2 items`.
+- **الـ `minItems` مع الـ tuple:** من غيره `[30]` بيعدّي، لأن `prefixItems` بيراجع الموجود بس. وAjv في strict mode بيطبع warning لو نسيته.
+- **الـ `contains`:** لازم عنصر واحد على الأقل يطابق. ومعاه `minContains` / `maxContains` للعدد. هنا لازم يبقى فيه owner **واحد بالظبط**.
+
+<Box type="warn" title="الـ items اتغيرت في 2020-12">
+
+في draft-07 الـ tuple كان `"items": [ {...}, {...} ]` (array) ومعاه `additionalItems`. في 2020-12 بقى `prefixItems`، و`items` بقت schema واحدة بس. لو كتبت الشكل القديم في Ajv2020 هتاخد: `schema is invalid: data/items must be object,boolean`.
+
+</Box>
+
+## الـ objects: قيود متقدمة
+
+<File name="headers.json">
+
+```json
+{
+  "type": "object",
+  "patternProperties": {
+    "^x-": { "type": "string" }
+  },
+  "propertyNames": { "pattern": "^[a-z-]+$" },
+  "minProperties": 1,
+  "maxProperties": 30
+}
+```
+
+</File>
+
+- **الـ `patternProperties`:** schema لكل حقل اسمه بيطابق regex. هنا أي حقل بيبدأ بـ `x-` قيمته لازم string.
+- **الـ `propertyNames`:** شرط على **أسماء** الحقول نفسها. `{"Bad": "1"}` بيترفض لأن فيه حرف capital.
+- **الـ `minProperties` / `maxProperties`:** عدد الحقول. `{}` بيترفض بـ `must NOT have fewer than 1 properties`.
+
+## حقل بيستدعي حقل
+
+<File name="payment.json">
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "card": { "type": "string" },
+    "cvv": { "type": "string" },
+    "billing": { "type": "string" }
+  },
+  "dependentRequired": {
+    "card": ["cvv"]
+  },
+  "dependentSchemas": {
+    "card": { "required": ["billing"] }
+  }
+}
+```
+
+</File>
+
+- **الـ `dependentRequired`:** لو `card` موجود، يبقى `cvv` لازم. الرسالة: `must have property cvv when property card is present`.
+- **الـ `dependentSchemas`:** لو `card` موجود، الـ object كله لازم يطابق schema تانية. أقوى من `dependentRequired`.
+- **في draft-07 كانوا keyword واحد:** اسمه `dependencies`، واتقسم في 2019-09.
+- **لو الشرط على قيمة الحقل مش وجوده:** استخدم `if/then` (فصل ٥).
+
+<Box type="story" icon="🍲" title="كشري بالإضافات">
+
+`dependentRequired` زي عربية الكشري: لو طلبت **"إضافة شطة"** لازم تقول **"قد إيه"**. الشطة مش إجبارية، بس لو طلبتها، الكمية بقت إجبارية.
+
+</Box>
+
+<Checklist id="jsonschema-constraints" title="خلّصت الفصل لما" items={["تستخدم `minLength` و`maxLength` و`pattern` وتعرف إن الطول بالـ code points", "تحط `^` و`$` في الـ pattern", "تشغّل `ajv-formats` وتعرف إن format annotation في الـ spec", "تفرق بين `minimum` و`exclusiveMinimum`", "تتجنب `multipleOf` مع الكسور وتخزن الفلوس بالقروش", "تكتب tuple بـ `prefixItems` و`items: false` و`minItems`", "تستخدم `contains` و`uniqueItems`", "تستخدم `patternProperties` و`propertyNames`", "تستخدم `dependentRequired` و`dependentSchemas`"]} />
+
+<Quiz>
+<Q n={1} q="الـ pattern `[0-9]{11}` على رقم موبايل. فين المشكلة؟">مش anchored، فـ `abc01012345678xyz` هيعدّي. الصح `^01[0125][0-9]{8}$`.</Q>
+<Q n={2} q="كتبت `format: email` وAjv قبل `not-an-email`. ليه؟">غالبًا معملتش `addFormats(ajv)` وstrict مقفول، أو شغال بـ `validateFormats: false`. في الـ spec نفسها الـ format annotation بس.</Q>
+<Q n={3} q="عايز array فيها نقطتين بالظبط (x, y) بالـ 2020-12؟">`prefixItems` فيها schemaين number، ومعاها `items: false` و`minItems: 2`.</Q>
+<Q n={4} q="سعر `19.99` اترفض مع `multipleOf: 0.01`. الحل؟">خزّنه integer بالقروش `1999`، أو استخدم `multipleOfPrecision` في Ajv.</Q>
+</Quiz>

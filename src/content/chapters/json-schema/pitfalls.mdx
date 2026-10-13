@@ -1,0 +1,140 @@
+---
+title: إمتى لأ؟ — الحدود والتطوّر والأمان
+short: إمتى لأ؟
+order: 12
+label: فصل ١٢
+badge: بعدها · فصل ١٢
+en: business rules · uniqueness · authorization · over-strict · schema evolution · breaking changes · versioning · ReDoS · payload limits · untrusted schemas · SSRF
+keywords: مش بتعمل إيه · schema evolution · breaking changes · ReDoS · حجم الـ payload · schemas من بره
+goal: تعرف حدود الـ JSON Schema، وتغيّر الـ schemas من غير ما تكسر حد، وتقفل الثغرات الأمنية اللي ممكن تفتحها.
+part: بعدها
+color: c2
+---
+
+## الـ JSON Schema بتراجع الشكل، مش المعنى
+
+<Hl c="y">الـ schema بتجاوب "الـ JSON ده شكله صح؟"، مش "الطلب ده مسموح ومنطقي؟".</Hl> حاجات مش شغلتها:
+
+- **مقارنة حقلين ببعض:** `endDate` بعد `startDate`، أو `confirmPassword` زي `password`. الـ standard مفيهوش ده. Ajv عنده `$data` لحالات قليلة، بس الأوضح إنك تكتبها كود.
+- **حاجات محتاجة الداتابيز:** الإيميل مش مستخدم قبل كده، الـ `productId` موجود فعلًا، المخزون يكفي.
+- **الصلاحيات:** اليوزر ده يقدر يعدّل الـ order ده؟ ده authorization مش validation.
+- **حسابات:** الـ `total` يساوي مجموع الأصناف. احسبه على السيرفر ومتصدقش اللي جاي.
+- **الـ sanitization:** string عدّت الـ schema ممكن يبقى فيها `<script>` أو `' OR 1=1`. لسه محتاج parameterized queries وescaping للـ HTML.
+
+<Flow items={[{"t": "JSON.parse", "s": "syntax", "c": 1}, "→", {"t": "JSON Schema", "s": "الشكل والـ types", "c": 2}, "→", {"t": "business rules", "s": "كود", "c": 3}, "→", {"t": "authz", "s": "مسموحلك؟", "c": 4}, "→", {"t": "DB constraints", "s": "unique / FK", "c": 5}]} />
+
+<Box type="story" icon="🏛️" title="موظف الشباك مش المدير">
+
+موظف الشباك بيتأكد إن **الفورم متملي صح**: كل الخانات موجودة والرقم القومي ١٤ رقم. بس مش هو اللي بيقرر **توافق على الطلب ولا لأ**، ولا بيدوّر في الأرشيف إذا كان عندك طلب قديم. دي شغلة المكتب اللي جوه. الـ schema = الشباك، والـ business logic = المكتب.
+
+</Box>
+
+## إمتى متستخدمهاش؟
+
+- **بين functions جوه نفس الكود:** الـ TypeScript كفاية. الـ validation على كل function call تكلفة من غير فايدة.
+- **لو كل حاجة TypeScript ومحتاج transforms كتير:** Zod غالبًا أريح (فصل ١٠).
+- **لو البيانات binary وبين services داخلية:** Protobuf أو Avro أنسب وأصغر.
+- **لو الشرط منطق معقد:** متحاولش تكتبه بـ ١٠ `if/then` متداخلين. الـ schema هتبقى مستحيلة تتقري، والـ errors محدش هيفهمها.
+- **لو الـ payload ضخم جدًا وبيتعمل stream:** الـ validator محتاج الـ object كله في الـ memory بعد الـ parse.
+
+## الـ schema الـ strict زيادة عن اللزوم
+
+- **الـ `additionalProperties: false` على حاجة جاية من service تانية:** يوم ما يضيفوا حقل، الـ consumer بتاعك هيرفض كل الرسايل. **كن صارم في اللي بتستقبله من يوزرز، ومتسامح في اللي بتقراه من services بتتطور.**
+- **الـ `enum` في الـ responses:** لو الـ API ضاف status جديد `refunded`، كل client عامل validation بـ enum قديم هيقع. الـ clients لازم يتعاملوا مع قيمة مش معروفة.
+- **الـ `pattern` مبالغ فيه:** regex للأسماء بيرفض `O'Brien` أو أسماء بالعربي. اختبر الـ schema على بيانات حقيقية.
+- **الـ `maxLength` صغير:** عنوان طوله 100 حرف مثلًا بيرفض عناوين حقيقية في مصر.
+
+## تطوير الـ schema من غير ما تكسر حد
+
+<Grid2>
+<Card title="✅ آمن غالبًا (للـ input)" c={3}>
+
+- **ضيف حقل optional جديد.**
+- **وسّع قيد:** `maxLength` من 50 لـ 100.
+- **ضيف قيمة للـ enum** (لو محدش بيقرا الـ output ده بـ enum).
+- **اعمل حقل required اختياري.**
+
+</Card>
+<Card title="❌ بيكسر" c={5}>
+
+- **ضيف حقل required:** كل الـ clients القديمة هتترفض.
+- **شيل حقل أو غيّر اسمه.**
+- **غيّر الـ type:** `id` من integer لـ string.
+- **ضيّق قيد:** `maxLength` من 100 لـ 50، أو pattern أقوى.
+- **شيل قيمة من الـ enum.**
+
+</Card>
+</Grid2>
+
+- **الاتجاه بيفرق:** <Hl c="o">للـ input (اللي بتستقبله)، التوسيع آمن والتضييق بيكسر.</Hl> للـ **output** (اللي بتبعته)، العكس تقريبًا: إضافة enum value بتكسر اللي بيقروا.
+- **متضيّقش schema بهدوء:** حتى لو القيد الجديد "منطقي"، فيه clients بتبعت الشكل القديم. ضيف القيد كـ warning في الـ logs الأول، وشوف مين بيكسره، وبعدين فعّله.
+- **الـ expand / contract:** عايز تغيّر `name` لـ `fullName`؟ اقبل الاتنين الأول (expand)، وحدّث الـ clients، وبعدين شيل القديم (contract).
+- **الـ versions:** حط الـ version في الـ `$id` زي `https://koshary.example/schemas/v2/order.json`، أو في الـ URL بتاع الـ API (`/v2/orders`)، أو في حقل `schemaVersion` جوه الـ event.
+- **في Kafka:** الـ Schema Registry بيعمل الكلام ده أوتوماتيك بـ compatibility modes، وبيرفض schema جديدة بتكسر.
+- **اختبر التغيير:** خلي عندك أمثلة حقيقية قديمة (fixtures) وشغّل الـ schema الجديدة عليها في الـ CI.
+
+## الأمان: الـ ReDoS
+
+الـ `pattern` regex، والـ regex الوحش ممكن ياخد وقت **أُسّي** على input معين:
+
+<File name="redos.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+
+const evil = { type: "string", pattern: "^(a+)+$" }; // nested quantifier
+const validate = new Ajv().compile(evil);
+
+for (const n of [20, 24, 26]) {
+  const input = "a".repeat(n) + "!";
+  const t = performance.now();
+  validate(input);
+  console.log(`${n + 1} حرف: ${(performance.now() - t).toFixed(0)}ms`);
+}
+```
+
+</File>
+
+<File name="output (على جهاز التجربة)">
+
+```text
+21 حرف: 106ms
+25 حرف: 219ms
+27 حرف: 1048ms
+```
+
+</File>
+
+- **٢٧ حرف بس = ثانية كاملة:** والـ Node single-threaded، فالسيرفر كله واقف الثانية دي. كام request زي ده = السيرفر مات.
+- **الأشكال الخطيرة:** quantifier جوه quantifier زي `(a+)+` و`(a*)*` و`(a|aa)+` و`(\w+\s?)+`.
+- **الـ `maxLength` بيحمي... أحيانًا:** جرّبنا `maxLength: 20` قبل نفس الـ pattern على ٢٧ حرف. من غير `allErrors` Ajv وقف عند الـ `maxLength` وخلّص في `0ms`. <Hl c="p">بس مع `allErrors: true` كمّل وشغّل الـ regex واستنى 7.7 ثانية.</Hl>
+- **الحلول:** اكتب regex بسيطة من غير nesting، واختبرها بأداة ReDoS checker، وفيه option في Ajv إنه يستخدم `re2` (regex engine وقته linear). راجع الـ docs.
+
+## الأمان: الحجم والعمق
+
+- **حد على حجم الـ body قبل الـ parse:** `express.json({ limit: "10kb" })` أو `bodyLimit` في Fastify. الـ schema بتشتغل **بعد** الـ parse، يعني بعد ما الـ memory اتصرفت خلاص.
+- **حط `maxLength` على كل string، و`maxItems` على كل array، و`maxProperties` على الـ maps:** من غيرهم array فيها مليون عنصر valid.
+- **الـ recursive schemas:** حط حدود على العمق والعدد (فصل ٦).
+- **الـ `allErrors` على input من بره:** بيكمّل يراجع حتى بعد أول غلط. مع array كبيرة كلها غلط، هتجمع آلاف الـ errors وتبعتهم في الـ response. حدد عدد الـ errors اللي بترجعه، أو اقفل `allErrors` في الـ APIs العامة.
+
+## الأمان: الـ schemas نفسها
+
+- **متعملش compile لـ schema جاية من يوزر:** Ajv بيحوّل الـ schema لكود JavaScript. الـ schema اللي من بره ممكن تبقى regex قاتلة، أو ضخمة، أو بتستغل bug في الـ code generation. الـ schemas بتاعتك لازم تبقى ملفات جوه الـ repo.
+- **متحمّلش `$ref` من النت وقت التشغيل:** (فصل ٦) خطر SSRF وبطء ووقوع لو السيرفر التاني وقع.
+- **الـ error messages:** متبعتش `schemaPath` ولا الـ schema كلها في الـ response. كفاية الحقل والقاعدة.
+- **الـ validation مش sanitization:** string سليمة شكلًا لسه ممكن تبقى SQL injection أو XSS. استخدم parameterized queries وescape الـ output.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"ضفنا حقل required جديد للـ API والـ mobile app القديمة وقعت. كان المفروض نعمل إيه؟" الإجابة: <Hl c="b">نضيفه optional الأول بـ default على السيرفر، ونحدّث الـ apps، ونستنى الـ adoption، وبعدين نخليه required أو نعمل version جديدة.</Hl> إضافة required لـ input = breaking change.
+
+</Box>
+
+<Checklist id="jsonschema-pitfalls" title="خلّصت الفصل لما" items={["تعرف 5 حاجات الـ schema مش بتعملها", "تعرف إمتى متستخدمش JSON Schema", "تتجنب additionalProperties false وenum الضيقة على بيانات بتتطور", "تفرق بين التغييرات الآمنة والـ breaking للـ input والـ output", "تطبق expand / contract وversion في الـ `$id`", "تتعرف على regex خطيرة وتعرف إن `allErrors` بيلغي حماية `maxLength`", "تحط limits على الحجم والعدد قبل وبعد الـ parse", "متعملش compile لـ schemas جاية من بره"]} />
+
+<Quiz>
+<Q n={1} q="عايز تتأكد إن `endDate` بعد `startDate`. تعملها في الـ schema؟">الـ standard مش بيقارن حقلين. اعملها كود بعد الـ validation (أو `$data` في Ajv لو الحالة بسيطة).</Q>
+<Q n={2} q="غيّرت `maxLength` بتاع الاسم من 100 لـ 50 في API موجود. فيه مشكلة؟">آه، breaking change. clients بتبعت أسماء أطول هتترفض فجأة. سجّلها warning الأول وشوف مين بيكسرها.</Q>
+<Q n={3} q="pattern `^(\w+\s?)+$` على حقل الاسم. فيه خطر؟">آه، nested quantifier، ممكن ReDoS على input معين. بسّطها وحط maxLength، ومتعتمدش على maxLength لو `allErrors` شغال.</Q>
+<Q n={4} q="الـ body فيه array بمليون عنصر كلهم valid. إيه اللي كان يمنعه؟">limit على حجم الـ body قبل الـ parse، و`maxItems` في الـ schema.</Q>
+</Quiz>

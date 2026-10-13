@@ -1,0 +1,272 @@
+---
+title: الـ TypeScript — مصدر واحد للحقيقة
+short: الـ TypeScript
+order: 10
+label: فصل ١٠
+badge: التطبيق · فصل ١٠
+en: JSONSchemaType · type guard · json-schema-to-typescript · ts-json-schema-generator · TypeBox · Static · Zod 4 · z.toJSONSchema · single source of truth
+keywords: type guard · schema ← types · types ← schema · TypeBox · Zod · إمتى مين
+goal: تخلي الـ schema والـ TypeScript type ميتفرقوش أبدًا، وتعرف تختار بين JSON Schema وTypeBox وZod.
+part: التطبيق
+color: c5
+---
+
+## المشكلة: حاجتين بيوصفوا نفس الشكل
+
+عندك `interface Order` في الـ TypeScript، و`order.json` كـ JSON Schema. لو حد زوّد حقل في واحد ونسي التاني:
+
+- **الـ type بيقول فيه `discount`:** والـ schema بترفضه بـ `additionalProperties`. الـ API بقى بيرفض طلبات سليمة.
+- **أو العكس:** الـ schema بتقبل حقل الكود مش متوقعه، فبيتعامل معاه على إنه `undefined`.
+
+<Hl c="y">الحل: مصدر واحد للحقيقة، والتاني يتولّد منه أوتوماتيك.</Hl> عندك أكتر من طريقة.
+
+<Flow items={[{"t": "JSON Schema", "s": "هي الأصل", "c": 1}, "→", {"t": "json-schema-to-typescript", "s": "يولّد types", "c": 2}, "→", {"t": "أو TypeBox / Zod", "s": "كود هو الأصل", "c": 3}, "→", {"t": "يولّد schema + type", "c": 4}]} />
+
+## الطريقة ١: Ajv بيعمل type guard
+
+<File name="typed.ts">
+
+```ts
+import { Ajv2020 } from "ajv/dist/2020.js";
+import type { JSONSchemaType } from "ajv";
+
+interface CreateUser {
+  name: string;
+  age?: number;
+  role: "admin" | "user";
+}
+
+const schema: JSONSchemaType<CreateUser> = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 2 },
+    age: { type: "integer", nullable: true },
+    role: { type: "string", enum: ["admin", "user"] },
+  },
+  required: ["name", "role"],
+  additionalProperties: false,
+};
+
+const ajv = new Ajv2020();
+const validate = ajv.compile(schema);
+
+const input: unknown = JSON.parse('{"name":"Saeed","role":"admin"}');
+if (validate(input)) {
+  console.log(input.name.toUpperCase(), input.role); // ← input بقى CreateUser
+} else {
+  console.log(validate.errors);
+}
+```
+
+</File>
+
+- **الـ `validate(input)`:** type guard. جوه الـ `if` الـ TypeScript عارف إن `input` نوعه `CreateUser`. الناتج: `SAEED admin`.
+- **الـ `JSONSchemaType<CreateUser>`:** بيخلي الـ compiler يراجع إن الـ schema مطابقة للـ interface. جرّبنا نكتب `name: { type: "number" }` والـ `tsc` رفض: `The types of 'properties.name' are incompatible`.
+- **فخ الـ optional:** أي حقل optional لازم يتكتب فيه `nullable: true`، وإلا `tsc` بيقول `Property 'nullable' is missing`. ده شرط من Ajv نفسه، مش من الـ spec.
+- **الحدود:** رسايل الـ TS error طويلة جدًا، والـ unions المعقدة بتتعب. وفيه `JTDSchemaType` لو بتستخدم JSON Type Definition بدل JSON Schema.
+
+## الطريقة ٢: الـ schema هي الأصل ← types
+
+لما الـ schemas JSON ومشتركة مع لغات تانية، ولّد الـ types منها:
+
+<File name="gen-types.js">
+
+```js
+import { compile } from "json-schema-to-typescript";
+
+const schema = {
+  title: "User",
+  type: "object",
+  properties: {
+    id: { type: "integer" },
+    name: { type: "string", description: "اسم اليوزر" },
+    role: { enum: ["admin", "user"] },
+    tags: { type: "array", items: { type: "string" } },
+  },
+  required: ["id", "name"],
+  additionalProperties: false,
+};
+
+console.log(await compile(schema, "User", { bannerComment: "" }));
+```
+
+</File>
+
+<File name="output">
+
+```ts
+export interface User {
+  id: number;
+  /**
+   * اسم اليوزر
+   */
+  name: string;
+  role?: "admin" | "user";
+  tags?: string[];
+}
+```
+
+</File>
+
+- **الـ `description`:** بقت JSDoc، فبتظهر في الـ hover.
+- **الـ `integer`:** بقى `number`، لأن TS مفيهوش integer.
+- **القيود زي `minLength` بتضيع:** الـ type مش بيقدر يعبّر عنها، بس الـ validator لسه بيراجعها.
+- **فيه CLI:** `json2ts` في نفس الـ package. شغّله في الـ build أو في script، وراجع الـ docs للـ flags.
+
+## الطريقة ٣: الـ types هي الأصل ← schema
+
+<File name="types.ts">
+
+```ts
+export interface Order {
+  /** @minimum 1 */
+  id: number;
+  status: "new" | "paid" | "shipped";
+  /** @format email */
+  customerEmail: string;
+  note?: string;
+}
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+pnpm add -D ts-json-schema-generator
+pnpm exec ts-json-schema-generator --path types.ts --type Order
+```
+
+</File>
+
+- **الناتج:** schema بـ `"$schema": "http://json-schema.org/draft-07/schema#"` وجواها `definitions.Order` فيها `required: ["id", "status", "customerEmail"]` و`additionalProperties: false`، والـ `@minimum` والـ `@format` بقوا keywords.
+- **خلي بالك:** الناتج **draft-07** بـ `definitions`، مش 2020-12. استخدمه مع `import Ajv from "ajv"`.
+- **فيه كمان `typescript-json-schema`:** أقدم وبنفس الفكرة.
+- **العيب:** القيود بتتكتب في JSDoc comments، وده سهل تغلط فيه ومفيش autocomplete.
+
+## الطريقة ٤: TypeBox — الكود بيطلّع JSON Schema
+
+الـ **TypeBox** بيخليك تكتب بـ functions، والناتج **JSON Schema حقيقي** ومعاه type:
+
+<File name="typebox.ts">
+
+```ts
+import Type, { type Static } from "typebox";
+import Ajv from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+
+const User = Type.Object({
+  name: Type.String({ minLength: 2 }),
+  email: Type.String({ format: "email" }),
+  age: Type.Optional(Type.Integer({ minimum: 0 })),
+  role: Type.Union([Type.Literal("admin"), Type.Literal("user")]),
+}, { additionalProperties: false });
+
+type User = Static<typeof User>; // { name: string; email: string; age?: number; role: "admin" | "user" }
+
+console.log(JSON.stringify(User)); // JSON Schema عادية
+
+const ajv = addFormats(new Ajv({ allErrors: true }));
+const validate = ajv.compile(User);
+console.log(validate({ name: "S", email: "x", role: "boss" }), ajv.errorsText(validate.errors));
+```
+
+</File>
+
+- **الـ `User` نفسه object JSON Schema:** `{"type":"object","required":["name","email","role"],"properties":{...},"additionalProperties":false}`، والـ union بقت `anyOf` بـ `const`.
+- **الـ `Static<typeof User>`:** بيطلّع الـ TypeScript type. مصدر واحد.
+- **بيشتغل مع Ajv وFastify على طول:** لأن الناتج JSON Schema.
+- **وفيه validator خاص بيه:** `Value.Check(User, data)` من `typebox/value`.
+- **اسم الـ package:** الإصدار الجديد اسمه `typebox` (1.x). القديم كان `@sinclair/typebox` (0.34). الـ API قريب، بس راجع الـ docs لو بتنقل.
+
+<Box type="tip" title="الـ tsconfig والـ default import">
+
+الأمثلة دي عدّت من `tsc` بـ `"module": "preserve"` و`"moduleResolution": "bundler"` (الشائع مع `tsx` والـ bundlers). مع `"module": "nodenext"` الـ `import Ajv from "ajv/dist/2020.js"` بيدي `This expression is not constructable` لأن Ajv مكتوب CommonJS. الحل هناك: `import { Ajv2020 } from "ajv/dist/2020.js"` زي أول مثال في الفصل.
+
+</Box>
+
+## الطريقة ٥: Zod 4 ← JSON Schema
+
+لو المشروع أصلًا بـ Zod، Zod 4 بيطلّع JSON Schema built-in:
+
+<File name="zod-schema.js">
+
+```js
+import { z } from "zod";
+
+const User = z.object({
+  name: z.string().min(2),
+  email: z.email(),
+  age: z.number().int().min(0).optional(),
+  role: z.enum(["admin", "user"]).default("user"),
+});
+
+console.log(JSON.stringify(z.toJSONSchema(User), null, 2));
+```
+
+</File>
+
+<File name="output (مختصر)">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "minLength": 2 },
+    "email": { "type": "string", "format": "email", "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*..." },
+    "age": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "role": { "default": "user", "type": "string", "enum": ["admin", "user"] }
+  },
+  "required": ["name", "email", "role"],
+  "additionalProperties": false
+}
+```
+
+</File>
+
+- **الـ `role` في `required`:** لأن الـ default إنه بيوصف الـ **output** (بعد ما الـ default اتحط). لو عايز شكل الـ **input** اكتب `z.toJSONSchema(User, { io: "input" })`، وساعتها الـ required بقى `["name", "email"]` بس.
+- **الـ `int()`:** بيطلّع `maximum: 9007199254740991` (أكبر safe integer).
+- **الـ `target`:** `"draft-7"` أو `"draft-4"` أو `"openapi-3.0"`. الأخير بيطلّع `nullable: true` بدل `type` array.
+- **حاجات مينفعش تتحول:** `z.date()` بيرمي `Date cannot be represented in JSON Schema`، و`.transform()` بيرمي `Transforms cannot be represented in JSON Schema`. فيه option اسمه `unrepresentable: "any"` بيحطهم `{}`.
+- **الـ `.refine()` بتضيع بهدوء:** refine بيقارن `pass` بـ `confirm` طلع schema عادية من غير الشرط. يعني الـ schema الناتجة **أضعف** من الـ Zod schema.
+- **الـ Zod 3:** مفيهوش `toJSONSchema`، وكانوا بيستخدموا package اسمها `zod-to-json-schema`.
+- **والعكس موجود:** Zod 4 فيه `z.fromJSONSchema()`، جرّبناه على schema بسيطة واشتغل. راجع الـ docs لأنه جديد.
+
+<Box type="warn" title="الـ z.object بيمسح الحقول الزيادة">
+
+الـ `z.object` الـ default بتاعه إنه **بيمسح** الحقول المش معروفة: `parse({name: "x", isAdmin: true})` بيرجّع `{ name: 'x' }`. عشان ترفضها استخدم `z.strictObject` وهتاخد `Unrecognized key: "isAdmin"`. ده نفس فرق `removeAdditional` ضد `additionalProperties: false` في Ajv.
+
+</Box>
+
+## JSON Schema ولا Zod؟
+
+| السؤال | JSON Schema (+ Ajv / TypeBox) | Zod |
+|---|---|---|
+| الـ schema نفسها | JSON / data | كود TypeScript |
+| تتشارك مع Python / Go | آه، زي ما هي | لازم تحوّلها الأول |
+| OpenAPI والـ LLMs والـ editors | native | بعد `toJSONSchema` |
+| شروط custom بكود | صعب (keywords custom في Ajv) | سهل بـ `refine` |
+| تحويل البيانات | محدود (coerce / defaults) | `transform` و`coerce` و`pipe` |
+| السرعة | Ajv من الأسرع (كود متولد) | كويسة، وZod 4 أسرع من 3 |
+| حجم الـ bundle للـ frontend | Ajv تقيل نسبيًا | أخف، وفيه `zod/mini` |
+| الـ DX في TS | TypeBox كويس، `JSONSchemaType` متعب | ممتاز |
+
+- **اختار JSON Schema لو:** الـ schema contract بين فرق أو لغات، أو أصلها OpenAPI، أو بتستخدمها لـ config files أو MongoDB أو LLM.
+- **اختار Zod لو:** كل حاجة TypeScript، ومحتاج transforms و refinements، وخصوصًا forms على الـ frontend.
+- **اختار TypeBox لو:** عايز JSON Schema حقيقي مع DX شبه Zod، وخصوصًا مع Fastify.
+- **وينفع تجمع:** Zod جوه التطبيق، و`z.toJSONSchema` يطلّع الـ schema للـ OpenAPI أو للـ LLM.
+
+<Box type="story" icon="🧵" title="الترزي والباترون">
+
+الـ **باترون** (الـ schema) هو الأصل. منه بيتقص القماش (الـ validation) وبيترسم الكتالوج (الـ types والـ docs). لو كل واحد رسم باترون لوحده، البدلة هتطلع كم طويل وكم قصير. **باترون واحد، وكل حاجة تتقص منه.**
+
+</Box>
+
+<Checklist id="jsonschema-typescript" title="خلّصت الفصل لما" items={["تستخدم `validate` كـ type guard", "تكتب `JSONSchemaType<T>` وتعرف فخ `nullable: true`", "تولّد types من schema بـ json-schema-to-typescript", "تولّد schema من types بـ ts-json-schema-generator وتعرف إنها draft-07", "تكتب TypeBox وتطلّع الـ type بـ `Static`", "تستخدم `z.toJSONSchema` وتفرق بين `io` input وoutput", "تعرف إن refine وtransform وDate مش بيتحولوا", "تختار بين JSON Schema وZod وTypeBox"]} />
+
+<Quiz>
+<Q n={1} q="ليه `z.toJSONSchema` حط الحقل اللي عليه default في required؟">لأنه by default بيوصف الـ output بعد الـ parse، والحقل ساعتها موجود دايمًا. استخدم `io: input` لشكل اللي هيتبعت.</Q>
+<Q n={2} q="Zod schema فيها refine إن تاريخ النهاية بعد البداية، وطلّعتها JSON Schema للـ OpenAPI. فيه مشكلة؟">آه، الـ refine بيضيع بهدوء، فالـ schema في الـ docs أضعف من الحقيقة. وثّق الشرط في description، وخلي الـ validation الحقيقي على السيرفر.</Q>
+<Q n={3} q="عندك services بـ Python وNode بيستخدموا نفس الـ events. تختار إيه؟">JSON Schema كملفات مشتركة، وكل لغة تعمل validation بيها، والـ TS types تتولد منها.</Q>
+</Quiz>

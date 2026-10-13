@@ -1,0 +1,337 @@
+---
+title: "🧪 Lab: API طلبات الكشري بالـ Express والـ Fastify"
+short: الـ Lab
+order: 9
+label: فصل ٩
+badge: التطبيق · فصل ٩
+en: Express middleware · express.json limit · error formatting · Fastify schema · coercion · removeAdditional · fast-json-stringify · response schema
+keywords: middleware · errors نضيفة · body limit · Fastify built-in · response serialization
+goal: تبني API حقيقي بيرفض أي طلب شكله غلط برسالة واضحة، وتشوف Fastify بيعمل نفس الحاجة built-in، وفخ الـ defaults بتاعته.
+part: التطبيق
+color: c4
+---
+
+## هنبني إيه؟
+
+endpoint واحد `POST /orders` لمحل كشري. الطلب لازم يكون فيه:
+
+- **عميل:** اسم من 2 لـ 50 حرف، وموبايل مصري، وإيميل اختياري.
+- **أصناف:** من 1 لـ 20 صنف، كل صنف `sku` من قايمة معروفة و`qty` integer من 1 لـ 10.
+- **طريقة دفع:** `cash` أو `card` أو `wallet`.
+- **ملاحظات:** اختيارية ولحد 200 حرف.
+- **ومفيش أي حقل زيادة:** عشان محدش يبعت `isAdmin` أو `discount`.
+
+<Tree>
+
+```text
+ajv-lab/
+├─ package.json
+├─ schemas/
+│  └─ order.json     ← العقد
+├─ validate.js       ← Ajv + middleware + تنسيق الـ errors
+└─ server.js         ← Express
+```
+
+</Tree>
+
+<File name="terminal">
+
+```bash
+mkdir ajv-lab && cd ajv-lab && pnpm init
+pnpm pkg set type=module scripts.start="node server.js"
+pnpm add ajv ajv-formats express
+mkdir schemas
+```
+
+</File>
+
+## الـ schema
+
+<File name="schemas/order.json">
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://koshary.example/schemas/order.json",
+  "title": "CreateOrder",
+  "type": "object",
+  "properties": {
+    "customer": { "$ref": "#/$defs/customer" },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "payment": { "enum": ["cash", "card", "wallet"] },
+    "notes": { "type": "string", "maxLength": 200 }
+  },
+  "required": ["customer", "items", "payment"],
+  "additionalProperties": false,
+  "$defs": {
+    "customer": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 2, "maxLength": 50 },
+        "phone": { "type": "string", "pattern": "^01[0125][0-9]{8}$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 }
+      },
+      "required": ["name", "phone"],
+      "additionalProperties": false
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "sku": { "enum": ["koshary-small", "koshary-large", "rice-pudding"] },
+        "qty": { "type": "integer", "minimum": 1, "maximum": 10 }
+      },
+      "required": ["sku", "qty"],
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+</File>
+
+## الـ validator والـ middleware
+
+<File name="validate.js">
+
+```js
+import { readFileSync } from "node:fs";
+import Ajv from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+
+// instance واحد للتطبيق كله
+export const ajv = new Ajv({ allErrors: true, strict: true });
+addFormats(ajv);
+
+const load = (file) => JSON.parse(readFileSync(new URL(`./schemas/${file}`, import.meta.url)));
+ajv.addSchema(load("order.json"));
+
+// يحوّل errors بتاعة Ajv لشكل نضيف يرجع للـ client
+export function formatErrors(errors = []) {
+  return errors.map((e) => {
+    let field = e.instancePath || "/";
+    if (e.keyword === "required") field = `${e.instancePath}/${e.params.missingProperty}`;
+    if (e.keyword === "additionalProperties") field = `${e.instancePath}/${e.params.additionalProperty}`;
+    return { field, rule: e.keyword, message: e.message };
+  });
+}
+
+// middleware: بياخد الـ $id بتاع الـ schema
+export function validateBody(schemaId) {
+  const validate = ajv.getSchema(schemaId);
+  if (!validate) throw new Error(`schema not found: ${schemaId}`);
+  return (req, res, next) => {
+    if (validate(req.body)) return next();
+    res.status(400).json({ error: "ValidationError", details: formatErrors(validate.errors) });
+  };
+}
+```
+
+</File>
+
+- **الـ `getSchema` بره الـ middleware:** بيحصل مرة واحدة لما الـ route يتسجل، مش مع كل request.
+- **الـ `throw` لو الـ schema مش موجودة:** السيرفر يقع وقت الـ startup أحسن ما يقع مع أول request.
+- **الـ `formatErrors`:** بيصلّح مكان الحقل في `required` و`additionalProperties`، وبيخبّي `schemaPath`.
+
+## السيرفر
+
+<File name="server.js">
+
+```js
+import express from "express";
+import { validateBody } from "./validate.js";
+
+const app = express();
+app.use(express.json({ limit: "10kb" })); // حد للحجم قبل الـ validation
+
+app.post("/orders", validateBody("https://koshary.example/schemas/order.json"), (req, res) => {
+  // هنا الـ body مضمون شكله
+  const count = req.body.items.reduce((sum, i) => sum + i.qty, 0);
+  res.status(201).json({ ok: true, customer: req.body.customer.name, count });
+});
+
+// errors الـ JSON parser نفسه (قبل الـ schema)
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") return res.status(400).json({ error: "InvalidJSON" });
+  if (err.type === "entity.too.large") return res.status(413).json({ error: "PayloadTooLarge" });
+  next(err);
+});
+
+const port = process.env.PORT ?? 3000;
+app.listen(port, () => console.log(`listening on http://localhost:${port}`));
+```
+
+</File>
+
+- **الـ `limit: "10kb"`:** أول خط دفاع. الـ body الضخم بيترفض قبل ما يتعمله parse أو validation خالص.
+- **الـ handler بقى بسيط:** مفيش ولا `if` على الشكل. `req.body.items.reduce` آمنة لأن الـ schema ضمنت إن `items` array فيها `qty` integer.
+
+## جرّب
+
+<File name="terminal">
+
+```bash
+pnpm start
+# في terminal تاني
+H='content-type: application/json'
+U=localhost:3000/orders
+
+# 1) طلب سليم
+curl -s -X POST $U -H "$H" -d '{"customer":{"name":"سعيد","phone":"01012345678"},"items":[{"sku":"koshary-large","qty":2},{"sku":"rice-pudding","qty":1}],"payment":"cash"}'
+
+# 2) كل حاجة غلط
+curl -s -X POST $U -H "$H" -d '{"customer":{"name":"س","phone":"123"},"items":[{"sku":"pizza","qty":"2"}],"payment":"bitcoin","isAdmin":true}'
+
+# 3) حقول ناقصة
+curl -s -X POST $U -H "$H" -d '{"customer":{"name":"سعيد"},"payment":"cash"}'
+
+# 4) JSON بايظ
+curl -s -X POST $U -H "$H" -d '{bad json'
+
+# 5) من غير content-type
+curl -s -X POST $U -d 'hello'
+```
+
+</File>
+
+النتايج الحقيقية:
+
+<File name="output">
+
+```text
+# 1
+{"ok":true,"customer":"سعيد","count":3}
+
+# 2
+{"error":"ValidationError","details":[
+  {"field":"/isAdmin","rule":"additionalProperties","message":"must NOT have additional properties"},
+  {"field":"/customer/name","rule":"minLength","message":"must NOT have fewer than 2 characters"},
+  {"field":"/customer/phone","rule":"pattern","message":"must match pattern \"^01[0125][0-9]{8}$\""},
+  {"field":"/items/0/sku","rule":"enum","message":"must be equal to one of the allowed values"},
+  {"field":"/items/0/qty","rule":"type","message":"must be integer"},
+  {"field":"/payment","rule":"enum","message":"must be equal to one of the allowed values"}]}
+
+# 3
+{"error":"ValidationError","details":[
+  {"field":"/items","rule":"required","message":"must have required property 'items'"},
+  {"field":"/customer/phone","rule":"required","message":"must have required property 'phone'"}]}
+
+# 4
+{"error":"InvalidJSON"}
+
+# 5
+{"error":"ValidationError","details":[{"field":"/","rule":"type","message":"must be object"}]}
+```
+
+</File>
+
+- **في 2:** ٦ أخطاء في رد واحد بفضل `allErrors`، وكل واحد فيه المكان بالظبط. والـ `"qty": "2"` اترفض لأننا مشغّلناش `coerceTypes`.
+- **في 3:** الـ `field` بقى `/items` و`/customer/phone` بدل الـ parent، بفضل `formatErrors`.
+- **في 5:** Express 5 مبيعملش parse من غير `content-type: application/json`، فالـ `req.body` بقى `undefined`، والـ schema رفضته بـ `must be object`. من غير الـ schema كان الـ handler هيقع.
+- **وbody أكبر من 10kb:** رجع `{"error":"PayloadTooLarge"}` بـ status `413`.
+
+<Box type="tip" title="زوّد عليه">
+
+- **الـ query والـ params:** اعمل schemas ليهم بـ Ajv instance تاني فيه `coerceTypes: true`، لأن قيمهم دايمًا strings.
+- **الـ tests:** اكتب test لكل حالة فوق بـ `node:test` و`fetch`، عشان أي تعديل في الـ schema يتلقط.
+- **الـ OpenAPI:** نفس `order.json` ينفع يتحط في `components/schemas` في OpenAPI 3.1 زي ما هو (فصل ١١).
+
+</Box>
+
+## نفس الحكاية في Fastify: built-in
+
+Fastify بيستخدم Ajv جوّاه، فمش محتاج middleware:
+
+<File name="fastify.js">
+
+```js
+import Fastify from "fastify";
+
+const app = Fastify();
+
+app.post("/users", {
+  schema: {
+    body: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 2 },
+        age: { type: "integer", minimum: 0 },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    response: {
+      201: {
+        type: "object",
+        properties: { id: { type: "integer" }, name: { type: "string" } },
+      },
+    },
+  },
+}, async (req, reply) => {
+  reply.code(201);
+  return { id: 7, name: req.body.name, age: req.body.age, password: "secret123" };
+});
+
+await app.ready();
+for (const payload of [{ name: "Saeed", age: "30" }, { name: "S", isAdmin: true }, { age: 5 }]) {
+  const r = await app.inject({ method: "POST", url: "/users", payload });
+  console.log(r.statusCode, r.body);
+}
+```
+
+</File>
+
+<File name="output">
+
+```text
+201 {"id":7,"name":"Saeed"}
+400 {"statusCode":400,"code":"FST_ERR_VALIDATION","error":"Bad Request","message":"body/name must NOT have fewer than 2 characters"}
+400 {"statusCode":400,"code":"FST_ERR_VALIDATION","error":"Bad Request","message":"body must have required property 'name'"}
+```
+
+</File>
+
+- **الـ `schema.body`:** Fastify بيعملها compile وقت الـ startup، وبيرد `400` لوحده.
+- **فيه كمان:** `schema.querystring` و`schema.params` و`schema.headers`.
+- **الـ `schema.response`:** بيتعمل بيها **serializer** سريع بـ `fast-json-stringify` بدل `JSON.stringify`.
+- **لاحظ الـ response:** الـ handler رجّع `password` و`age`، بس الرد طلع `{"id":7,"name":"Saeed"}` بس. الـ serializer بيطلّع الحقول اللي في الـ schema بس. <Hl c="g">ده بيحميك من تسريب حقول بالغلط.</Hl>
+- **الـ response schema مش validation:** هو بيشكّل الـ output، مش بيرفضه لو غلط. متعتمدش عليه كـ test.
+
+<Box type="warn" title="الـ defaults بتاعة Fastify مش زي Ajv">
+
+لاحظ إن `"age": "30"` **عدّى** في أول request! Fastify بيشغّل Ajv بالـ options دي by default (من الـ source بتاع `@fastify/ajv-compiler`):
+
+- **`coerceTypes: "array"`:** بيحوّل `"30"` لـ `30`.
+- **`removeAdditional: true`:** بيمسح الحقول الزيادة **بهدوء** لو فيه `additionalProperties: false`. جرّبنا `{"name":"Saeed","isAdmin":true}` والـ handler استلم `{"name":"Saeed"}` بـ `200`، من غير أي رفض.
+- **`useDefaults: true`:** بيحط الـ defaults.
+- **`allErrors: false`:** بيرجّع أول غلط بس.
+- **وdraft-07:** فـ `prefixItems` و`unevaluatedProperties` بيرموا error وقت الـ startup.
+
+لو عايز الرفض الصريح:
+
+</Box>
+
+<File name="fastify-strict.js">
+
+```js
+const app = Fastify({
+  ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
+});
+// {"name":"Saeed","isAdmin":true} ← 400 body must NOT have additional properties
+// {"name":"Saeed","age":"30"}     ← 400 body/age must be integer
+```
+
+</File>
+
+<Checklist id="jsonschema-lab" title="خلّصت الـ Lab لما" items={["تكتب schema لطلب كامل بـ `$defs` و`additionalProperties: false`", "تعمل middleware بياخد `$id` ويعمل compile مرة واحدة", "تنسّق الـ errors وتصلّح مكان `required` و`additionalProperties`", "تحط `limit` على `express.json` وتتعامل مع InvalidJSON", "تشغّل الـ 5 curls وتفهم كل رد", "تستخدم `schema.body` و`schema.response` في Fastify", "تعرف defaults بتاعة Fastify وتغيّرها بـ `customOptions`"]} />
+
+<Quiz>
+<Q n={1} q="ليه `getSchema` بره الـ function اللي بترجع للـ middleware؟">عشان يحصل مرة واحدة وقت تسجيل الـ route، والـ middleware يستخدم نفس الـ function مع كل request.</Q>
+<Q n={2} q="request من غير content-type وصل الـ handler بـ `req.body` undefined. الـ schema عملت إيه؟">رفضته بـ `must be object`، فالـ handler متنفذش أصلًا.</Q>
+<Q n={3} q="في Fastify اليوزر بعت `role: admin` والـ schema فيها `additionalProperties: false`، ومفيش error. ليه؟">لأن Fastify شغّال بـ `removeAdditional: true`، فالحقل اتمسح بهدوء. لو عايز رفض، خليه `false` في `customOptions`.</Q>
+<Q n={4} q="الـ handler رجّع `passwordHash` بالغلط. إزاي Fastify يمنعه يطلع؟">بـ `schema.response` من غير الحقل ده، لأن الـ serializer بيطلّع الحقول المذكورة بس.</Q>
+</Quiz>

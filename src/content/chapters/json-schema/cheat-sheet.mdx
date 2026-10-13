@@ -1,0 +1,84 @@
+---
+title: "Cheat Sheet: الـ JSON Schema"
+short: Cheat Sheet
+order: 13
+label: الآخر
+badge: الآخر
+en: type · required · additionalProperties · format · prefixItems · oneOf · if/then · unevaluatedProperties · $ref · 2020-12 · Ajv · Fastify · Zod · TypeBox · OpenAPI 3.1 · ReDoS
+keywords: المشكلة والحل في سطر
+goal: تفتكر كل keyword وكل فخ وكل أداة في المذكرة بسرعة.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["المشكلة", "`JSON.parse` بيقبل أي شكل، والـ TS types بتختفي وقت التشغيل، و`as T` مش validation"],
+  ["الحل", "JSON Schema = عقد مكتوب JSON، والـ validator (Ajv) يراجع عند كل trust boundary"],
+  ["الـ trust boundaries", "API bodies، webhooks، config، queues، ردود الـ LLM، localStorage، بيانات DB قديمة"],
+  ["الـ import", "`ajv` = draft-07، و`ajv/dist/2020.js` = 2020-12، ولازم يتفقوا مع `$schema`"],
+  ["الـ types", "`string` `number` `integer` `boolean` `null` `object` `array`، و`5.0` integer"],
+  ["يقبل null", "`type: [\"string\", \"null\"]`، ومفيش `nullable` بره OpenAPI 3.0"],
+  ["حقل إجباري", "`required: [...]` في الـ object، مش جوه الحقل"],
+  ["حقول زيادة", "`additionalProperties: false` للـ input، ومفتوح للبيانات اللي بتتطور"],
+  ["map", "object من غير properties + `additionalProperties: { type }`"],
+  ["قيمة ثابتة", "`enum` لقايمة، `const` لقيمة واحدة"],
+  ["الـ annotations", "`title` `description` `default` `examples` `readOnly` `writeOnly` `deprecated` `$comment`"],
+  ["الـ default", "annotation، Ajv بيحطه بس مع `useDefaults: true`"],
+  ["الـ strings", "`minLength` `maxLength` بالـ code points، و`pattern` محتاج `^...$`"],
+  ["الـ format", "annotation في الـ spec، في Ajv محتاج `ajv-formats`، و`time` محتاج timezone"],
+  ["الأرقام", "`minimum` شامل، `exclusiveMinimum` رقم مش boolean"],
+  ["الفلوس", "integer بالقروش، و`multipleOf: 0.01` بيرفض `19.99`"],
+  ["الـ tuple", "`prefixItems` + `items: false` + `minItems`"],
+  ["الـ arrays", "`items` `minItems` `maxItems` `uniqueItems` (deep) `contains` `minContains`"],
+  ["الـ objects", "`patternProperties` `propertyNames` `minProperties` `maxProperties`"],
+  ["حقل بيستدعي حقل", "`dependentRequired` للوجود، `dependentSchemas` لـ schema كاملة"],
+  ["التركيب", "`allOf` = و، `anyOf` = أو، `oneOf` = واحدة بس، `not` = لأ"],
+  ["فخ oneOf", "فروع بتتقاطع = invalid، فاستخدم `anyOf` أو `const` يفرق بينهم"],
+  ["الـ unions", "`const` في كل فرع + `discriminator: true` في Ajv = error واحد واضح"],
+  ["الـ if/then", "حط `required` جوه الـ `if` وإلا `{}` هيروح `then`"],
+  ["كذا شرط", "كل `if/then` في عنصر منفصل جوه `allOf`"],
+  ["allOf + additionalProperties", "بيرفض حقول الـ base، فاستخدم `unevaluatedProperties: false`"],
+  ["إعادة استخدام", "`$defs` + `$ref: \"#/$defs/x\"`، والقديم `definitions`"],
+  ["ملفات منفصلة", "`$id` لكل ملف + `addSchema` + `getSchema(id)`"],
+  ["الـ $ref لـ URL", "Ajv مش بيحمّل، ومتحمّلش من النت وقت التشغيل"],
+  ["شجرة", "`$ref: \"#\"` + `maxItems` + limit على الـ body"],
+  ["الـ $anchor في Ajv 8.20", "strict رماه unknown، والحل `ajv.addKeyword(\"$anchor\")`"],
+  ["draft-07 ← 2020-12", "`definitions` ← `$defs`، `items: [..]` ← `prefixItems`، `dependencies` ← اتنين"],
+  ["الـ compile", "مرة واحدة وقت الـ startup، وجوه الـ handler = بطء + memory leak"],
+  ["الـ allErrors", "كويس للـ forms، وخطر مع input ضخم أو regex وحشة"],
+  ["الـ strict", "سيبه شغال، بيلقط `minLenght` والـ formats الناقصة"],
+  ["الـ coerceTypes", "للـ query والـ env بس، مش للـ JSON body"],
+  ["بيعدّلوا الـ data", "`coerceTypes` `useDefaults` `removeAdditional`"],
+  ["الـ removeAdditional", "بيخبّي الـ typos، والرفض أوضح للـ APIs العامة"],
+  ["الـ errors", "`instancePath` `keyword` `params` `message`، والناقص في `params.missingProperty`"],
+  ["رسايل عربي", "`ajv-errors` + `errorMessage`، أو `ajv-i18n` بـ `localize.ar`"],
+  ["standalone", "كود متولد وقت الـ build، طلّعه `.cjs`، ومفيد للـ serverless والـ CSP"],
+  ["Express", "`express.json({ limit })` + middleware بـ `getSchema` + handler للـ parse errors"],
+  ["Fastify", "`schema.body/querystring/params/headers` built-in، و`schema.response` بيمنع تسريب حقول"],
+  ["defaults بتاعة Fastify", "`coerceTypes: \"array\"` `removeAdditional: true` `useDefaults: true` وdraft-07"],
+  ["Type guard", "`JSONSchemaType<T>` + `if (validate(x))`، والـ optional محتاج `nullable: true`"],
+  ["schema ← types", "`json-schema-to-typescript` / `json2ts`"],
+  ["types ← schema", "`ts-json-schema-generator` (بيطلّع draft-07)"],
+  ["TypeBox", "`Type.Object` = JSON Schema حقيقي + `Static<typeof T>`"],
+  ["Zod 4", "`z.toJSONSchema`، `io: \"input\"`، `target`، والـ refine بيضيع والـ Date/transform بيرموا"],
+  ["JSON Schema ولا Zod", "عقد بين لغات/أدوات = JSON Schema، كل حاجة TS + transforms = Zod"],
+  ["OpenAPI 3.1", "متوافقة مع 2020-12، `type` array بدل `nullable`، و`examples` بدل `example`"],
+  ["autocomplete", "`$schema` في الـ JSON، comment `yaml-language-server` في الـ YAML، SchemaStore، `json.schemas`"],
+  ["الـ config", "validate وقت الـ startup و`process.exit(1)`، وسيب `$schema` كـ property"],
+  ["LLM strict", "كل الحقول required، `additionalProperties: false`، الاختياري = null، وراجع الرد برضه"],
+  ["MongoDB", "`$jsonSchema` + `bsonType`، من غير `$ref` ولا `format`"],
+  ["مش شغلتها", "مقارنة حقول، uniqueness، صلاحيات، حسابات، sanitization"],
+  ["تطوير الـ input", "optional جديد وتوسيع = آمن، required جديد وتضييق = breaking"],
+  ["متضيّقش بهدوء", "warning الأول، expand / contract، version في الـ `$id`"],
+  ["ReDoS", "متعملش `(a+)+`، و27 حرف = ثانية، و`allErrors` بيلغي حماية `maxLength`"],
+  ["الحجم", "limit قبل الـ parse + `maxLength` `maxItems` `maxProperties`"],
+  ["schemas من بره", "متعملهاش compile أبدًا"],
+]} />
+
+<Checklist id="jsonschema-cheat" title="خلّصت المذكرة لما" items={["تشرح المشكلة اللي JSON Schema بتحلها وليه TS مش كفاية", "تكتب schema لأي object بـ types وrequired وadditionalProperties", "تحط قيود strings وأرقام وarrays وobjects وتتجنب فخاخ format وpattern وmultipleOf", "تكتب unions وif/then وتستخدم unevaluatedProperties", "تقسم الـ schemas بـ `$defs` و`$ref` وملفات", "تعرف الفروق بين draft-07 و2020-12", "تشغّل Ajv صح وتنسق الـ errors", "تبني middleware في Express وتعرف defaults بتاعة Fastify", "تربط الـ schema بالـ TypeScript بـ TypeBox أو Zod أو generators", "تستخدمها في OpenAPI والـ config والـ LLMs", "تطوّر الـ schema من غير ما تكسر حد وتقفل ReDoS والـ payloads الضخمة"]} />
+
+<Quiz>
+<Q n={1} q="webhook جاي من Stripe. تحط `additionalProperties: false`؟">لأ. هيضيفوا حقول في أي وقت. راجع الحقول اللي بتستخدمها بس، وسيب الباقي مفتوح.</Q>
+<Q n={2} q='ليه API بـ Fastify قبل `age: "30"`؟'>لأن Fastify شغّال بـ `coerceTypes: "array"` by default.</Q>
+<Q n={3} q="عايز schema واحدة تشتغل في Node وPython وOpenAPI وVS Code. تكتبها بإيه؟">JSON Schema 2020-12 كملفات JSON، وتعمل validation بـ Ajv في Node و`jsonschema` في Python.</Q>
+</Quiz>

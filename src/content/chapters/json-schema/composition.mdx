@@ -1,0 +1,280 @@
+---
+title: التركيب والشروط — الـ allOf والـ oneOf والـ if/then
+short: الـ allOf والـ if/then
+order: 5
+label: فصل ٥
+badge: الـ keywords · فصل ٥
+en: allOf · anyOf · oneOf · not · if · then · else · discriminator · unions · unevaluatedProperties
+keywords: allOf · anyOf · oneOf · not · if/then/else · discriminated unions · unevaluatedProperties
+goal: تبني schemas من schemas أصغر، وتكتب unions وشروط بين الحقول، وتتجنب أشهر فخين في oneOf والـ additionalProperties.
+part: الـ keywords
+color: c5
+---
+
+## الأربعة الأساسيين
+
+<Grid2>
+<Card title="allOf = و (AND)" c={1}>
+
+لازم يطابق **كل** الـ schemas. بنستخدمها عشان نركّب: "user أساسي + حقول admin".
+
+</Card>
+<Card title="anyOf = أو (OR)" c={2}>
+
+لازم يطابق **واحدة على الأقل**. أسهل وأرخص من `oneOf`، وغالبًا هي اللي محتاجها.
+
+</Card>
+<Card title="oneOf = واحدة بالظبط (XOR)" c={3}>
+
+لازم يطابق **واحدة بس**. لو طابق اتنين، بيفشل. مفيد للـ unions اللي فروعها مش بتتقاطع.
+
+</Card>
+<Card title="not = لأ" c={4}>
+
+لازم **ميطابقش** الـ schema. مثلًا username مش `root` ولا `admin`. الرسالة `must NOT be valid`.
+
+</Card>
+</Grid2>
+
+<File name="compose.json">
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "not": { "enum": ["root", "admin"] }
+    },
+    "contact": {
+      "anyOf": [
+        { "type": "string", "format": "email" },
+        { "type": "string", "pattern": "^01[0125][0-9]{8}$" }
+      ]
+    }
+  }
+}
+```
+
+</File>
+
+- **الـ username:** أي string ما عدا `root` و`admin`.
+- **الـ contact:** إيميل **أو** رقم موبايل مصري.
+- **الـ errors مع `anyOf`:** Ajv بيرجّع أخطاء كل الفروع ومعاها `must match a schema in anyOf`، فالرسالة ممكن تبقى طويلة ومحيّرة لليوزر.
+
+## فخ الـ oneOf: الفروع اللي بتتقاطع
+
+<File name="oneof-trap.json">
+
+```json
+{ "oneOf": [{ "type": "number" }, { "type": "integer" }] }
+```
+
+</File>
+
+- **جرّبنا `5`:** طلع **invalid**! لأن `5` number و integer في نفس الوقت، يعني طابق فرعين.
+- **و`5.5`:** طلع valid، لأنه طابق `number` بس.
+- **نفس الكلام مع objects:** `oneOf` بين `{required: [card]}` و`{required: [iban]}` يرفض object فيه الاتنين. ساعات ده اللي عايزه، وساعات لأ.
+- **القاعدة:** <Hl c="p">استخدم `anyOf` إلا لو محتاج فعلًا "واحدة بس"</Hl>. والـ `oneOf` لازم يجرّب كل الفروع عشان يتأكد إن مفيش اتنين، فهو أبطأ.
+
+## الـ discriminated unions
+
+أشهر استخدام: object شكله بيتغير حسب حقل اسمه `type` أو `kind` أو `method`:
+
+<File name="union.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+
+const ajv = new Ajv({ allErrors: true, discriminator: true });
+
+const validate = ajv.compile({
+  type: "object",
+  discriminator: { propertyName: "method" },
+  required: ["method"],
+  oneOf: [
+    {
+      properties: {
+        method: { const: "card" },
+        cardNumber: { type: "string", pattern: "^[0-9]{16}$" },
+      },
+      required: ["cardNumber"],
+    },
+    {
+      properties: {
+        method: { const: "wallet" },
+        phone: { type: "string", pattern: "^01[0125][0-9]{8}$" },
+      },
+      required: ["phone"],
+    },
+    { properties: { method: { const: "cod" } } },
+  ],
+});
+
+const show = (d) => console.log(JSON.stringify(d), validate(d), validate.errors?.map((e) => `${e.instancePath} ${e.message}`) ?? "");
+show({ method: "card", cardNumber: "4111111111111111" });
+show({ method: "card", cardNumber: "41" });
+show({ method: "bitcoin" });
+show({ method: "cod" });
+```
+
+</File>
+
+<File name="output">
+
+```text
+{"method":"card","cardNumber":"4111111111111111"} true
+{"method":"card","cardNumber":"41"} false [ '/cardNumber must match pattern "^[0-9]{16}$"' ]
+{"method":"bitcoin"} false [ ' value of tag "method" must be in oneOf' ]
+{"method":"cod"} true
+```
+
+</File>
+
+- **الـ `const` في كل فرع:** هو اللي بيخلي الفروع مش بتتقاطع، فالـ `oneOf` آمن.
+- **الـ `discriminator`:** keyword جاي من OpenAPI، مش من JSON Schema نفسها. Ajv بيدعمه بـ `discriminator: true`.
+- **الفايدة:** Ajv بيبص على `method` الأول ويروح للفرع الصح على طول، فالـ error بقى **سطر واحد مفهوم**.
+- **من غير `discriminator`:** نفس الـ body بيرجّع ٥ أخطاء من كل الفروع:
+
+<File name="output (من غير discriminator)">
+
+```text
+/cardNumber must match pattern "^[0-9]{16}$"
+(root) must have required property 'phone'
+/method must be equal to constant
+/method must be equal to constant
+(root) must match exactly one schema in oneOf
+```
+
+</File>
+
+<Box type="story" icon="🧾" title="شباك الدفع">
+
+الكاشير بيسألك الأول: **"كاش ولا فيزا ولا محفظة؟"**. لو قلت فيزا، بيطلب الكارت بس، ومش هيقولك "ناقص رقم المحفظة". ده الـ discriminator: سؤال واحد بيحدد إنت في أنهي فرع، وبعدين الأسئلة على قد الفرع ده.
+
+</Box>
+
+## الـ if / then / else
+
+لما شرط على **قيمة** حقل بيغيّر قواعد حقل تاني:
+
+<File name="shipping.js">
+
+```js
+import Ajv from "ajv/dist/2020.js";
+
+const ajv = new Ajv({ allErrors: true });
+
+const validate = ajv.compile({
+  type: "object",
+  properties: {
+    country: { type: "string" },
+    postalCode: { type: "string" },
+  },
+  required: ["country"],
+  if: {
+    properties: { country: { const: "EG" } },
+    required: ["country"],
+  },
+  then: {
+    properties: { postalCode: { type: "string", pattern: "^[0-9]{5}$" } },
+    required: ["postalCode"],
+  },
+  else: {
+    properties: { postalCode: { type: "string", minLength: 3 } },
+  },
+});
+
+for (const data of [{ country: "EG" }, { country: "EG", postalCode: "12" }, { country: "US" }]) {
+  console.log(JSON.stringify(data), validate(data), validate.errors?.map((e) => `${e.instancePath} ${e.message}`).join(" | ") ?? "");
+}
+```
+
+</File>
+
+<File name="output">
+
+```text
+{"country":"EG"} false  must have required property 'postalCode' |  must match "then" schema
+{"country":"EG","postalCode":"12"} false /postalCode must match pattern "^[0-9]{5}$" |  must match "then" schema
+{"country":"US"} true
+```
+
+</File>
+
+- **الـ `if`:** schema عادية، نتيجتها مش بتفشّل حاجة. بتحدد بس هنروح `then` ولا `else`.
+- **الـ `then` / `else`:** الاتنين اختياريين.
+- **أكتر من شرط:** حط كل `if/then` جوه `allOf` منفصل: `"allOf": [ {if, then}, {if, then} ]`.
+
+<Box type="warn" title="الـ if من غير required = دايمًا true">
+
+`"if": { "properties": { "type": { "const": "company" } } }` على object **مفيهوش** `type` أصلًا هتطلع `true`! لأن `properties` مش بتراجع حقل مش موجود. فالـ `then` هيتطبق على `{}` ويطلب `taxId`.
+
+جرّبناها: `{}` اترفض بـ `must have required property 'taxId'`. ولما ضفنا `"required": ["type"]` جوه الـ `if`، الـ `{}` عدّى. <Hl c="o">دايمًا حط `required` جوه الـ if.</Hl>
+
+</Box>
+
+## فخ additionalProperties مع allOf
+
+عايز تعمل "schema أساسية" وتوسّعها:
+
+<File name="extend-wrong.json">
+
+```json
+{
+  "type": "object",
+  "allOf": [
+    {
+      "type": "object",
+      "properties": { "id": { "type": "integer" } },
+      "required": ["id"]
+    }
+  ],
+  "properties": { "name": { "type": "string" } },
+  "additionalProperties": false
+}
+```
+
+</File>
+
+- **جرّبنا `{"id": 1, "name": "x"}`:** طلع **invalid** برسالة `must NOT have additional properties`!
+- **ليه؟** الـ `additionalProperties` بيبص على الـ `properties` اللي **جنبه في نفس الـ object** بس. هو مش شايف `id` اللي جوه الـ `allOf`، فبيعتبره زيادة.
+- **الحل في 2019-09 وما بعده:** `unevaluatedProperties: false` بدل `additionalProperties: false`:
+
+<File name="extend-right.json">
+
+```json
+{
+  "type": "object",
+  "allOf": [
+    {
+      "type": "object",
+      "properties": { "id": { "type": "integer" } },
+      "required": ["id"]
+    }
+  ],
+  "properties": { "name": { "type": "string" } },
+  "unevaluatedProperties": false
+}
+```
+
+</File>
+
+- **الـ `unevaluatedProperties`:** بيشوف كل حقل اتراجع في **أي** subschema (allOf، $ref، if/then، oneOf…)، والباقي بس هو اللي "زيادة".
+- **النتيجة:** `{"id": 1, "name": "x"}` بقى valid، و`{"id": 1, "name": "x", "hack": true}` اترفض بـ `must NOT have unevaluated properties`.
+- **ونفس الفكرة للـ arrays:** `unevaluatedItems`.
+- **في draft-07 مفيش الـ keyword ده:** الحل هناك إنك تكرر الـ properties كلها في المكان اللي فيه `additionalProperties`.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"إمتى تستخدم `oneOf` وإمتى `anyOf`؟" الإجابة: <Hl c="b">anyOf لما يكفي فرع واحد يطابق، وoneOf لما تطابق فرعين يبقى غلط فعلًا.</Hl> ولو هتعمل oneOf، خلي الفروع مش بتتقاطع بـ `const` في discriminator.
+
+</Box>
+
+<Checklist id="jsonschema-composition" title="خلّصت الفصل لما" items={["تفرق بين allOf وanyOf وoneOf وnot", "تشرح ليه `5` بيفشل في oneOf بين number وinteger", "تكتب discriminated union بـ `const` في كل فرع", "تشغّل `discriminator: true` في Ajv عشان errors أوضح", "تكتب if/then/else وتحط `required` جوه الـ if", "تحط كذا if/then جوه allOf", "تستخدم `unevaluatedProperties` بدل `additionalProperties` مع allOf"]} />
+
+<Quiz>
+<Q n={1} q="`oneOf` بين string بـ maxLength 10 وstring بـ pattern أرقام بس. القيمة `12345`؟">invalid، لأنها طابقت الفرعين. استخدم `anyOf`.</Q>
+<Q n={2} q="`if` فيها `properties.kind.const = business` من غير required. الـ `{}` هيروح then ولا else؟">then. لأن `properties` مش بتراجع حقل مش موجود، فالـ if بقت true.</Q>
+<Q n={3} q="عملت base schema في allOf وحطيت additionalProperties false بره. حقول الـ base بقت مرفوضة. ليه وإزاي تحلها؟">لأن additionalProperties بيشوف الـ properties اللي جنبه بس. استخدم `unevaluatedProperties: false` (2019-09 وما بعده).</Q>
+</Quiz>
