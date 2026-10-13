@@ -1,107 +1,111 @@
 ---
-title: Cluster mode — باب واحد وWorkers
+title: Cluster Mode — Port واحد لكل الـ Workers
 short: Cluster mode
 order: 3
 label: فصل ٣
-badge: أوضاع التشغيل · فصل ٣
-en: node:cluster · primary · worker · IPC · shared port
-keywords: cluster · primary · worker · IPC · round robin
-goal: تبني cluster من غير PM2 وتفهم إزاي workers متعددة تسمع على نفس الـ port.
+badge: الوضعين · فصل ٣
+en: node:cluster · primary · worker · round-robin · instances max
+keywords: cluster · primary · workers · port مشترك
+goal: تبني cluster بإيدك، وتفهم إن PM2 في cluster mode هو نفسه الـ primary، فكودك بيشتغل جوه workers بس.
 part: الوضعين
 color: c3
 ---
 
-## إزاي نفس الـ port مش بيتخانق؟
+## الفكرة
 
-Node `cluster` يعمل primary process ويفرّع workers. الـ workers processes منفصلة، لكن cluster ينسّق بينهم ويشارك server handle؛ عشان كده كل worker تقدر تعمل `listen(3000)`.
+في cluster فيه process رئيسية اسمها **primary**. الـ primary مش بيخدم requests، شغلته إنه يعمل fork لـ workers ويمسك الـ port. والـ workers كلهم بيشاركوا **نفس الـ port**، والـ primary بيوزّع الـ connections عليهم بالدور (round-robin، وده الـ default على Linux وmacOS).
 
-على الأنظمة المدعومة، Node غالبًا يخلي الـ primary يوزع connections على workers بـ round-robin. Windows له سلوك وقيود مختلفة، فمتبنيش توقعات production من تجربة على نظام تاني.
+<Hl c="g">port واحد، ومفيش Nginx مطلوب عشان التوزيع.</Hl>
 
-<Flow items={[{"t": "port 3000", "s": "باب واحد", "c": 1}, "→", {"t": "primary", "s": "يوزع connections", "c": 3}, "→", {"t": "workers", "s": "process لكل نسخة", "c": 5}]} />
-
-## Cluster من غير PM2
+## بإيدك: Node cluster
 
 <File name="cluster.js">
 
 ```js
-import cluster from "node:cluster";
-import os from "node:os";
+const cluster = require("node:cluster");
+const http = require("node:http");
+const os = require("node:os");
 
 if (cluster.isPrimary) {
   const count = os.availableParallelism();
-  console.log(`primary ${process.pid}: ${count} workers`);
+  console.log(`primary ${process.pid} → ${count} workers`);
 
   for (let i = 0; i < count; i++) cluster.fork();
 
   cluster.on("exit", (worker, code) => {
-    console.error(`worker ${worker.process.pid} exited: ${code}`);
+    // رجّع الـ worker لو وقع، مش لو احنا اللي قفلناه
     if (!worker.exitedAfterDisconnect) {
-      setTimeout(() => cluster.fork(), 1000);
+      console.log(`worker ${worker.process.pid} died (${code}), forking again`);
+      cluster.fork();
     }
   });
 } else {
-  await import("./server.js");
+  http
+    .createServer((req, res) => res.end(`pid ${process.pid}\n`))
+    .listen(3000);
 }
 ```
 
 </File>
 
-<File name="terminal">
+- `cluster.fork()` من جوه بيستخدم `child_process.fork()`، بس معاه قناة IPC مع الـ primary. وده اللي بيخلي الـ workers يشاركوا الـ server handle بتاع الـ port.
+- الـ worker لما ينادي `listen(3000)`، ده مش بيفتح الـ port بنفسه. الطلب بيروح للـ primary، والـ primary هو اللي ماسك الـ port.
+- `isPrimary` هو الاسم الجديد. أما `isMaster` فـ deprecated بس لسه شغال.
 
-```bash
-node cluster.js
+## نفس الكلام بـ PM2: PM2 هو الـ primary
 
-for i in {1..8}; do
-  curl --no-keepalive http://localhost:3000
-done
-```
+<Hl c="o">في cluster mode، PM2 نفسه هو الـ primary.</Hl> كودك بيتشغّل جوه workers بس، فمحتاجش أي سطر من `cluster`:
 
-</File>
-
-الـ PID المفروض يتغير بين responses. `--no-keepalive` يساعد التجربة تعمل connections جديدة؛ connection واحدة persistent مش لازم تتنقل بين workers.
-
-## وبـ PM2
-
-مش محتاج تكتب `cluster.js`. ادّي PM2 ملف السيرفر العادي:
-
-<File name="ecosystem.cluster.config.cjs">
+<File name="ecosystem.config.js">
 
 ```js
 module.exports = {
-  apps: [{
-    name: "api-cluster",
-    script: "server.js",
-    exec_mode: "cluster",
-    instances: "max",
-    env: { PORT: 3000 },
-  }],
+  apps: [
+    {
+      name: "api",
+      script: "./server.js",
+      exec_mode: "cluster",
+      instances: "max", // worker لكل core
+      env: { PORT: 3000 },
+    },
+  ],
 };
 ```
 
 </File>
 
+<Diagram title="cluster: PM2 ماسك الـ port" height={300} mheight={460} nodes={[{id:"c",t:"Client",x:12,y:50,mx:50,my:8,c:1},{id:"p",t:"PM2",s:"primary · :3000",x:42,y:50,mx:50,my:34,c:3},{id:"a",t:"worker 1",x:84,y:16,mx:18,my:84,c:4},{id:"b",t:"worker 2",x:84,y:50,mx:50,my:84,c:4},{id:"d",t:"worker N",x:84,y:84,mx:82,my:84,c:4}]} edges={[{from:"c",to:"p",t:":3000"},{from:"p",to:"a"},{from:"p",to:"b"},{from:"p",to:"d"}]} />
+
+### قيم `instances`
+
+- `"max"` أو `0`: worker لكل core.
+- `-1`: كل الـ cores إلا واحد، عشان تسيب core للـ OS أو للداتابيز لو على نفس السيرفر.
+- رقم زي `4`: عدد ثابت، وما ينفعش يزيد عن عدد الـ cores (هنشرح ليه في فصل `bin/www`).
+
+## 🧪 Lab: اتأكد إن التوزيع شغال
+
 <File name="terminal">
 
 ```bash
-pm2 start ecosystem.cluster.config.cjs
-pm2 list
-pm2 scale api-cluster 6
+pm2 start ecosystem.config.js
+pm2 list                                   # mode = cluster، وكذا سطر لنفس الاسم
+for i in $(seq 8); do curl -s --no-keepalive localhost:3000; done
 ```
 
 </File>
 
-`max` أو `0` معناهم عدد الـ CPUs المتاحة، و`-1` يعني العدد ناقص واحد. العدد الأكبر مش دايمًا أسرع؛ سيب مساحة للـ OS والـ database والـ reverse proxy، واعمل load test.
+لازم تلاقي الـ pid بيتغيّر بين الردود. ولو كل الردود جت من pid واحد، فغالبًا الـ client بيعيد استخدام نفس الـ connection (keep-alive)، لأن التوزيع بيتم على مستوى الـ connection مش الـ request.
 
-## `cluster.fork()` مبنية على إيه؟
+<Box type="warn" title="Cluster للـ Node بس">
 
-هي نفسها تستخدم `child_process.fork()` لتكوين Node processes وقناة IPC. القيمة المضافة من cluster هي إدارة workers ومشاركة server handles وسياسة توزيع connections.
+cluster mode شغال مع تطبيقات Node بس، لأنه مبني على `node:cluster`. أي تطبيق مش Node بيشتغل fork حتى لو كتبت `instances`.
 
-<Hl c="g">Cluster يوزع requests على processes؛ مش بيقسم request واحدة تقيلة على cores.</Hl>
+</Box>
 
-<Checklist id="pm2-cluster" title="خلّصت الفصل لما" items={["تفرق primary عن worker", "تشغّل workers كلها على port واحد", "تلاحظ PIDs مختلفة مع connections جديدة", "تستخدم instances max في PM2", "تعرف إن كل worker لسه process مستقلة"]} />
+<Checklist id="pm2-cluster" title="خلّصت الفصل لما" items={["تشرح دور الـ primary ودور الـ worker", "تكتب cluster بإيدك وترجّع الـ worker اللي يقع بس", "تعرف إن PM2 هو الـ primary في cluster mode", "تعرف قيم instances: max و0 و-1 والرقم", "تتأكد من التوزيع بـ curl وتفهم أثر keep-alive"]} />
 
 <Quiz>
-<Q n={1} q="ليه workers تقدر تسمع على نفس port؟">cluster ينسق مشاركة server handle وتوزيع connections.</Q>
-<Q n={2} q="هل worker عندها نفس heap بتاعة أختها؟">لأ. كل واحدة process وmemory مستقلة.</Q>
-<Q n={3} q="instances: max دائمًا أفضل رقم؟">لأ. هو بداية سهلة، لكن الرقم الصح يتحدد بالـ load test وباقي شغل الجهاز.</Q>
+<Q n={1} q="في PM2 cluster mode، كودك بيشتغل primary ولا worker؟">worker. PM2 هو الـ primary.</Q>
+<Q n={2} q="ليه workers كتير يقدروا يعملوا listen على نفس الـ port؟">لأن الـ primary هو اللي ماسك الـ port فعلًا، والـ workers بياخدوا منه الـ connections عن طريق IPC.</Q>
+<Q n={3} q="كل الردود جت من نفس الـ pid. ليه؟">غالبًا keep-alive. التوزيع بيحصل لكل connection جديدة مش لكل request.</Q>
 </Quiz>

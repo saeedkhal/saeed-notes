@@ -1,58 +1,63 @@
 ---
 title: "Cheat Sheet: PM2 في الإنتاج"
 short: Cheat Sheet
-order: 9
+order: 10
 label: الآخر
 badge: الآخر
-en: fork · cluster · reload · save · startup · logrotate
-keywords: pm2 start · reload · resurrect · max_size
-goal: تفتكر قرار الـ mode وأوامر التشغيل والاستمرارية والـ logs بسرعة.
+en: fork · cluster · bin/www · reload · startup · save · logrotate
+keywords: المشكلة والحل في سطر
+goal: تفتكر كل قرار وكل أمر في المذكرة بسرعة.
 part: بعدها
 color: dark
 ---
 
 <Cheat items={[
-  ["PM2 default", "Fork mode وinstance واحدة"],
-  ["Node app مع `-i 8`", "Cluster mode بثماني workers"],
-  ["كل cores بسهولة", "`pm2 start app.js -i max`"],
-  ["نفس port", "Cluster؛ Fork instances تحتاج ports مختلفة وLB"],
-  ["برنامج مش Node", "Fork mode"],
-  ["Kubernetes", "ابدأ process واحدة لكل container وscale replicas"],
-  ["request واحدة CPU-heavy", "`worker_threads` أو job queue، مش Cluster وحدها"],
-  ["sessions أو cache في Cluster", "store مشتركة زي Redis"],
-  ["cron جوه app", "هيتكرر لكل worker؛ افصله أو استخدم lock"],
-  ["WebSockets", "راجع sticky sessions وadapter مشتركة"],
-  ["اعرض العمليات", "`pm2 list`"],
-  ["تابع logs", "`pm2 logs <name>`"],
-  ["راقب CPU وRAM", "`pm2 monit`"],
-  ["غيّر عدد workers", "`pm2 scale <name> 6`"],
-  ["إعادة تدريجية", "`pm2 reload <name>` مع graceful shutdown"],
-  ["إعادة عادية", "`pm2 restart <name>`"],
-  ["احفظ القائمة", "`pm2 save`"],
-  ["رجع القائمة يدويًا", "`pm2 resurrect`"],
-  ["اربط PM2 بالإقلاع", "`pm2 startup` من غير sudo، ثم نفّذ الأمر الناتج"],
-  ["تأكد من service", "`systemctl status pm2-<username>`"],
-  ["شخّص فشل الإقلاع", "`journalctl -u pm2-<username> --since boot`"],
-  ["بعد تغيير app list", "`pm2 save` تاني"],
-  ["بعد تغيير Node مع nvm", "`pm2 unstartup` ثم `pm2 startup`"],
-  ["بعد تحديث PM2 عالميًا", "`pm2 update` لتحديث الـ daemon"],
-  ["env بعد reboot", "ecosystem أو مصدر ثابت، مش `export` في SSH"],
-  ["fallback مع cron", "`@reboot /absolute/path/pm2 resurrect` لنفس المستخدم"],
-  ["ادمج logs بين instances", "`--merge-logs`، وout/error يفضلوا منفصلين"],
-  ["أضف وقتًا لكل سطر", "`--time`"],
-  ["فضّي logs المدارة", "`pm2 flush`"],
-  ["ثبّت rotation", "`pm2 install pm2-logrotate`"],
-  ["Rotate عند حجم", "`pm2 set pm2-logrotate:max_size 1G`"],
-  ["احتفظ بسبعة قديمة", "`pm2 set pm2-logrotate:retain 7`"],
-  ["اضغط القديمة", "`pm2 set pm2-logrotate:compress true`"],
-  ["Rotate منتصف الليل", "`pm2 set pm2-logrotate:rotateInterval '0 0 * * *'`"],
-  ["راجع إعداد module", "`pm2 conf`"],
+  ["process واحدة على 8 cores", "بتشغّل كودك على core واحد بس"],
+  ["`pm2 start app.js`", "fork وinstance واحدة (الـ default)"],
+  ["`pm2 start app.js -i 4`", "cluster تلقائي، 4 workers"],
+  ["عايز كذا instance بس fork", "`-x` في الـ CLI، أو `exec_mode: \"fork\"` في الـ ecosystem"],
+  ["في الـ ecosystem", "اكتب `exec_mode` صريح دايمًا"],
+  ["app مش Node", "fork دايمًا"],
+  ["fork و port لكل instance", "`increment_var: \"PORT\"` ووراهم Nginx"],
+  ["cluster: مين الـ primary؟", "PM2 نفسه، وكودك جوه workers بس"],
+  ["عدد الـ workers", "`instances: \"max\"`، أو `-1` لو عايز تسيب core"],
+  ["`bin/www` فيه `cluster.isMaster` و`-i 10`", "فرع الـ master كود ميت، و10 workers بالظبط"],
+  ["نفس الملف في fork", "10 masters، والباقي بيقع بـ `EADDRINUSE`؛ شيل كود الـ cluster"],
+  ["`isMaster`", "deprecated، والبديل `isPrimary`"],
+  ["DB connections", "workers × pool max (Sequelize default 5)"],
+  ["`NODE_TLS_REJECT_UNAUTHORIZED=0`", "بيقفل التحقق للكل؛ استخدم `httpsAgent` لـ service واحدة"],
+  ["HTTPS server", "حط `on('error')` على الفرعين"],
+  ["session أو cache أو rate limit", "Redis، مش RAM"],
+  ["cron جوه التطبيق", "بيتكرر لكل worker؛ process لوحده أو lock"],
+  ["Socket.io في cluster", "Redis adapter، وsticky لو فيه polling"],
+  ["request واحدة تقيلة", "`worker_threads` أو queue"],
+  ["Kubernetes", "process لكل container، وزوّد الـ replicas"],
+  ["deploy من غير downtime", "`pm2 reload <name>` في cluster"],
+  ["reload يقفل بأدب", "`server.close` على `SIGINT`، و`wait_ready` لو محتاج"],
+  ["راقب", "`pm2 list` · `pm2 logs` · `pm2 monit` · `pm2 describe`"],
+  ["PM2 يقوم مع الـ boot", "`pm2 startup` من غير sudo، ونفّذ الأمر اللي طلع بالظبط"],
+  ["احفظ الـ apps", "`pm2 save` وبتتكتب في `~/.pm2/dump.pm2`"],
+  ["غيّرت أي حاجة", "`pm2 save` تاني"],
+  ["غيّرت Node بـ nvm", "`pm2 unstartup` ثم `pm2 startup` ثم `pm2 save`"],
+  ["حدّثت PM2", "`pm2 update`"],
+  ["env variables", "ecosystem أو `.env`، مش `export` في الـ shell"],
+  ["الـ service منفصلة؟", "لأ، بتشغّل نفس الـ daemon اللي `pm2 list` بيكلمه"],
+  ["`systemctl stop pm2-ubuntu`", "بيعمل `pm2 kill` ويقفل كل الـ apps"],
+  ["`pm2` و`sudo pm2`", "daemons مختلفين؛ يوزر واحد في كل حاجة"],
+  ["inactive أول مرة بعد startup", "طبيعي؛ بعد أول reboot هتبقى active"],
+  ["الـ apps مرجعتش", "enabled؟ نفس اليوزر؟ dump حديث؟ مسار node؟ `journalctl -b`"],
+  ["مفيش systemd", "`@reboot /full/path/pm2 resurrect` في crontab نفس اليوزر"],
+  ["الغي الـ startup", "`pm2 unstartup` (ممكن يقفل الـ apps)"],
+  ["logs بتكبر", "`pm2 install pm2-logrotate`"],
+  ["`retain 7`", "7 قديمة + الحالي"],
+  ["`compress false`", "الضغط مقفول"],
+  ["امسح logs", "`pm2 flush`، مش `rm`"],
 ]} />
 
-<Checklist id="pm2-cheat" title="خلّصت المذكرة لما" items={["تختار Fork أو Cluster بسبب واضح", "تشغّل Cluster وتشوف PIDs مختلفة", "تخرج state المشتركة من memory", "تجرب graceful reload", "تعمل save وstartup وتختبر reboot", "تضبط logrotate وتختبرها على staging"]} />
+<Checklist id="pm2-cheat" title="خلّصت المذكرة لما" items={["تختار fork أو cluster بسبب واضح", "تشيل كود الـ cluster من bin/www وتسيبه لـ PM2", "تحسب الـ DB connections قبل ما تزوّد workers", "تطلّع الـ state من الـ memory", "تعمل reload من غير downtime", "تعمل startup وsave وتجرب reboot", "تفهم إن الـ service والـ daemon حاجة واحدة", "تضبط logrotate"]} />
 
 <Quiz>
-<Q n={1} q="VPS عليها HTTP API stateless و٨ cores؟">Cluster نقطة بداية مناسبة، ثم load test يحدد عدد workers.</Q>
-<Q n={2} q="عملت save من غير startup. إيه الناقص؟">init service تشغّل PM2 بعد reboot.</Q>
-<Q n={3} q="الـ log وصل 1G، أمسحه بـ rm؟">لأ. استخدم flush أو logrotate؛ حذف ملف مفتوح ممكن يسيب المساحة محجوزة.</Q>
+<Q n={1} q="VPS بـ 8 cores عليها API stateless. تبدأ بإيه؟">cluster مع instances max، وتراجع الـ DB pool.</Q>
+<Q n={2} q="pm2 start ./bin/www -i 10 والملف فيه cluster.fork. كام worker؟">10 بس، لأن فرع الـ master مش بيتنفذ تحت PM2 cluster.</Q>
+<Q n={3} q="بعد الـ reboot pm2 list فاضية والـ service active. أول حاجة تشك فيها؟">اليوزر. غالبًا الـ apps اتحفظت بـ sudo pm2 أو بيوزر تاني.</Q>
 </Quiz>

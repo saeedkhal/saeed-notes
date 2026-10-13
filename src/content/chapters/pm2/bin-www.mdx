@@ -1,0 +1,215 @@
+---
+title: كود Cluster جوه bin/www مع pm2 -i
+short: bin/www تحت PM2
+order: 5
+label: فصل ٥
+badge: القرار · فصل ٥
+en: cluster.isMaster · pm2 start -i 10 · EADDRINUSE · Sequelize pool
+keywords: كود ميت · fork بالغلط · DB connections · TLS · bin/www نظيف
+goal: تعرف إيه اللي بيحصل فعلًا لما ملف فيه كود cluster يتشغّل بـ pm2 start -i، وتنضّف الملف وتسيب الـ clustering لـ PM2.
+part: القرار
+color: c5
+---
+
+## الملف اللي بنتكلم عنه
+
+ده الشكل المختصر لـ `bin/www` اللي فيه cluster بإيده، واتشغّل بـ `pm2 start ./bin/www -i 10`:
+
+<File name="bin/www (قبل)">
+
+```js
+#!/usr/bin/env node
+const cluster = require("cluster");
+const os = require("os");
+const app = require("../app");
+const http = require("http");
+const https = require("https");
+const fs = require("fs");
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+if (cluster.isMaster) {
+  for (let i = 0; i < os.cpus().length; i++) cluster.fork();
+  cluster.on("exit", (worker) => console.log(`worker ${worker.process.pid} died`));
+} else {
+  const port = normalizePort(process.env.PORT || "4000");
+  app.set("port", port);
+
+  if (process.env.SERVERHTTPS === "2") {
+    const server = http.createServer(app);
+    server.listen(port);
+    server.on("error", onError);
+    server.on("listening", onListening);
+  } else {
+    const options = {
+      key: fs.readFileSync(process.env.SSL_PUBLIC_KEY),
+      cert: fs.readFileSync(process.env.SSL_CERT_KEY),
+    };
+    const server = https.createServer(options, app);
+    server.addContext("example.com", options);
+    server.listen(port);
+  }
+}
+```
+
+</File>
+
+## الخلاصة
+
+<Hl c="y">كود الـ cluster اللي جوه الملف مش هيشتغل خالص، وهيبقى عندك 10 workers بالظبط، مش 10 × عدد الـ cores.</Hl>
+
+## اللي بيحصل فعليًا
+
+- `-i 10` بيخلي PM2 يشتغل cluster mode ويعمل 10 workers.
+- PM2 نفسه هو الـ primary، وهو اللي بيعمل الـ workers بـ `cluster.fork()`.
+- جوه كل worker من الـ 10، الملف `bin/www` بيتنفّذ، و`cluster.isMaster` قيمتها `false`، لأن الـ process دي أصلًا worker عند PM2.
+- فبيدخل الـ `else` على طول ويشغّل السيرفر على port 4000.
+
+<Tree>
+
+```text
+PM2 (primary - ماسك port 4000)
+ ├─ worker 1  → bin/www → isMaster = false → else → listen(4000)
+ ├─ worker 2  → bin/www → isMaster = false → else → listen(4000)
+ └─ ... لحد 10
+```
+
+</Tree>
+
+يعني الـ `if` بتاع `cluster.isMaster` كله **كود ميت** تحت PM2 بالأمر ده.
+
+<Box type="tip" title="جرّبتها بنفسي">
+
+شغّلت ملف بنفس الشكل بـ `pm2 start www.js -i 2` على PM2 7.0.4. الاتنين طبعوا `isMaster=false isWorker=true`، والـ curl رجّع pid الاتنين بالتبادل، ومفيش أي سطر طلع من فرع الـ master.
+
+</Box>
+
+## إمتى الـ if ده يشتغل؟ وهنا المشكلة
+
+لو شغلت الملف بـ `node bin/www` أو بـ PM2 في **fork mode**، ساعتها `isMaster` هتبقى `true` وهيعمل workers بعدد الـ cores. ولو اتلخبط حد وشغّله fork بـ 10 instances:
+
+<File name="terminal">
+
+```bash
+pm2 start ./bin/www -i 10 -x   # -x = fork mode في الـ CLI
+```
+
+</File>
+
+- الـ CLI مفيهوش `--exec-mode`، والـ flag اللي بيجبر fork اسمه `-x`. والنتيجة نفسها لو كتبت `exec_mode: "fork"` مع `instances: 10` في الـ ecosystem.
+- PM2 هيعمل 10 processes، وكل واحدة فيهم master، وكل master هيعمل workers بعدد الـ cores.
+- الـ workers بتوع أول master بس هيمسكوا port 4000.
+- الباقيين هيضربوا `EADDRINUSE` ويعملوا `process.exit(1)`، والـ master بتاعهم مش بيعمل fork تاني، لأن الـ exit handler بيطبع بس.
+
+<Diagram title="fork mode: 10 masters على port واحد" height={320} mheight={520} nodes={[{id:"pm",t:"PM2",s:"fork × 10",x:12,y:50,mx:50,my:7,c:5},{id:"m1",t:"master 1",x:42,y:22,mx:25,my:32,c:2},{id:"m2",t:"master 2..10",x:42,y:78,mx:75,my:32,c:1},{id:"w1",t:"workers",s:"listen(4000) ✓",x:82,y:22,mx:25,my:72,c:3},{id:"w2",t:"workers",s:"EADDRINUSE → exit(1)",x:82,y:78,mx:75,my:72,c:1}]} edges={[{from:"pm",to:"m1"},{from:"pm",to:"m2"},{from:"m1",to:"w1",t:"fork"},{from:"m2",to:"w2",t:"fork",dash:true}]} />
+
+<Box type="warn" title="الكود ده بيعتمد على الصدفة">
+
+هو شغال صح بس عشان PM2 ماشي cluster. وفي تجربتي بـ `-x`، الـ master التاني فضل `online` في `pm2 list` وworkers بتوعه كلهم ماتوا بـ `EADDRINUSE`. يعني الـ list شكلها سليم، والـ process مش بتخدم ولا request.
+
+</Box>
+
+## حاجات تانية لازم تاخد بالك منها
+
+- **`-i 10` رقم ثابت:** لو السيرفر عنده 4 cores مثلًا، الـ 10 workers هيتخانقوا على الـ CPU ويزودوا الـ memory من غير فايدة. الأحسن `-i max`، أو رقم أقل من أو يساوي عدد الـ cores.
+- **الـ DB connections:** كل worker عنده Sequelize pool لوحده. الـ default في Sequelize هو `max: 5`، يعني 10 workers × 5 = لحد 50 connection على الداتابيز. اتأكد إن ده مناسب لـ `max_connections` عندك.
+- **`NODE_TLS_REJECT_UNAUTHORIZED = 0`:** ده بيقفل التحقق من الـ certificates لكل الـ requests الخارجة من السيرفر (axios وfetch وغيرهم)، وده خطر أمني (MITM). لو محتاجه لـ service معينة، اعمله على الـ agent بتاعها بس.
+- **فرع الـ HTTPS مفيهوش `on('error')`:** فلو الـ port مستخدم، هيرمي error من غير الرسالة الواضحة اللي في `onError`.
+- **`addContext` بنفس الـ options** ملوش لازمة، لأنها نفس الشهادة الأساسية.
+- **`cluster.isMaster` بقت deprecated**، والبديل `cluster.isPrimary`.
+- **أي state في الـ memory**، زي cron jobs أو socket.io أو cache أو rate limiter جوه `app.js`، هيتكرر 10 مرات، زي ما اتكلمنا في الفصل اللي فات.
+
+<File name="لو service واحدة بس شهادتها self-signed">
+
+```js
+const https = require("https");
+const axios = require("axios");
+
+// التحقق مقفول للـ client ده بس، وباقي السيرفر سليم
+const internalApi = axios.create({
+  baseURL: process.env.INTERNAL_API_URL,
+  httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+});
+```
+
+</File>
+
+والأحسن من كده إنك تدي الـ agent الـ CA بتاعة الـ service نفسها في `ca`، بدل ما تقفل التحقق.
+
+## التعديل المقترح
+
+شيل كود الـ cluster من `bin/www` خالص، وخلي PM2 هو المسؤول عن الـ clustering. وابدأ الملف على طول من الـ `else`:
+
+<File name="bin/www (بعد)">
+
+```js
+#!/usr/bin/env node
+const app = require("../app");
+const http = require("http");
+const https = require("https");
+const fs = require("fs");
+
+const port = normalizePort(process.env.PORT || "4000");
+app.set("port", port);
+
+const server =
+  process.env.SERVERHTTPS === "2"
+    ? http.createServer(app)
+    : https.createServer(
+        {
+          key: fs.readFileSync(process.env.SSL_PUBLIC_KEY),
+          cert: fs.readFileSync(process.env.SSL_CERT_KEY),
+        },
+        app
+      );
+
+server.listen(port);
+server.on("error", onError);
+server.on("listening", onListening);
+
+// normalizePort و onError و onListening زي ما هما
+```
+
+</File>
+
+كده الـ `on('error')` بقى على الفرعين، والـ `addContext` والـ TLS اتشالوا، ومبقاش فيه `isMaster` خالص.
+
+وبعدها ecosystem file واضح بدل الأمر الطويل:
+
+<File name="ecosystem.config.js">
+
+```js
+module.exports = {
+  apps: [
+    {
+      name: "LMS::backend",
+      script: "./bin/www",
+      exec_mode: "cluster",
+      instances: "max",
+      merge_logs: true,
+      time: true,
+      env: { PORT: 4000 },
+    },
+  ],
+};
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.config.js
+pm2 reload "LMS::backend"   # للـ deploy من غير downtime
+```
+
+</File>
+
+<Checklist id="pm2-binwww" title="خلّصت الفصل لما" items={["تشرح ليه `isMaster` بتبقى false جوه workers بتوع PM2", "تعرف إن -i 10 بتدي 10 workers مش 10 × cores", "تشرح اللي بيحصل لو نفس الملف اشتغل fork بـ -x", "تحسب الـ DB connections = workers × pool max", "تقفل TLS على agent واحد بس لو مضطر", "تكتب bin/www من غير كود cluster وecosystem بـ instances max"]} />
+
+<Quiz>
+<Q n={1} q="pm2 start ./bin/www -i 10 على سيرفر 8 cores، والملف فيه cluster.fork لكل core. كام worker بيخدم؟">10 بالظبط. فرع الـ master مش بيتنفذ، لأن كل process هي worker عند PM2.</Q>
+<Q n={2} q="نفس الملف بـ -i 10 -x. إيه اللي بيحصل؟">10 masters، كل واحد بيعمل 8 workers. workers بتوع أول master بس بيمسكوا 4000، والباقي بيقع بـ EADDRINUSE ومحدش بيرجّعه.</Q>
+<Q n={3} q="10 workers وSequelize pool max 5. أقصى connections كام؟">50 connection، فراجعها مع max_connections في الداتابيز.</Q>
+<Q n={4} q="ليه NODE_TLS_REJECT_UNAUTHORIZED=0 خطر حتى لو محتاجه لـ API واحدة؟">لأنه بيقفل التحقق على كل الـ HTTPS الخارجة من الـ process، فأي request ممكن يتعمله MITM.</Q>
+</Quiz>

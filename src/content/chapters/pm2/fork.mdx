@@ -1,59 +1,50 @@
 ---
-title: Fork mode — كل Process لوحدها
+title: Fork Mode — كل Process في حالها
 short: Fork mode
 order: 2
 label: فصل ٢
-badge: أوضاع التشغيل · فصل ٢
-en: child_process.fork · PORT · increment_var · Nginx
-keywords: fork · port · increment_var · load balancer
-goal: تشغّل كذا process مستقلة وتفهم ليه كل HTTP instance محتاجة port مختلف أو load balancer.
+badge: الوضعين · فصل ٢
+en: child_process.fork · Nginx upstream · increment_var
+keywords: fork · port لكل process · Nginx · increment_var
+goal: تبني fork بإيدك وبـ PM2، وتفهم ليه كل process محتاجة port مختلف وحد قدامها يوزّع.
 part: الوضعين
 color: c2
 ---
 
-## معنى Fork هنا
+## الفكرة
 
-في PM2، Fork mode يشغّل البرنامج كـ process مستقلة. لتطبيق Node، PM2 يستخدم آلية تشغيل process مناسبة ويديرها، لكن مفيش Node cluster بيوحّد الـ server handle بين النسخ.
+في fork، كل instance بتبقى **process مستقلة**: ليها memory لوحدها، وevent loop لوحده، وفي الغالب **port لوحده**. مفيش أي حاجة مشتركة بين الـ processes.
 
-لو شغّلت ٣ نسخ من `server.js` وكلهم بيحاولوا يمسكوا port 3000، أول واحدة تكسب والباقي يقع بـ `EADDRINUSE`.
+<Hl c="p">الـ processes مش بتتقاسم port، فلازم حد قدامهم يوزّع الطلبات عليهم.</Hl> والحد ده غالبًا Nginx.
 
-<Box type="warn" title="fork() مش معناه memory مشتركة">
+<Diagram title="fork: كل process على port" height={300} mheight={460} nodes={[{id:"c",t:"Client",x:12,y:50,mx:50,my:8,c:1},{id:"n",t:"Nginx",s:":80",x:40,y:50,mx:50,my:34,c:5},{id:"a",t:"process 1",s:":3001",x:82,y:16,mx:18,my:84,c:2},{id:"b",t:"process 2",s:":3002",x:82,y:50,mx:50,my:84,c:2},{id:"d",t:"process 3",s:":3003",x:82,y:84,mx:82,my:84,c:2}]} edges={[{from:"c",to:"n",t:"request"},{from:"n",to:"a"},{from:"n",to:"b"},{from:"n",to:"d"}]} />
 
-`child_process.fork()` اسمه جاي من API Node، لكنه بيشغّل Node process جديدة بقناة IPC. كل process عندها heap وevent loop وglobals منفصلين.
-
-</Box>
-
-## من غير PM2
+## بإيدك: سكريبت بيشغّل 3 processes
 
 <File name="fork-launcher.js">
 
 ```js
-import { fork } from "node:child_process";
+const { fork } = require("node:child_process");
 
-for (const port of [3001, 3002, 3003]) {
-  const start = () => {
-    const child = fork("./server.js", {
-      env: { ...process.env, PORT: String(port) },
-    });
+const ports = [3001, 3002, 3003];
 
-    child.once("exit", (code) => {
-      console.log(`port ${port} exited with ${code}`);
-      setTimeout(start, 1000);
-    });
-  };
-
-  start();
+for (const port of ports) {
+  // كل واحدة process جديدة تمامًا، وبناخد الـ port من env
+  const child = fork("./server.js", [], {
+    env: { ...process.env, PORT: String(port) },
+  });
+  child.on("exit", (code) => console.log(`port ${port} exited with ${code}`));
 }
 ```
 
 </File>
 
-كل process على port. العميل محتاج load balancer قدامهم:
+السكريبت ده بيعمل fork وبس: مش بيرجّع process لو وقعت، ومش بيوزّع طلبات. وعشان العميل يكلم port واحد، محتاج Nginx:
 
-<File name="/etc/nginx/conf.d/api.conf">
+<File name="/etc/nginx/conf.d/app.conf">
 
 ```nginx
-upstream node_api {
+upstream app {
   server 127.0.0.1:3001;
   server 127.0.0.1:3002;
   server 127.0.0.1:3003;
@@ -61,59 +52,63 @@ upstream node_api {
 
 server {
   listen 80;
-
   location / {
-    proxy_pass http://node_api;
+    proxy_pass http://app;
   }
 }
 ```
 
 </File>
 
-## بـ PM2 وports متزايدة
+## نفس الكلام بـ PM2
 
-<File name="ecosystem.fork.config.cjs">
+بدل السكريبت، PM2 بيشغّل الـ processes ويرجّع أي واحدة تقع. والمشكلة إن كلهم هيقروا نفس `PORT`، فنستخدم `increment_var`:
+
+<File name="ecosystem.config.js">
 
 ```js
 module.exports = {
-  apps: [{
-    name: "api-fork",
-    script: "server.js",
-    exec_mode: "fork",
-    instances: 3,
-    increment_var: "PORT",
-    env: { PORT: 3001 },
-  }],
+  apps: [
+    {
+      name: "api-fork",
+      script: "./server.js",
+      exec_mode: "fork",
+      instances: 3,
+      increment_var: "PORT", // 3001، 3002، 3003
+      env: { PORT: 3001 },
+    },
+  ],
 };
 ```
 
 </File>
 
-`increment_var` يخلي النسخ تاخد 3001 ثم 3002 ثم 3003. شغّل:
-
 <File name="terminal">
 
 ```bash
-pm2 start ecosystem.fork.config.cjs
-pm2 list
-pm2 logs api-fork
+pm2 start ecosystem.config.js
+pm2 list                         # عمود mode = fork
+curl localhost:3001; curl localhost:3002; curl localhost:3003
 ```
 
 </File>
 
-استخدمنا `.cjs` لأن المشروع ممكن يكون `"type": "module"`، بينما ملف ecosystem هنا مكتوب بـ `module.exports`.
+- PM2 بيزوّد `PORT` بواحد لكل instance جديدة.
+- لو نسيت `increment_var`، كلهم هيحاولوا يفتحوا 3001، والتانية والتالتة هيقعوا بـ `EADDRINUSE`.
+- Nginx لسه مطلوب قدامهم. PM2 في fork مش بيوزّع ترافيك.
 
-## Fork مناسب لإيه؟
+<Box type="idea" title="إمتى fork هو الصح؟">
 
-- process واحدة بسيطة أو script.
-- queue consumer وbackground worker مبيفتحش HTTP port.
-- Python أو Bash أو binary؛ Cluster mode خاص بتطبيقات Node الشبكية.
-- Docker/Kubernetes لما كل container يشغّل process واحدة، والـ orchestrator هو اللي يكرر replicas.
+- لما التطبيق مش Node، زي Python أو bash أو binary.
+- لما التطبيق Node بس مش HTTP server، زي worker بيسحب jobs من queue أو cron runner. في الحالة دي مفيش port يتقسم أصلًا.
+- لما عايز instance واحدة بس. ساعتها مفيش فرق، وfork أبسط.
 
-<Checklist id="pm2-fork" title="خلّصت الفصل لما" items={["تشرح ليه نفس الـ port يعمل EADDRINUSE", "تشغل ٣ ports بـ increment_var", "تحط Nginx قدام fork instances", "تعرف إن كل process لها memory منفصلة", "تختار fork للـ scripts واللغات الأخرى"]} />
+</Box>
+
+<Checklist id="pm2-fork" title="خلّصت الفصل لما" items={["تشرح ليه fork محتاجة port لكل process", "تكتب upstream في Nginx لعدة ports", "تستخدم `increment_var` في الـ ecosystem", "تعرف إن PM2 في fork مش بيوزّع ترافيك", "تعرف إمتى fork هو الاختيار الصح"]} />
 
 <Quiz>
-<Q n={1} q="٣ fork instances لسيرفر HTTP على port 3000 هتشتغل؟">لأ، إلا لو فيه آلية مشاركة socket خارج Fork mode. بالشكل العادي يحصل EADDRINUSE.</Q>
-<Q n={2} q="increment_var بيعمل إيه؟">يزود قيمة environment variable لكل instance، زي PORT.</Q>
-<Q n={3} q="ليه محتاج Nginx هنا؟">عشان العميل يدخل من باب واحد وNginx يوزع على الـ ports المختلفة.</Q>
+<Q n={1} q="3 instances fork من غير increment_var على PORT=3001. إيه اللي هيحصل؟">واحدة بس هتفتح 3001، والاتنين التانيين هيقعوا بـ EADDRINUSE وPM2 هيفضل يعيد تشغيلهم.</Q>
+<Q n={2} q="مين بيوزّع الطلبات في fork؟">حد برّه PM2، زي Nginx أو load balancer.</Q>
+<Q n={3} q="عندي worker بيسحب jobs من Redis. fork ولا cluster؟">fork، لأنه مش بيسمع على port، وcluster ميزته الأساسية تقسيم الـ port.</Q>
 </Quiz>

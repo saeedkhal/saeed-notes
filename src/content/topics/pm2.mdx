@@ -1,24 +1,24 @@
 ---
-title: PM2 من تشغيل Process لحد Cluster
+title: PM2 من Fork لحد Cluster والـ Reboot
 highlight: PM2
-subtitle: fork · cluster · reload · startup · logs · logrotate
-description: شغّل Node في production، افهم الفرق الحقيقي بين fork وcluster، احفظ الـ process list بعد الـ reboot، وسيطر على الـ logs قبل ما تملى الهارد.
+subtitle: fork · cluster · bin/www · reload · startup · save · logrotate
+description: الفرق الحقيقي بين fork mode وcluster mode، وليه كود الـ cluster اللي جوه bin/www بيبقى كود ميت تحت PM2، وإزاي التطبيقات ترجع لوحدها بعد ما السيرفر يعمل restart.
 emoji: ♾️
 order: 22
 tags: [backend, devops]
-note: شرح عملي بأسلوبي مبني على PM2 وNode cluster docs. PM2 بيتغير؛ راجع الـ docs الرسمية قبل نسخ flags إلى production، وجرّب graceful shutdown على تطبيقك.
+note: شرح بأسلوبي، واتجرّب على PM2 7.0.4 وNode cluster. الـ flags بتتغير بين الإصدارات، فراجع الـ docs و pm2 --help قبل ما تنسخ أمر على production.
 ---
 
-المذكرة ماشية من السؤال الأساسي: <Hl c="y">الـ process الواحدة هتستغل كام core؟</Hl> بعدين نبني Fork وCluster بإيدنا، ونشوف PM2 بيختصر إيه، وإمتى الـ reload مش مضمون يبقى zero downtime. وفي الآخر نحفظ التشغيل بعد reboot ونمنع ملفات الـ logs تكبر للأبد.
+المذكرة دي بتجاوب على <Hl c="y">٤ أسئلة</Hl> بالترتيب. السؤال الأول: ليه أصلًا محتاج أكتر من process؟ التاني: إيه الفرق بين fork وcluster؟ التالت: إيه اللي بيحصل لكود الـ cluster اللي جوه `bin/www` لما PM2 يشغّله؟ والرابع: إزاي التطبيقات ترجع لوحدها بعد الـ reboot من غير ما حد يدخل السيرفر؟
 
 <Box type="story" icon="🍽️" title="تشبيه المذكرة كلها">
 
-المطعم عنده كاونتر واحد. في Fork mode كل جرسون واقف على كاونتر برقم مختلف، ومحتاج مدير صالة يوزع الزباين. في Cluster mode فيه باب واحد، وPM2 يوزع الداخلين على كذا جرسون. كل جرسون له جيبه ودفتره لوحده؛ لو عايزهم يشوفوا نفس الـ session أو cache، حطها في خزنة مشتركة زي Redis.
+المطعم ده عنده جرسون واحد شاطر جدًا، بس مهما كان شاطر فهو إيد واحدة. في **fork mode** بتجيب ٣ جرسونات، وكل واحد واقف على باب لوحده، والزبون محتاج حد على الرصيف يقوله يدخل من أنهي باب، وده الـ Nginx. في **cluster mode** المطعم ليه باب واحد، والمدير (PM2) واقف عليه يوزّع الزباين على الجرسونات. وفي الحالتين كل جرسون معاه نوتة لوحده، فلو عايزهم يعرفوا نفس المعلومة لازم تتكتب في سبورة مشتركة، وهي Redis.
 
 </Box>
 
 <Box type="idea" title="قبل ما تبدأ">
 
-PM2 process manager، مش بديل Docker أو Kubernetes، ومش حل للحسابات الثقيلة داخل request واحدة. الأمثلة ES modules، وملف `package.json` محتاج `"type": "module"`. على Windows وبعض البيئات سلوك توزيع Node cluster يختلف، فاختبر على نظام production.
+الأمثلة مكتوبة بـ CommonJS (`require`)، لأن ده شكل `bin/www` اللي بيطلعه Express generator. ملفات الـ ecosystem هنا بامتداد `.config.js`. ولو مشروعك `"type": "module"`، سمّيها `ecosystem.config.cjs`.
 
 </Box>

@@ -1,111 +1,106 @@
 ---
 title: متسيبش الـ Logs تاكل الهارد
 short: Logrotate
-order: 8
-label: فصل ٨
-badge: الاستمرار · فصل ٨
-en: pm2-logrotate · max_size · retain · compress · rotateInterval
-keywords: logs · rotate · retain · gzip · timezone
-goal: تثبّت pm2-logrotate وتضبط الحجم والاحتفاظ والضغط والتوقيت بمعنى صحيح.
-part: الاستمرار
-color: c3
+order: 9
+label: فصل ٩
+badge: الـ Logs · فصل ٩
+en: pm2-logrotate · max_size · retain · compress · rotateInterval · flush
+keywords: logs · rotate · retain · compress · rm vs flush
+goal: تثبّت pm2-logrotate وتفهم كل إعداد، وتعرف ليه rm على log شغال مش بيفضّي الهارد.
+part: الـ Logs
+color: c4
 ---
 
 ## المشكلة
 
-PM2 تكتب logs افتراضيًا تحت `$HOME/.pm2/logs`. لو التطبيق بيطبع كتير، `app-out.log` و`app-error.log` يكبروا لحد ما الهارد يتملي.
+PM2 بيكتب الـ logs في `~/.pm2/logs`، ملف للـ out وملف للـ error لكل app. ولو التطبيق بيطبع كتير، الملفات دي بتكبر لحد ما الهارد يتملي والسيرفر كله يقف.
 
-الـ rotation يخلي فيه current log يفضل التطبيق يكتب فيه، ونسخ مؤرخة قديمة بعدد محدود. لما trigger يحصل بالحجم أو بالوقت، الأداة تدور الملف وتبدأ current log جديدة.
+<Hl c="o">الحل مش إنك تمسح الملفات بإيدك، الحل rotation.</Hl> يعني الملف الحالي يتقفل ويتسمى بالتاريخ، ويبدأ ملف جديد، والقديم يتمسح بعد عدد معين.
 
-<Box type="warn" title="التثبيت بـ PM2 مش npm">
+## التثبيت
 
-`pm2-logrotate` PM2 module، فالأمر الرسمي:
+`pm2-logrotate` ده PM2 module، فبيتسطب بـ `pm2 install` مش بـ npm أو pnpm:
+
+<File name="terminal">
 
 ```bash
 pm2 install pm2-logrotate
 ```
 
-</Box>
+</File>
 
-## إعداد عملي
+## الإعداد
 
 <File name="terminal">
 
 ```bash
 pm2 set pm2-logrotate:max_size 1G
 pm2 set pm2-logrotate:retain 7
-pm2 set pm2-logrotate:compress true
+pm2 set pm2-logrotate:compress false
 pm2 set pm2-logrotate:dateFormat YYYY-MM-DD_HH-mm-ss
 pm2 set pm2-logrotate:workerInterval 30
 pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
 pm2 set pm2-logrotate:TZ Asia/Kuwait
 
-pm2 conf
+pm2 conf pm2-logrotate   # راجع القيم
 ```
 
 </File>
 
-## كل قيمة معناها إيه؟
+## كل سطر معناه إيه؟
 
-<Grid2>
-<Card title="max_size: 1G" c={1}>
+- **`max_size 1G`:** لما الملف يعدّي 1G، يتعمله rotate. وممكن يعدّي الرقم شوية، لأن الفحص بيحصل كل فترة مش مع كل سطر.
+- **`retain 7`:** يحتفظ بآخر 7 ملفات قديمة، والملف الحالي فوقهم. يعني مش 7 إجمالي.
+- **`compress false`:** الضغط **مقفول**. لو عايز الملفات القديمة تتضغط بـ gzip وتاخد مساحة أقل، خليها `true`.
+- **`dateFormat`:** شكل التاريخ اللي بيتحط في اسم الملف القديم.
+- **`workerInterval 30`:** كل كام ثانية يفحص حجم الملفات.
+- **`rotateInterval '0 0 * * *'`:** cron بيعمل rotate كل يوم الساعة 12 بالليل، حتى لو الملف لسه موصلش للحجم. والـ quotes مهمة عشان الـ shell ميفسّرش النجوم كأسماء ملفات.
+- **`TZ Asia/Kuwait`:** التوقيت اللي الـ cron والتاريخ بيمشوا عليه. ولو مش محطوطة، بياخد توقيت السيستم.
 
-لما الفحص يلاقي الملف عدى 1G يعمل rotate. ممكن يتخطى الرقم شوية لأن الفحص دوري، مش byte بbyte.
+<Box type="tip" title="حسبة الهارد">
 
-</Card>
-<Card title="retain: 7" c={2}>
+الأسوأ تقريبًا = `max_size` × (`retain` + 1) لكل ملف. يعني 1G × 8 = حوالي 8G للـ out، ومثلهم للـ error، لكل app. ولو الهارد صغير، قلّل الرقمين أو فعّل `compress`.
 
-يحتفظ بحد أقصى ٧ ملفات rotated، بالإضافة إلى current log.
+</Box>
 
-</Card>
-</Grid2>
-
-<Grid2>
-<Card title="compress: true" c={3}>
-
-يضغط الملفات rotated بـ gzip. لو `false`، الضغط **مقفول**؛ القيمة لا تعني "اضغط بشكل false".
-
-</Card>
-<Card title="workerInterval: 30" c={4}>
-
-يفحص الأحجام كل ٣٠ ثانية. تقليله جدًا يزود الفحص، وتكبيره يسمح بتجاوز أكبر للحجم.
-
-</Card>
-</Grid2>
-
-`rotateInterval: '0 0 * * *'` يعمل forced rotation يوميًا عند منتصف الليل. الـ quotes مهمة عشان shell متفسرش النجوم كأسماء ملفات. ده trigger زمني منفصل عن `max_size`.
-
-`TZ: Asia/Kuwait` يحدد timezone المستخدمة في الجدولة واسم الملف حسب دعم module. لو مش موجودة، الافتراضي timezone النظام.
-
-## مثال شكل الملفات
-
-لو التطبيق اسمه `app`:
+## شكل الملفات
 
 <Tree>
 
 ```text
 ~/.pm2/logs/
-├── app-out.log
-├── app-out__2026-10-12_00-00-00.log.gz
-├── app-out__2026-10-11_00-00-00.log.gz
-├── app-error.log
-└── app-error__2026-10-12_00-00-00.log.gz
+├── LMS--backend-out.log                          ← الحالي
+├── LMS--backend-out__2026-10-12_00-00-00.log     ← قديم
+├── LMS--backend-out__2026-10-11_00-00-00.log
+├── LMS--backend-error.log
+└── LMS--backend-error__2026-10-12_00-00-00.log
 ```
 
 </Tree>
 
-اسم الملف الفعلي والفاصل يتأثران بإصدار module والإعداد، فاعتمد على النتيجة عندك، مش الاسم الحرفي في الرسم.
+الاسم الفعلي بيختلف حسب اسم الـ app والإصدار، والرموز زي `:` في الاسم بتتحوّل لـ `-`. اعتمد على اللي عندك في `ls ~/.pm2/logs`.
 
-<Box type="tip" title="اختبر بإعداد صغير مؤقتًا">
+## متمسحش log شغال بـ `rm`
 
-على staging، حط `max_size 1K` واطبع logs، وتأكد إن rotation والضغط والretain حصلوا. بعد الاختبار رجّع إعداد production.
+لو عملت `rm` على ملف الـ app لسه فاتحه، الملف هيختفي من الفولدر، لكن الـ app هيفضل يكتب فيه، والمساحة **مش هترجع** لحد ما الـ process تقفل. وده اللي بيخلي `df` يقول الهارد مليان و`du` مش لاقي حاجة.
 
-</Box>
+<File name="terminal">
 
-<Checklist id="pm2-logrotate" title="خلّصت الفصل لما" items={["تثبت module بأمر pm2 install", "تفرق current log عن rotated logs", "تعرف إن retain لا يحسب current file", "تفعّل الضغط بـ true", "تحط cron expression بين quotes", "تراجع الإعداد بـ pm2 conf"]} />
+```bash
+pm2 flush                  # يفضّي كل ملفات الـ logs من غير ما يمسحها
+pm2 flush "LMS::backend"   # app واحد بس
+
+# لو مسحت بـ rm خلاص، خلي الـ app يفتح ملف جديد:
+pm2 reload all             # في cluster من غير downtime
+pm2 restart all            # في fork
+```
+
+</File>
+
+<Checklist id="pm2-logrotate" title="خلّصت الفصل لما" items={["تثبّت الـ module بـ pm2 install", "تعرف إن retain مش بيعد الملف الحالي", "تعرف إن compress false يعني الضغط مقفول", "تحط الـ cron بين quotes", "تحسب أقصى مساحة الـ logs ممكن تاخدها", "تستخدم pm2 flush بدل rm"]} />
 
 <Quiz>
-<Q n={1} q="retain 7 معناها إجمالي ٧ مع current؟">لأ. حتى ٧ rotated files، وفوقهم current file.</Q>
-<Q n={2} q="compress false يعمل ضغط؟">لأ. يعطّل gzip. استخدم true للتفعيل.</Q>
-<Q n={3} q="ليه الملف ممكن يعدي 1G قبل rotation؟">لأن worker تفحص كل فترة؛ trigger يحصل وقت الفحص التالي.</Q>
+<Q n={1} q="retain 7. كام ملف هتلاقي لكل نوع log؟">لحد 8: الحالي و7 قديمين.</Q>
+<Q n={2} q="compress false معناها إيه؟">الضغط مقفول، والملفات القديمة بتفضل نص عادي.</Q>
+<Q n={3} q="عملت rm على ملف log، وdf لسه بيقول الهارد مليان. ليه؟">لأن الـ app لسه فاتح الملف وبيكتب فيه. اعمل reload أو restart عشان يفتح ملف جديد والمساحة ترجع.</Q>
 </Quiz>

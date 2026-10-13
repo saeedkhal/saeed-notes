@@ -1,87 +1,76 @@
 ---
 title: تختار Fork ولا Cluster؟
-short: المقارنة
+short: المقارنة والمشاكل
 order: 4
 label: فصل ٤
 badge: القرار · فصل ٤
-en: stateless · Redis · WebSocket · cron · worker_threads
-keywords: stateless · sticky sessions · worker_threads · Kubernetes
-goal: تختار mode صح وتتجنب تكرار sessions والcron والـ cache بين workers.
+en: stateless · Redis · cron · WebSocket · worker_threads
+keywords: مقارنة · stateless · cron مكرر · worker_threads
+goal: تقارن الوضعين، وتعرف المشاكل اللي بتظهر لما التطبيق يبقى كذا نسخة، وتختار الصح لكل حالة.
 part: القرار
 color: c4
 ---
 
-## المقارنة اللي تهمك
+## المقارنة
 
-| السؤال | Fork mode | Cluster mode |
+| | Fork | Cluster |
 |---|---|---|
-| نفس الـ port؟ | لأ بين نسخ HTTP العادية | أيوه |
-| استغلال cores؟ | يدوي مع ports وLB | workers بسهولة |
-| Node فقط؟ | يشغّل لغات وبرامج مختلفة | لتطبيقات Node الشبكية |
-| reload تدريجي؟ | restart عادي غالبًا | `pm2 reload` |
-| process رئيسية؟ | كل instance تطبيق مستقل | PM2 يدير cluster workers |
+| الـ port | port لكل process | port واحد للكل |
+| مين بيوزّع؟ | Nginx أو LB برّه | PM2 (الـ primary) |
+| اللغة | أي حاجة | Node بس |
+| `pm2 reload` بدون downtime | لأ، بيبقى restart | أيوه |
 | memory مشتركة؟ | لأ | برضه لأ |
 
-الـ overhead بتاع primary process موجود، لكن القرار الحقيقي مش كام MB زيادة؛ القرار مين هيوزع الشبكة ومين مسؤول عن lifecycle.
+<Hl c="b">السطر الأخير هو أهم سطر: في الوضعين، كل instance ليها memory لوحدها.</Hl> cluster معناه port مشترك، مش memory مشتركة.
 
-## Cluster معناها التطبيق Stateless
+## المشاكل اللي بتظهر لما التطبيق يبقى N نسخة
 
-كل worker عندها memory مختلفة. الحاجات دي تعمل مشاكل:
+أي حاجة متخزنة في متغير جوه الـ process هتبقى N نسخة مختلفة:
 
 <Grid2>
 <Card title="Session أو cache في RAM" c={1}>
 
-المستخدم يسجل دخوله عند worker 1، والطلب التالي يروح worker 2 فمتلاقيش session. انقل الحالة إلى Redis أو database مشتركة.
+المستخدم يعمل login عند worker 1، والـ request الجاي يروح worker 2 فميلاقيش الـ session. الحل إنك تحطها في Redis أو في الداتابيز.
 
 </Card>
 <Card title="Rate limiter في RAM" c={2}>
 
-كل worker تعد لوحدها؛ الحد الحقيقي يبقى مضروبًا في عدد workers. استخدم store مشتركة.
+كل worker بيعد لوحده. حد 100 request مع 4 workers بيبقى في الحقيقة 400. الحل store مشتركة.
 
 </Card>
 </Grid2>
 
 <Grid2>
-<Card title="Cron داخل التطبيق" c={4}>
+<Card title="Cron جوه التطبيق" c={4}>
 
-الوظيفة تشتغل N مرات، مرة في كل worker. افصل scheduler أو استخدم distributed lock.
+الـ job بتشتغل N مرة، مرة في كل worker. يعني إيميل التقرير يوصل 8 مرات. الحل إنك تشغّل الـ cron في process لوحدها (fork، instance واحدة)، أو تستخدم lock في Redis.
 
 </Card>
-<Card title="WebSockets" c={5}>
+<Card title="Socket.io" c={5}>
 
-راجع sticky sessions والـ adapter المشتركة، زي Redis adapter في Socket.IO. connection الحالية مرتبطة بالworker اللي قبلتها.
+الـ client متوصل بـ worker معين، فرسالة من worker تاني مش هتوصله. محتاج Redis adapter، ومحتاج sticky sessions لو فيه polling.
 
 </Card>
 </Grid2>
 
-## Docker وKubernetes
+<Box type="tip" title="لو مضطر تشغّل حاجة في worker واحد بس">
 
-في VPS واحدة، PM2 Cluster طريق بسيط لاستغلال cores. في Kubernetes، النمط الشائع process واحدة في كل container وreplicas متعددة:
-
-<Flow items={[{"t": "Pod 1", "s": "Node process", "c": 1}, {"t": "Pod 2", "s": "Node process", "c": 2}, {"t": "Pod 3", "s": "Node process", "c": 3}, "←", {"t": "Service", "s": "load balancing", "c": 5}]} />
-
-كده الـ orchestrator يدير health checks وrestarts وrolling updates. Cluster داخل كل container ممكن يبقى قرار مقصود، لكنه يضيف طبقة scaling ومراقبة ثانية. متعملوش تلقائيًا.
-
-## الشغل CPU-heavy
-
-لو request واحدة بتعمل image processing أو loop حسابية تقيلة، إضافة cluster تخلي requests مختلفة تتوزع، لكنها لا تسرّع الطلب الواحد.
-
-استخدم:
-
-- `worker_threads` لتوازي JavaScript CPU work داخل التطبيق.
-- job queue وworker services للشغل الطويل.
-- process منفصلة لو العزل أهم.
-
-<Box type="interview" title="الإجابة العملية">
-
-"VPS عليها API Node وعايز كل cores؟" — Cluster مع app stateless واختبار graceful reload. "Kubernetes؟" — ابدأ process واحدة لكل container وscale replicas. "سكريبت أو Python؟" — Fork.
+PM2 بيدي كل instance رقم في `process.env.NODE_APP_INSTANCE`، من `0` لحد `N-1`. تقدر تكتب `if (process.env.NODE_APP_INSTANCE === "0")` وتشغّل الـ cron جواها. وده حل سريع، بس process منفصلة للـ cron أنضف، لأن worker صفر ممكن يعمل restart في نص الـ job.
 
 </Box>
 
-<Checklist id="pm2-choosing" title="خلّصت الفصل لما" items={["تنقل session والcache المشتركة خارج RAM", "تمنع cron من التكرار في كل worker", "تخطط للـ WebSockets والsticky sessions", "تختار process واحدة لكل container كافتراضي", "تستخدم worker_threads للطلب CPU-heavy"]} />
+## إمتى تستخدم إيه؟
+
+- **API أو web server بـ Node على VPS:** cluster مع `instances: "max"`، وبشرط إن التطبيق stateless.
+- **Worker بيسحب من queue، أو cron، أو سكريبت:** fork، instance واحدة.
+- **أي حاجة مش Node:** fork. مفيش اختيار تاني.
+- **Docker أو Kubernetes:** غالبًا process واحدة لكل container، وزوّد الـ replicas. الـ orchestrator هو اللي بيوزّع ويرجّع اللي يقع، فـ cluster جوه كل container بيبقى طبقة زيادة.
+- **request واحدة بتعمل حساب تقيل:** cluster مش هيسرّعها، لأنه بيوزّع requests مختلفة بس. استخدم `worker_threads` أو job queue.
+
+<Checklist id="pm2-choosing" title="خلّصت الفصل لما" items={["تعرف إن cluster مش بيشارك memory", "تنقل الـ session والـ cache والـ rate limiter لـ Redis", "تمنع الـ cron إنه يشتغل في كل worker", "تعرف `NODE_APP_INSTANCE` وإمتى تستخدمه", "تختار الـ mode المناسب لكل نوع تطبيق"]} />
 
 <Quiz>
-<Q n={1} q="عندك ٤ workers وrate limit في RAM قيمته ١٠٠. الحد العالمي مضمون يبقى ١٠٠؟">لأ. كل worker عندها عداد، فمحتاج store مشتركة.</Q>
-<Q n={2} q="Cluster تسرّع تحويل صورة واحدة؟">مش بذاتها. وزّع الحساب على worker_threads أو job workers.</Q>
-<Q n={3} q="ليه Cluster جوه Kubernetes مش أول اختيار؟">لأن Kubernetes أصلًا يدير replicas والتوزيع والـ rolling updates؛ cluster تضيف طبقة إدارة أخرى.</Q>
+<Q n={1} q="4 workers وrate limit في RAM قيمته 100. الحد الحقيقي كام؟">لحد 400، لأن كل worker بيعد لوحده.</Q>
+<Q n={2} q="cron بيبعت إيميل جوه تطبيق شغال بـ instances max على 8 cores. كام إيميل؟">8، مرة من كل worker.</Q>
+<Q n={3} q="cluster هيسرّع request بتعالج صورة كبيرة؟">لأ. الـ request الواحدة بتفضل على worker واحد. استخدم worker_threads أو queue.</Q>
 </Quiz>

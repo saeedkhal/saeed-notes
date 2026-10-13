@@ -1,216 +1,162 @@
 ---
-title: Lab — اختبر رجوع التطبيق بعد Reboot
-short: Reboot Lab
-order: 7
-label: فصل ٧
-badge: الاستمرار · فصل ٧
-en: systemctl · dump.pm2 · pm2 update · environment variables
-keywords: pm2-username · reboot · pm2 update · env
-goal: تنفّذ startup وsave بالترتيب، وتثبت إن نفس المستخدم والـ environment رجعوا بعد reboot.
-part: الاستمرار
-color: c2
+title: هل الـ Service منفصلة عن PM2 اللي فيه الـ Apps؟
+short: الـ Service والـ Daemon
+order: 8
+label: فصل ٨
+badge: بعد الـ Reboot · فصل ٨
+en: systemd · pm2-ubuntu.service · PM2 daemon · resurrect · kill
+keywords: service = مفتاح تشغيل · pm2 vs sudo pm2 · inactive · Lab
+goal: تفهم إن الـ service مجرد مفتاح تشغيل لنفس الـ daemon، وتختبر الـ reboot وتشخّص لو الـ apps مرجعتش.
+part: بعد الـ Reboot
+color: c3
 ---
 
-## النتيجة اللي عايزينها
+## الإجابة
 
-بعد ما السيرفر يعمل reboot، عايزين:
+<Hl c="p">لأ، مش منفصلة.</Hl> الـ service دي مجرد مفتاح تشغيل لنفس الـ PM2 اللي ماسك الـ apps بتاعتك.
 
-1. systemd تشغّل PM2 daemon تحت مستخدم التطبيق.
-2. PM2 تقرأ `~/.pm2/dump.pm2`.
-3. التطبيقات ترجع بنفس الأسماء والعدد والمسارات.
-4. الـ environment المطلوبة تبقى موجودة.
+## الترتيب
 
-<Hl c="y">`startup` يشغّل PM2 مع النظام. `save` تقول لـ PM2 أنهي apps ترجع. واحدة من غير الثانية مش كفاية.</Hl>
+<Tree>
 
-## جهّز التطبيق واحفظه
-
-نفّذ الخطوات بنفس المستخدم اللي التطبيق هيشتغل باسمه، مش root:
-
-<File name="terminal">
-
-```bash
-whoami
-pm2 start ecosystem.config.cjs
-pm2 list
-pm2 save
+```text
+systemd
+ └─ pm2-ubuntu.service      ← بتقوم مع الـ boot
+     └─ PM2 daemon          ← نفس الـ PM2 اللي بتكلمه بـ pm2 list
+         ├─ LMS::backend worker 1
+         ├─ LMS::backend worker 2
+         └─ ...
 ```
 
-</File>
+</Tree>
 
-`pm2 save` تكتب snapshot في `~/.pm2/dump.pm2`. راجع إن القائمة الحالية هي اللي فعلًا عايز ترجع بعد reboot؛ متحفظش process تجريبية بالغلط.
+- **systemd:** وظيفته بس إنه يشغّل الـ PM2 daemon لما السيرفر يقوم.
+- **الـ PM2 daemon:** هو اللي بيدير الـ apps. بيشغّلها، ويرجّع اللي يقع منها، ويوزّع الـ requests في الـ cluster.
+- **أوامر `pm2` في الـ terminal:** بتكلم نفس الـ daemon ده عن طريق socket في `~/.pm2`، مش نسخة تانية.
 
-<Box type="warn" title="كل مستخدم له PM2 مختلفة">
+<Box type="story" icon="🏢" title="زي بواب العمارة">
 
-لو عملت `pm2 save` كمستخدم `ubuntu`، وبعدين أنشأت startup service لمستخدم `root`، عندك هومان و`PM2_HOME` وprocess lists مختلفين. الأوامر تنجح، لكن التطبيق المطلوب مش هيرجع.
+الـ service هي المنبّه اللي بيصحّي البواب الصبح. البواب نفسه هو الـ PM2 daemon، وهو اللي عارف السكان ومين ساكن فين. وإنت لما تكلّمه من الـ terminal بتكلّم نفس البواب، مش واحد تاني. ولو قلت للمنبّه "خلاص"، يعني `systemctl stop`، البواب بيمشي وبيقفل العمارة كلها.
 
 </Box>
 
-## أنشئ Startup service
+## الـ service بتعمل إيه جواها؟
 
-شغّل الأمر الأول من غير sudo:
+لو فتحت الملف بالأمر ده:
 
 <File name="terminal">
 
 ```bash
-pm2 startup
+systemctl cat pm2-ubuntu
 ```
 
 </File>
 
-هيطبع أمرًا مخصوصًا لجهازك، قريب من:
+هتلاقي حاجة شبه كده:
 
-<File name="terminal">
+<File name="/etc/systemd/system/pm2-ubuntu.service">
 
-```bash
-sudo env PATH=$PATH:/home/ubuntu/.nvm/versions/node/v22/bin \
-  pm2 startup systemd -u ubuntu --hp /home/ubuntu
+```ini
+[Service]
+Type=forking
+User=ubuntu
+Environment=PATH=/usr/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin
+Environment=PM2_HOME=/home/ubuntu/.pm2
+PIDFile=/home/ubuntu/.pm2/pm2.pid
+Restart=on-failure
+
+ExecStart=/usr/bin/pm2 resurrect
+ExecReload=/usr/bin/pm2 reload all
+ExecStop=/usr/bin/pm2 kill
 ```
 
 </File>
 
-انسخ الناتج عندك بالحرف. متنسخش المثال؛ مسار Node واسم المستخدم والـ home مختلفين من جهاز للتاني.
+- **عند الـ boot:** بتنفذ `pm2 resurrect`، فيقوم الـ daemon ويقرأ `dump.pm2` ويرجّع الـ apps.
+- **عند الإيقاف:** بتنفذ `pm2 kill`. يعني لو عملت `systemctl stop pm2-ubuntu` هتقفل الـ apps كلها، لأنه نفس الـ daemon.
+- **`systemctl reload pm2-ubuntu`:** بينفذ `pm2 reload all`.
+- **`Environment=PATH`:** هنا بالظبط مسار الـ node اللي اتحفظ وقت الـ startup. ولو Node متسطب بـ nvm، هتلاقي أول المسار حاجة زي `/home/ubuntu/.nvm/versions/node/v22.11.0/bin`، وكمان الـ `pm2` في `ExecStart` هيبقى من نفس الفولدر. وده سبب إنك تعيد الـ startup بعد تغيير Node.
+- **`User` و`PM2_HOME`:** دول اللي بيحددوا أنهي daemon وأنهي `dump.pm2` هيتقري.
 
-الخدمة غالبًا اسمها `pm2-<username>`. افحص:
+## حاجتين ممكن يلخبطوك
+
+- **`pm2` و`sudo pm2` اتنين daemons مختلفين.** كل يوزر ليه PM2 خاص بيه في الـ home بتاعه، فـ root عنده `/root/.pm2`. لو شغلت الـ apps بـ `sudo pm2` وعملت startup ليوزر عادي، بعد الـ reboot مش هتلاقيهم. خليك على يوزر واحد في كل حاجة.
+- **أول مرة بعد `pm2 startup`، ممكن `systemctl status` يقولك إن الـ service مش شغالة (inactive)،** رغم إن الـ apps شغالة. ده لأن الـ daemon الحالي إنت اللي شغلته بإيدك، مش systemd، و`pm2 startup` بيعمل `enable` بس مش `start`. ودي مش مشكلة، فبعد أول reboot systemd هيبقى هو اللي مشغّله.
 
 <File name="terminal">
 
 ```bash
-sudo systemctl status pm2-ubuntu
-sudo systemctl is-enabled pm2-ubuntu
+pm2 list          # الـ apps بتاعة اليوزر الحالي
+sudo pm2 list     # الـ apps بتاعة root، غالبًا فاضية، ولو مش فاضية ده سبب اللخبطة
 ```
 
 </File>
 
-بدّل `ubuntu` باسم المستخدم الحقيقي.
+## 🧪 Lab: جرّب الـ reboot بجد
 
-## اعمل الاختبار الحقيقي
-
-متعتبرش الإعداد ناجحًا لمجرد إن `systemctl status` أخضر. اختبر reboot في وقت آمن:
+متعتبرش الإعداد ناجح عشان `systemctl status` أخضر. جرّب في وقت هادي:
 
 <File name="terminal">
 
 ```bash
+whoami                                 # لازم يكون يوزر الـ app
+pm2 list && pm2 save
+systemctl is-enabled pm2-$(whoami)     # enabled
 sudo reboot
 ```
 
 </File>
 
-بعد رجوع السيرفر:
+بعد ما يقوم:
 
 <File name="terminal">
 
 ```bash
-pm2 list
-pm2 describe .COM::backend
-curl http://localhost:3000
+systemctl status pm2-$(whoami)         # المرة دي active (running)
+pm2 list                               # نفس الأسماء ونفس العدد
+curl -k https://localhost:4000         # الـ app بيرد فعلًا
 ```
 
 </File>
 
-لو الـ list فاضية، قارن مستخدم الـ service بالمستخدم الحالي، وافحص:
+## لو الـ apps مرجعتش
+
+اسأل بالترتيب ده:
+
+1. **هل الـ service enabled؟** `systemctl is-enabled pm2-ubuntu`.
+2. **هل هي لنفس اليوزر؟** قارن سطر `User=` في `systemctl cat` بـ `whoami`.
+3. **هل `dump.pm2` موجود وحديث؟** `ls -l ~/.pm2/dump.pm2`، وقارن الوقت بآخر تغيير عملته.
+4. **هل مسار الـ node لسه موجود؟** قارن سطر `Environment=PATH` بـ `which node`.
+5. **إيه اللي اتكتب وقت الـ boot؟** `journalctl -u pm2-ubuntu -b`.
+6. **الـ app قام ووقع؟** `pm2 logs --err --lines 50`، وغالبًا السبب env ناقصة أو `cwd` غلط.
+
+## بديل: cron لو مفيش systemd
+
+ده حل احتياطي، مش أحسن من الـ service. في crontab **لنفس اليوزر**:
 
 <File name="terminal">
 
 ```bash
-systemctl cat pm2-$(whoami)
-journalctl -u pm2-$(whoami) --since boot
-ls -l ~/.pm2/dump.pm2
+which pm2      # خد المسار الكامل
+crontab -e
 ```
 
 </File>
 
-## أي تغيير محتاج Save جديدة
+<File name="crontab">
 
-بعد add أوdelete أوscale أوتغيير ecosystem:
-
-<File name="terminal">
-
-```bash
-pm2 start ecosystem.config.cjs
-pm2 delete old-worker
-pm2 scale .COM::backend 8
-pm2 save
+```cron
+@reboot /home/pmstest/.npm-global/bin/pm2 resurrect
 ```
 
 </File>
 
-آخر `save` هي snapshot اللي reboot الجاي يرجعها.
+لازم تكتب المسار الكامل، لأن cron بيشتغل بـ `PATH` صغير جدًا ومش هيلاقي `pm2` بالاسم بس. ولو `pm2` بيتشغّل بـ node من nvm، cron مش هيلاقي `node` برضه، فاكتب في السطر قبله `PATH=` بمسار فولدر الـ node.
 
-## Node وPM2 والـ PATH
-
-مع nvm، systemd service تحتفظ بمسار نسخة Node وقت إنشاء الخدمة. بعد تغيير Node:
-
-<File name="terminal">
-
-```bash
-pm2 unstartup
-pm2 startup
-# نفّذ أمر sudo الجديد
-pm2 save
-```
-
-</File>
-
-ولو حدّثت حزمة PM2 العالمية، حدّث الـ daemon اللي شغالة:
-
-<File name="terminal">
-
-```bash
-pm2 update
-pm2 list
-```
-
-</File>
-
-راجع release notes قبل تحديث production، واختبر إن apps رجعت سليمة.
-
-## Environment تفضل بعد Reboot
-
-متصدقش إن متغيرًا عملته `export` في جلسة SSH هيفضل موجودًا في systemd. حط القيم غير السرية في ecosystem:
-
-<File name="ecosystem.config.cjs">
-
-```js
-module.exports = {
-  apps: [{
-    name: ".COM::backend",
-    script: "./bin/www",
-    exec_mode: "cluster",
-    instances: 4,
-    env_production: {
-      NODE_ENV: "production",
-      PORT: 3000,
-      SERVERHTTPS: "true",
-    },
-  }],
-};
-```
-
-</File>
-
-وشغّل البيئة المقصودة:
-
-<File name="terminal">
-
-```bash
-pm2 start ecosystem.config.cjs --env production
-pm2 save
-```
-
-</File>
-
-الأسرار زي private keys متتحطش في Git. استخدم secret manager أو ملف محمي يقرأه التطبيق وقت التشغيل، وتأكد إن مستخدم الـ service عنده صلاحية القراءة. لو التطبيق بيقرأ `.env`، استخدم مسارًا ثابتًا و`cwd` واضحًا؛ systemd مش شرط تبدأ من نفس فولدر جلسة SSH.
-
-<Box type="interview" title="تشخيص سريع">
-
-"التطبيق شغال قبل reboot ومش موجود بعده" — افحص بالترتيب: هل service enabled؟ هل هي لنفس المستخدم؟ هل `dump.pm2` موجودة وحديثة؟ هل مسار Node لسه صحيح؟ وهل الـ env والـ cwd متاحين من systemd؟
-
-</Box>
-
-<Checklist id="pm2-reboot-lab" title="خلّصت الفصل لما" items={["تنفّذ start ثم save بنفس مستخدم التطبيق", "تنسخ أمر startup الناتج من جهازك", "تفحص service بـ systemctl", "تعمل reboot تجريبي وتختبر endpoint", "تعمل save بعد أي تغيير في القائمة", "تعيد startup بعد تغيير Node", "تحفظ env خارج جلسة SSH"]} />
+<Checklist id="pm2-reboot-lab" title="خلّصت الفصل لما" items={["تشرح إن الـ service بتشغّل نفس الـ daemon اللي pm2 list بتكلمه", "تقرا `systemctl cat` وتعرف ExecStart وExecStop", "تعرف إن systemctl stop بيقفل كل الـ apps", "تفرق بين pm2 وsudo pm2", "متقلقش من inactive أول مرة", "تعمل reboot تجريبي وتختبر الـ endpoint", "تشخّص بالترتيب لو الـ apps مرجعتش", "تكتب cron بالمسار الكامل لو مفيش systemd"]} />
 
 <Quiz>
-<Q n={1} q="service شغالة لكن pm2 list فاضية بعد reboot. أول حاجة تشك فيها؟">إن save والخدمة اتعملوا بمستخدمين مختلفين، أو dump.pm2 قديمة أو غير موجودة.</Q>
-<Q n={2} q="حدّثت Node بـ nvm. ليه startup تتعمل تاني؟">لأن systemd service فيها PATH ومسار Node القديم.</Q>
-<Q n={3} q="عملت export لمتغير في SSH. هل systemd هتشوفه بعد reboot؟">مش مضمون وغالبًا لأ. حطه في ecosystem أو مصدر env/secret ثابت يقرأه التطبيق.</Q>
+<Q n={1} q="عملت sudo systemctl stop pm2-ubuntu. الـ apps هتفضل شغالة؟">لأ. ExecStop هو pm2 kill، فالـ daemon والـ apps كلهم بيقفلوا.</Q>
+<Q n={2} q="الـ apps شغالة بـ sudo pm2، والـ startup ليوزر ubuntu. بعد الـ reboot؟">pm2 list هتبقى فاضية، لأن الـ service بتقرا /home/ubuntu/.pm2 والـ apps محفوظة في /root/.pm2.</Q>
+<Q n={3} q="لسه عامل pm2 startup والـ status بيقول inactive والـ apps شغالة. فيه مشكلة؟">لأ. الـ daemon الحالي إنت اللي شغلته، وstartup بيعمل enable بس. بعد أول reboot هتبقى active.</Q>
 </Quiz>

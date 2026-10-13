@@ -1,36 +1,36 @@
 ---
 title: رجّع التطبيقات بعد Reboot
-short: Save وStartup
-order: 6
-label: فصل ٦
-badge: الاستمرارية · فصل ٦
-en: pm2 save · startup · systemd · resurrect · pm2 update · environment
-keywords: dump.pm2 · systemd · PM2_HOME · nvm · env
-goal: تحفظ process list وتربطها بإقلاع النظام من غير ما تشغّل تطبيق المستخدم كـ root.
-part: الاستمرار
-color: c1
+short: الرجوع بعد Reboot
+order: 7
+label: فصل ٧
+badge: بعد الـ Reboot · فصل ٧
+en: pm2 startup · pm2 save · dump.pm2 · unstartup · pm2 update
+keywords: startup · save · dump.pm2 · نفس اليوزر · nvm · env
+goal: تخلي PM2 يقوم مع السيستم ويرجّع نفس الـ apps، وتعرف الحاجات اللي بتبوّظ ده.
+part: بعد الـ Reboot
+color: c2
 ---
 
-## `save` تحفظ إيه؟
+## الفكرة
 
-بعد ما تشغّل التطبيقات بالإعداد الصحيح:
+PM2 عنده حاجة جاهزة للموضوع ده، وهي خطوتين: **startup** و**save**.
 
-<File name="terminal">
+<Grid2>
+<Card title="pm2 startup" c={2}>
 
-```bash
-pm2 list
-pm2 save
-```
+بيخلي PM2 نفسه يقوم مع الـ boot.
 
-</File>
+</Card>
+<Card title="pm2 save" c={3}>
 
-PM2 تحفظ snapshot للـ process list: الأسماء، العدد، script path والإعدادات اللازمة للـ resurrect. الملف عادةً تحت `~/.pm2/dump.pm2`.
+بيقول لـ PM2 أنهي apps يرجّعها لما يقوم.
 
-<Hl c="b">`pm2 save` تحفظ القائمة، لكنها لا تجعل النظام يشغّل PM2 عند الإقلاع. محتاج startup service.</Hl>
+</Card>
+</Grid2>
 
-## الطريقة الرسمية مع systemd
+<Hl c="y">واحدة من غير التانية مش كفاية.</Hl> startup من غير save يعني PM2 هيقوم فاضي. وsave من غير startup يعني القائمة محفوظة ومحدش هيقراها.
 
-شغّل الأمر الأول **من غير sudo** وأنت داخل بالمستخدم اللي يشغّل التطبيق:
+## ١. خلي PM2 يقوم مع السيستم
 
 <File name="terminal">
 
@@ -40,154 +40,119 @@ pm2 startup
 
 </File>
 
-PM2 تكتشف init system وتطبع أمرًا شبيهًا بـ:
+الأمر ده بيعرف نوع الـ init system عندك (غالبًا systemd على Ubuntu)، وبيطبعلك أمر جاهز يبدأ بـ `sudo`، شكله كده:
 
 <File name="terminal">
 
 ```bash
-sudo env PATH=$PATH:/home/youruser/.nvm/versions/node/v22/bin \
-  pm2 startup systemd -u youruser --hp /home/youruser
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
 ```
 
 </File>
 
-انسخ الأمر الناتج عندك كما هو ونفّذه؛ الجزء ده يحتاج صلاحية root عشان ينشئ systemd service، لكن الخدمة نفسها مربوطة بـ `youruser`.
+- **انسخ الأمر اللي طلعلك إنت بالظبط ونفذه، متكتبوش من دماغك.** الأمر فيه مسار الـ node واسم اليوزر والـ home بتوعك.
+- الأمر ده بيعمل service اسمها `pm2-<username>`، بتقوم مع الـ boot.
+- شغّل `pm2 startup` نفسه **من غير sudo**. هو بس اللي بيطبع الأمر، والأمر المطبوع هو اللي فيه sudo.
 
-<Flow items={[{"t": "pm2 start", "s": "شغّل apps", "c": 1}, "→", {"t": "pm2 save", "s": "احفظ القائمة", "c": 2}, "→", {"t": "pm2 startup", "s": "ولّد service", "c": 3}, "→", {"t": "sudo command", "s": "ثبّت service", "c": 4}]} />
+## ٢. احفظ الـ apps الشغالة
+
+شغّل الـ apps الأول، وبعدين احفظ القائمة:
+
+<File name="terminal">
+
+```bash
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+</File>
+
+الأمر `pm2 save` بيكتب الـ apps الشغالة حاليًا في ملف `~/.pm2/dump.pm2`. ولما السيرفر يقوم، PM2 بيقرأ الملف ده ويرجّع كل حاجة زي ما كانت.
+
+## ٣. اتأكد إنه شغال
+
+<File name="terminal">
+
+```bash
+sudo systemctl status pm2-ubuntu   # غيّر ubuntu باسم اليوزر بتاعك
+sudo reboot
+# بعد ما يقوم:
+pm2 list
+```
+
+</File>
+
+<Flow items={[{"t": "pm2 startup", "s": "اطبع الأمر", "c": 1}, "→", {"t": "sudo …", "s": "اعمل الـ service", "c": 2}, "→", {"t": "pm2 start", "s": "شغّل الـ apps", "c": 3}, "→", {"t": "pm2 save", "s": "احفظ القائمة", "c": 4}]} />
 
 ## حاجات لازم تاخد بالك منها
 
-### أي تغيير محتاج `save` جديدة
+- **بعد أي تغيير في الـ apps:** ضفت app أو مسحت واحدة أو غيرت الإعدادات أو عدد الـ instances، اعمل `pm2 save` تاني. وإلا هيرجع للنسخة القديمة بعد الـ restart.
+- **نفّذ الأوامر بنفس اليوزر اللي هيشغّل الـ app.** لو عملت `pm2 save` بيوزر و`startup` بيوزر تاني، مش هتلاقي الـ apps.
+- **لو بتستخدم nvm وغيرت نسخة Node:** اعمل `pm2 unstartup` وبعدها `pm2 startup` تاني، لأن الـ service فيها مسار الـ node القديم (في سطر `Environment=PATH=...`).
+- **لو حدّثت PM2 نفسه:** اعمل `pm2 update` عشان الـ daemon اللي شغال يتحدث. تحديث الـ package بس مش بيغيّر الـ daemon اللي في الـ memory.
+- **الـ env variables** (زي `SSL_PUBLIC_KEY` و`SERVERHTTPS`): الأضمن تحطها في الـ ecosystem file أو في `.env` يتقري من الكود، مش في الـ shell، عشان تبقى موجودة بعد الـ reboot.
 
-لو ضفت app أو مسحت واحدة أو غيرت عدد instances أو الإعدادات، اعمل:
-
-<File name="terminal">
+<File name="terminal (لو غيرت Node بـ nvm)">
 
 ```bash
-pm2 list
+pm2 unstartup     # هيطبع أمر sudo يشيل الـ service القديمة، نفّذه
+pm2 startup       # هيطبع أمر sudo جديد بمسار الـ node الجديد، نفّذه
+pm2 resurrect     # لو الـ apps وقفت مع الـ unstartup
 pm2 save
 ```
 
 </File>
 
-وإلا reboot الجاي ممكن يرجّع snapshot القديمة بدل الحالة اللي شايفها دلوقتي.
+<Box type="warn" title="ليه الـ env في الـ shell خطر؟">
 
-### نفس المستخدم في كل الخطوات
+`pm2 save` بيحفظ نسخة من الـ env وقت الحفظ في `dump.pm2`، فممكن الـ app يقوم بعد الـ reboot وتفتكر إن كله تمام. لكن أول ما تعمل `pm2 delete` و`pm2 start` من terminal جديد، أو تنقل لسيرفر تاني، المتغيرات هتختفي، لأن مصدرها الحقيقي كان `export` في session اتقفلت. وكمان `dump.pm2` بيبقى فيه الأسرار دي كـ نص عادي، فخلي صلاحيات `~/.pm2` لليوزر بس.
 
-نفّذ `start` و`save` و`startup` لنفس مستخدم التطبيق. لو `ubuntu` عمل `pm2 save` وroot عمل startup لنفسه، كل واحد له `HOME` و`PM2_HOME` وprocess list مختلفة؛ الخدمة تقوم لكن apps المطلوبة متظهرش.
+</Box>
 
-<File name="terminal">
-
-```bash
-whoami
-echo "$HOME"
-echo "${PM2_HOME:-$HOME/.pm2}"
-```
-
-</File>
-
-### غيّرت Node مع nvm؟ جدّد الخدمة
-
-أمر startup الناتج يحتوي مسار Node الحالي. بعد تثبيت أو تفعيل نسخة Node جديدة:
-
-<File name="terminal">
-
-```bash
-pm2 unstartup
-pm2 startup
-# انسخ ونفّذ أمر sudo الجديد اللي PM2 تطبعه
-pm2 save
-```
-
-</File>
-
-الخدمة القديمة ممكن تفضل تشير إلى فولدر نسخة Node اتحذفت.
-
-### حدّثت PM2؟ حدّث الـ daemon
-
-تحديث الحزمة العالمية لا يبدّل تلقائيًا الـ daemon القديمة الموجودة في الذاكرة:
-
-<File name="terminal">
-
-```bash
-pm2 update
-pm2 list
-```
-
-</File>
-
-راجع release notes واختبر التطبيق قبل تحديث production.
-
-### الـ Environment مش جلسة SSH
-
-متغير عملته بـ `export` في terminal مش مضمون يوصل إلى systemd بعد reboot. حط القيم غير السرية في ecosystem file:
-
-<File name="ecosystem.config.cjs">
+<File name="ecosystem.config.js">
 
 ```js
 module.exports = {
-  apps: [{
-    name: "backend",
-    script: "./bin/www",
-    env_production: {
-      NODE_ENV: "production",
-      SERVERHTTPS: "true",
+  apps: [
+    {
+      name: "LMS::backend",
+      script: "./bin/www",
+      cwd: "/home/ubuntu/lms-backend", // عشان .env يتقري من مكان ثابت
+      exec_mode: "cluster",
+      instances: "max",
+      env: { NODE_ENV: "production", PORT: 4000, SERVERHTTPS: "1" },
     },
-  }],
+  ],
 };
 ```
 
 </File>
 
-أو خلي التطبيق يقرأ `.env` من مسار ثابت. الأسرار زي `SSL_PRIVATE_KEY` متتحطش في Git؛ استخدم secret manager أو ملفًا محميًا بصلاحيات مناسبة. بعد تغيير environment، أعد تشغيل التطبيق بالطريقة المناسبة وراجع القيم ثم `pm2 save`.
+والأسرار نفسها، زي مسار الـ private key أو باسوورد الداتابيز، متتحطش في Git. حطها في `.env` على السيرفر بصلاحيات `600`، والكود يقراها.
 
-<Hl c="o">نفس المستخدم + snapshot حديثة + PATH صحيح + env ثابتة = التطبيق يعرف يرجع بعد reboot.</Hl>
-
-## بديل Cron لما systemd مش متاح
-
-ده fallback، مش أفضل من service manager:
+## لو عايز تلغيه
 
 <File name="terminal">
 
 ```bash
-command -v pm2
-crontab -e
+pm2 unstartup
 ```
 
 </File>
 
-في crontab **لنفس المستخدم**:
+ده بيطبع أمر sudo، والأمر ده بيعمل `systemctl stop` وبعدين `disable` وبعدين بيمسح ملف الـ service.
 
-<File name="crontab">
+<Box type="warn" title="unstartup ممكن يقفل الـ apps">
 
-```cron
-@reboot /home/youruser/.npm-global/bin/pm2 resurrect
-```
+لو الـ daemon الحالي اتشغّل من systemd، وده حالك بعد أول reboot، فالـ `stop` بينفّذ `pm2 kill`، والـ apps كلها هتقف. شغّلها تاني بـ `pm2 resurrect` أو `pm2 start ecosystem.config.js`. وده بيحصل برضه في خطوة nvm اللي فوق، فاعملها في وقت هادي.
 
-</File>
+</Box>
 
-استخدم المسار اللي طلع فعلًا، وتأكد إن `HOME` و`PM2_HOME` لنفس المستخدم. Cron environment محدودة، عشان كده المسار المطلق مهم.
-
-## متحذفش log شغال بـ `rm`
-
-لو process فاتحة file descriptor وحذفت الملف، ممكن تفضل تكتب في inode محذوف وتستهلك مساحة من غير ملف واضح. استخدم:
-
-<File name="terminal">
-
-```bash
-pm2 flush
-pm2 restart all
-```
-
-</File>
-
-`flush` يفضي logs المدارة. Restart يخلي التطبيق يفتح الملفات من جديد، لكنه يعمل downtime في Fork mode؛ الأفضل log rotation بدل الحذف اليدوي.
-
-<Checklist id="pm2-startup" title="خلّصت الفصل لما" items={["تشغّل التطبيقات ثم pm2 save", "تنفّذ pm2 startup من غير sudo أولًا", "تنسخ أمر sudo الناتج بدل ما تخترعه", "تستخدم نفس المستخدم في start وsave وstartup", "تعيد startup بعد تغيير مسار Node", "تشغّل pm2 update بعد تحديث PM2", "تحفظ env في مصدر ثابت بعد reboot", "تستخدم absolute path في cron fallback", "تستخدم flush أو rotate بدل rm"]} />
+<Checklist id="pm2-startup" title="خلّصت الفصل لما" items={["تشغّل pm2 startup من غير sudo وتنفذ الأمر اللي طلع", "تعرف إن الـ service اسمها pm2-username", "تعمل pm2 save بعد ما الـ apps تشتغل", "تعرف إن save بتكتب في ~/.pm2/dump.pm2", "تعمل save تاني بعد أي تغيير", "تستخدم نفس اليوزر في كل الأوامر", "تعمل unstartup وstartup بعد تغيير Node", "تعمل pm2 update بعد تحديث PM2", "تحط الـ env في ecosystem أو .env مش في الـ shell"]} />
 
 <Quiz>
-<Q n={1} q="عملت pm2 save بس. هل التطبيقات هترجع بعد reboot؟">مش إلا لو فيه startup service أو cron يشغّل pm2 resurrect.</Q>
-<Q n={2} q="ليه أمر systemd فيه -u و--hp؟">عشان الخدمة تدير PM2 تحت مستخدم التطبيق وهومه، مش هوم root.</Q>
-<Q n={3} q="غيرت instances من ٤ إلى ٨. لازم save تاني؟">أيوه، عشان snapshot المحفوظة تعكس القائمة الجديدة.</Q>
-<Q n={4} q="حدّثت حزمة PM2 العالمية. ليه pm2 update؟">عشان تحدّث الـ daemon اللي شغالة في الذاكرة، مش الحزمة على القرص بس.</Q>
+<Q n={1} q="عملت pm2 save بس. التطبيقات هترجع بعد الـ reboot؟">لأ، لأن مفيش حاجة هتشغّل PM2 مع الـ boot. محتاج pm2 startup.</Q>
+<Q n={2} q="غيرت instances من 4 لـ 8 ومعملتش save. بعد الـ reboot هتلاقي كام؟">4، لأن dump.pm2 لسه فيه النسخة القديمة.</Q>
+<Q n={3} q="عملت nvm install 22 وبقيت تستخدمه. ليه startup تاني؟">لأن الـ service فيها PATH بمسار الـ node القديم، ولو اتمسح الـ service مش هتلاقي node.</Q>
+<Q n={4} q="حدّثت PM2 بـ pnpm add -g pm2. ليه pm2 update؟">عشان الـ daemon اللي شغال في الـ memory يتبدل بالنسخة الجديدة.</Q>
 </Quiz>
