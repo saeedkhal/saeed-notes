@@ -1,0 +1,162 @@
+---
+title: Dynamic Search للـ Registries الكبيرة
+short: Dynamic Search
+order: 9
+label: فصل ٩
+badge: التوسع · فصل ٩
+en: q · type · limit · offset · pagination · hasMore
+keywords: search على السيرفر · pagination · كذا registry · backwards compatible
+goal: تخلي السيرفر هو اللي يدوّر لما الـ registry يبقى فيه آلاف الـ items، من غير ما تكسر أي حاجة قديمة.
+part: التوسع
+color: c4
+---
+
+## الوضع العادي
+
+- **`shadcn search` بيجيب `registry.json` كله** ويفلتر عنده على الجهاز.
+- **ده كويس لأغلب الـ registries**، ومحتاج ملف static بس.
+- **مع آلاف الـ items** بيبقى تقيل، فتقدر تخلي السيرفر هو اللي يدوّر.
+
+<Hl c="b">الـ dynamic search اختياري ومتوافق مع القديم. الـ registries الـ static هتفضل شغالة من غير أي تغيير.</Hl>
+
+## بيشتغل إزاي؟
+
+الـ CLI بيزوّد query params على طلب الفهرس:
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest search @nile --query money --limit 50
+```
+
+</File>
+
+<File name="الطلب">
+
+```text
+GET https://nile.dev/r/registry.json?q=money&limit=50&offset=0
+```
+
+</File>
+
+- **registry static:** بيتجاهل الـ params ويرجّع الفهرس كله، والـ CLI يفلتر هو.
+- **registry dynamic:** بيفلتر عنده ويرجّع النتايج **ومعاها `pagination`**.
+- **وجود `pagination`** في الرد هو الإشارة الوحيدة. أول ما الـ CLI يشوفها، يعتبر النتايج متفلترة وميفلترش تاني. ومفيش أي config أو negotiation.
+
+## الـ params
+
+| الـ param | معناه |
+|---|---|
+| `q` | كلمة البحث |
+| `type` | أنواع مفصولة بفاصلة، زي `registry:ui,registry:block` |
+| `limit` | أقصى عدد items |
+| `offset` | كام item يتعدّى |
+
+- **كلهم اختياريين.**
+- **من غير `q` و`type`:** المفروض يرجع كل الـ items مقسمة صفحات.
+
+## شكل الرد
+
+<File name="registry.json?q=money&limit=2">
+
+```json
+{
+  "name": "nile",
+  "homepage": "https://nile.dev",
+  "items": [
+    { "name": "money-input", "type": "registry:ui", "description": "Input للمبالغ بالجنيه." },
+    { "name": "money-format", "type": "registry:lib", "description": "تنسيق المبالغ." }
+  ],
+  "pagination": { "total": 7, "offset": 0, "limit": 2, "hasMore": true }
+}
+```
+
+</File>
+
+- **كل item محتاج `name` و`type` و`description` بس.** مش محتاج `files` ولا `dependencies`، لأن الـ CLI بيجيب الـ item كامل وقت `add`.
+- **`total`:** عدد كل النتايج المطابقة.
+- **`offset`:** كام اتعدّى.
+- **`limit`:** أقصى عدد في الرد ده.
+- **`hasMore`:** فيه نتايج بعد الصفحة دي ولا لأ.
+
+## السيرفر
+
+<File name="app/r/registry.json/route.ts">
+
+```ts
+import { NextRequest, NextResponse } from "next/server"
+
+export async function GET(request: NextRequest) {
+  const sp = request.nextUrl.searchParams
+  const query = sp.get("q")
+  const types = sp.get("type")?.split(",")
+  const limit = Number(sp.get("limit") ?? 100)
+  const offset = Number(sp.get("offset") ?? 0)
+
+  const { items, total } = await searchItems({ query, types, limit, offset })
+
+  return NextResponse.json({
+    name: "nile",
+    homepage: "https://nile.dev",
+    items,
+    pagination: { total, offset, limit, hasMore: offset + limit < total },
+  })
+}
+```
+
+</File>
+
+`searchItems` ممكن تبقى query على الداتابيز، أو full-text index، أو search service من برّه.
+
+## البحث في كذا registry
+
+- **registry واحدة:** الـ CLI بيبعت كل الـ params ويستخدم الـ `pagination` بتاعتك زي ما هي.
+- **كذا registry** زي `search @nile @lib`: الـ `offset` العام مينفعش يتقسم عليهم. فالـ CLI بيبعت لكل واحدة `q` و`type` و`limit` كبير كفاية يملا الصفحة (`offset + limit`)، وبعدين يدمج ويقسّم صفحات عنده.
+- **السيرفر لسه بيفلتر** في الحالة دي، فكل registry بترجّع المطابق بس.
+
+<Box type="warn" title="احترم الـ limit">
+
+لو السيرفر بيرجّع عدد أقل من الـ `limit` المطلوب، لأنه حاطط حد أقصى عنده، فالـ CLI هيعتبر إن الـ registry خلصت في الصفحات اللي بعد كده. فرجّع العدد المطلوب لو تقدر، عشان كل النتايج توصل بالـ paging.
+
+</Box>
+
+## مع الـ auth
+
+الـ CLI بيبعت نفس الـ headers والـ params المتعرفة مع طلب البحث. فتقدر تقصر النتايج على اللي المستخدم ده يقدر يشوفه:
+
+<File name="route.ts (جزء)">
+
+```ts
+const token = request.headers.get("authorization")?.replace("Bearer ", "")
+const team = await getTeamFromToken(token)
+const { items, total } = await searchItems({ query: sp.get("q"), team })
+```
+
+</File>
+
+## التوافق مع القديم
+
+- **الـ registries الـ static** مش محتاجة أي تغيير، والـ file server بيتجاهل الـ params.
+- **إصدارات الـ CLI القديمة** بتطلب الفهرس من غير params وبتتجاهل `pagination`. عشان كده رد السيرفر من غير params لازم يبقى معقول، زي أول صفحة.
+- **الترتيب** قرارك إنت. لو رجّعت نتايج متفلترة، الـ CLI بيحافظ على ترتيبك ومش بيرتب تاني.
+
+## جرّب
+
+<File name="terminal">
+
+```bash
+curl "https://nile.dev/r/registry.json?q=money&limit=10"
+npx shadcn@latest search @nile --query money
+```
+
+</File>
+
+اتأكد إن الرد فيه `pagination`، وإن الـ items المطابقة بس هي اللي رجعت.
+
+<Checklist id="shreg-search" title="خلّصت الفصل لما" items={["تعرف إن الـ search العادي بيفلتر على جهاز المستخدم", "تعرف الـ params q وtype وlimit وoffset", "ترجّع pagination عشان الـ CLI يثق في النتايج", "ترجّع name وtype وdescription بس في نتايج البحث", "تفهم إزاي الـ CLI بيدمج نتايج كذا registry", "تحترم الـ limit المطلوب", "تخلي الرد من غير params معقول للـ CLI القديم"]} />
+
+<Quiz>
+<Q n={1} q="الـ CLI عرف منين إن السيرفر فلتر النتايج؟">من وجود pagination في الرد.</Q>
+<Q n={2} q="نتايج البحث محتاجة files؟">لأ. name وtype وdescription كفاية، والـ item الكامل بيتجاب وقت add.</Q>
+<Q n={3} q="السيرفر بيرجّع 20 بالكتير والـ CLI طلب 50. إيه اللي هيحصل؟">الـ CLI ممكن يعتبر الـ registry خلصت في الصفحات اللي بعد كده، وبعض النتايج متوصلش.</Q>
+</Quiz>

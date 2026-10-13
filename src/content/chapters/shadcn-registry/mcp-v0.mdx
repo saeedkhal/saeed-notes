@@ -1,0 +1,156 @@
+---
+title: الـ Registry مع الـ AI — الـ MCP والـ Open in v0
+short: الـ MCP والـ v0
+order: 11
+label: فصل ١١
+badge: النشر · فصل ١١
+en: shadcn mcp · mcp init --client · v0.dev/chat/api/open · query token
+keywords: MCP server · Claude Code · Cursor · VS Code · Codex · OpenCode · v0
+goal: تخلي الـ AI agents تشوف الـ registry بتاعك وتسطّب منه، وتفتح أي item في v0.
+part: النشر
+color: c1
+---
+
+## MCP — من غير أي شغل منك
+
+الـ shadcn MCP server **شغال مع أي registry متوافق** على طول. مش محتاج تعمل حاجة مخصوصة في الـ registry.
+
+### الشرط الوحيد
+
+- **الـ MCP بيطلب الفهرس**، فلازم يكون فيه ملف اسمه `registry` في الـ root بتاع الـ registry.
+- **مثال:** لو الـ items على `https://nile.dev/r/[name].json`، يبقى الفهرس على `https://nile.dev/r/registry.json`، أو `https://nile.dev/r/registry` لو مش بتستخدم امتداد.
+- **الفهرس ده** لازم يكون JSON ماشي على registry schema.
+
+### المستخدم بيعمل إيه؟
+
+**أولًا:** يعرّف الـ registry في `components.json`:
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@nile": "https://nile.dev/r/{name}.json"
+  }
+}
+```
+
+</File>
+
+**ثانيًا:** يضيف الـ MCP server حسب الأداة:
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest mcp init --client claude     # وبعدها restart لـ Claude Code
+npx shadcn@latest mcp init --client cursor     # وبعدها فعّل shadcn في Cursor Settings
+npx shadcn@latest mcp init --client vscode     # وبعدها افتح .vscode/mcp.json واضغط Start
+npx shadcn@latest mcp init --client opencode   # وبعدها restart لـ OpenCode
+```
+
+</File>
+
+<File name="~/.codex/config.toml (Codex)">
+
+```toml
+[mcp_servers.shadcn]
+command = "npx"
+args = ["shadcn@latest", "mcp"]
+```
+
+</File>
+
+- **Codex** مفيش له `init`، فبتضيف الـ config بإيدك وبعدها restart.
+- **في Claude Code** تقدر تستخدم `/mcp` عشان تعمل debug للـ server.
+- **في VS Code** الـ agent هو GitHub Copilot.
+
+**ثالثًا:** يجرّب prompts زي دي:
+
+- "وريني الـ components اللي في nile registry"
+- "اعمل landing page من items الـ nile registry"
+
+### عشان الـ AI يستخدم الـ registry صح
+
+1. **descriptions واضحة:** قصيرة وبتقول الـ item بيعمل إيه وبيتستخدم إزاي.
+2. **`dependencies` كاملة:** عشان الـ MCP يسطّبها لوحده.
+3. **`registryDependencies`:** عشان يفهم العلاقات بين الـ items.
+4. **أسماء kebab-case** وثابتة على نفس الشكل في الـ registry كله.
+
+## Open in v0
+
+لو الـ registry public وعلى URL، أي item يتفتح في v0 بالرابط ده:
+
+<File name="الرابط">
+
+```text
+https://v0.dev/chat/api/open?url=https://nile.dev/r/checkout-card.json
+```
+
+</File>
+
+<Box type="warn" title="v0 مش بيدعم كل حاجة">
+
+Open in v0 **مش بيدعم** `cssVars` ولا `css` ولا `envVars` ولا الـ namespaces ولا الـ auth المتقدم زي Bearer أو API key في الـ headers.
+
+</Box>
+
+### زرار "Open in v0"
+
+<File name="components/open-in-v0.tsx">
+
+```tsx
+import { Button } from "@/components/ui/button"
+
+export function OpenInV0Button({ url }: { url: string }) {
+  return (
+    <Button asChild aria-label="Open in v0" className="h-8 gap-1 bg-black px-3 text-xs text-white">
+      <a href={`https://v0.dev/chat/api/open?url=${url}`} target="_blank" rel="noreferrer">
+        Open in v0
+      </a>
+    </Button>
+  )
+}
+```
+
+</File>
+
+<File name="الاستخدام">
+
+```tsx
+<OpenInV0Button url="https://nile.dev/r/checkout-card.json" />
+```
+
+</File>
+
+ولو عايز الشكل الرسمي بالـ logo، فيه صفحة [Build your Open in v0 button](https://v0.dev/chat/button).
+
+### الـ auth مع v0
+
+v0 بيدعم **query param بس**:
+
+<File name="الرابط">
+
+```text
+https://registry.nile.dev/r/checkout-card.json?token=xxxxxxxx
+```
+
+</File>
+
+1. **السيرفر يقرا** الـ `token` من الـ query.
+2. **يتحقق منه.**
+3. **يرجّع 401** لو الـ token غلط أو مش موجود.
+4. **الـ CLI وv0 الاتنين** بيفهموا الـ 401 ويعرضوا رسالة مناسبة.
+
+<Box type="tip" title="الـ token في الرابط">
+
+الـ token اللي في query string بيظهر في الـ logs والـ history. فخليه متشفّر وليه مدة صلاحية، وأوعى تحط token حقيقي في docs أو أمثلة.
+
+</Box>
+
+<Checklist id="shreg-mcp" title="خلّصت الفصل لما" items={["تعرف إن الـ MCP محتاج فهرس اسمه registry في الـ root", "تشغّل mcp init للـ client المناسب", "تضيف Codex بـ config.toml", "تكتب descriptions وdependencies تساعد الـ AI", "تفتح item في v0 بـ /chat/api/open?url=", "تعرف حدود v0: من غير cssVars وcss وenvVars وnamespaces", "تعمل auth لـ v0 بـ query token"]} />
+
+<Quiz>
+<Q n={1} q="الـ items على /r/{name}.json. الـ MCP هيدوّر على الفهرس فين؟">على /r/registry.json.</Q>
+<Q n={2} q="item فيه cssVars واتفتح في v0. الألوان هتيجي؟">لأ. v0 مش بيدعم cssVars.</Q>
+<Q n={3} q="registry private بـ Bearer header. ينفع مع Open in v0؟">لأ. v0 بيدعم query param token بس.</Q>
+</Quiz>

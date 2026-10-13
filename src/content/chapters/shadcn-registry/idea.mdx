@@ -1,0 +1,103 @@
+---
+title: يعني إيه Registry أصلًا؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: code distribution · registry.json · registry item · shadcn add
+keywords: توزيع كود · فهرس · item · عناوين
+goal: تفهم الـ registry بيوزّع إيه، ومكوّن من إيه، وإزاي الـ CLI بيوصل لأي item.
+part: البداية
+color: c1
+---
+
+## الفكرة
+
+الـ `shadcn` CLI مش بس بيجيب components بتاعة shadcn. تقدر تخليه يجيب **كودك إنت** من registry إنت عامله.
+
+- الـ registry ده **نظام لتوزيع الكود**: components وhooks وصفحات وconfig وrules وأي ملفات تانية.
+- الكود بيتكتب **جوه مشروع المستخدم** كملفات عادية، مش بيتسطب في `node_modules`.
+- المستخدم يقدر يعدّل الملفات بعد كده براحته، لأنها بقت بتاعته.
+
+<Hl c="g">npm بيديك صندوق مقفول، والـ registry بيديك الكود نفسه.</Hl>
+
+## مش لـ React بس
+
+- الـ registry شغال مع **أي نوع مشروع وأي framework**.
+- السيرفر بتاع الـ registry نفسه ممكن يبقى Next أو Vite أو Vue أو Svelte أو PHP أو أي حاجة، المهم إنه يقدّم JSON على HTTP.
+- أو ممكن ميبقاش فيه سيرفر خالص: **GitHub repo** فيه `registry.json` في الـ root.
+
+## تقدر توزّع إيه؟
+
+| النوع | أمثلة ملفات |
+|---|---|
+| UI | `components/ui/date-picker.tsx` |
+| Helpers | `lib/format-money.ts`، `hooks/use-copy.ts` |
+| Design system | `styles/theme.css`، tokens، components كاملة |
+| Feature كاملة | صفحات auth + `lib/auth.ts` + الفورم |
+| Rules للـ AI agents | `AGENTS.md`، `.cursor/rules/*`، `.claude/commands/*` |
+| Conventions | `.editorconfig`، `biome.json`، docs |
+| Testing | `vitest.config.ts`، `test/setup.ts` |
+| CI | `.github/workflows/ci.yml` |
+| Templates | issue templates، PR template |
+| Codemods | `codemods/*`، `scripts/migrate.ts` |
+| MCP config | `.mcp.json`، `.cursor/mcp.json` |
+
+## الـ registry مكوّن من إيه؟
+
+<Grid2>
+<Card title="registry.json — الفهرس" c={1}>
+
+ملف واحد في الـ root فيه اسم الـ registry والـ homepage وقائمة كل الـ items. ده اللي `list` و`search` بيقروه.
+
+</Card>
+<Card title="item.json — الوصفة" c={2}>
+
+ملف لكل item، فيه الملفات بمحتواها، والـ packages المطلوبة، والـ CSS variables. ده اللي `view` و`add` بيقروه.
+
+</Card>
+</Grid2>
+
+<Flow items={[{"t": "registry.json", "s": "فهرس", "c": 1}, "→", {"t": "button.json", "s": "item + content", "c": 2}, "→", {"t": "shadcn add", "s": "يقرا ويكتب", "c": 3}, "→", {"t": "مشروعك", "s": "ملفات عادية", "c": 4}]} />
+
+## الـ CLI بيوصل للـ item إزاي؟
+
+في 5 أشكال للعنوان، وهتشوفهم في كل المذكرة:
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest add button                            # اسم بس = item من shadcn نفسه
+npx shadcn@latest add @nile/money-input                 # namespace متعرّف في components.json
+npx shadcn@latest add nile-team/ui/money-input          # GitHub: owner/repo/item
+npx shadcn@latest add https://nile.dev/r/money-input.json  # URL مباشر
+npx shadcn@latest add ./registry/money-input.json       # ملف local
+```
+
+</File>
+
+- **الاسم لوحده** زي `button` معناه دايمًا الـ item الرسمي بتاع shadcn، حتى لو إنت جوه registry تاني.
+- **`@nile/...`** محتاج تعريف للـ namespace في `components.json`، أو يكون الـ namespace متسجل في الـ Registry Directory.
+- **`owner/repo/item`** بيقرا من GitHub على طول، من غير سيرفر ومن غير config.
+
+## 3 طرق تقدّم بيها الـ registry
+
+1. **ملفات JSON static:** تعمل `shadcn build` وترفع الناتج على أي hosting.
+2. **Route handlers:** السيرفر يبني الـ JSON وقت الطلب من `registry.json` الأصلي.
+3. **GitHub repo:** تحط `registry.json` في الـ root وخلاص.
+
+وفي البداية خالص، shadcn عامل [registry template](https://github.com/shadcn-ui/registry-template) جاهز تبدأ منه.
+
+<Box type="tip" title="الشرط الوحيد">
+
+مفيش شكل إجباري للمشروع. الشرط الوحيد إن الفهرس والـ items يمشوا على الـ schema الرسمية: `https://ui.shadcn.com/schema/registry.json` و`https://ui.shadcn.com/schema/registry-item.json`.
+
+</Box>
+
+<Checklist id="shreg-idea" title="خلّصت الفصل لما" items={["تشرح الفرق بين registry وnpm package", "تعرف إن الـ registry مش لـ React بس", "تفرق بين registry.json وملف الـ item", "تعرف الـ 5 أشكال لعنوان الـ item", "تعرف إن الاسم لوحده معناه item من shadcn الرسمي", "تعرف الـ 3 طرق لتقديم الـ registry"]} />
+
+<Quiz>
+<Q n={1} q="إيه الفرق الأساسي بين registry item وnpm package؟">الـ item بيتكتب كملفات جوه مشروعك وتقدر تعدّلها، والـ package بيفضل في node_modules.</Q>
+<Q n={2} q="shadcn add button جوه مشروع متعرّف فيه @nile. هيجيب button منين؟">من shadcn الرسمي. الاسم لوحده مش بيتربط بأي registry تاني.</Q>
+<Q n={3} q="أنهي ملف بيقراه list وأنهي بيقراه add؟">list وsearch بيقروا registry.json، وview وadd بيقروا ملف الـ item.</Q>
+</Quiz>

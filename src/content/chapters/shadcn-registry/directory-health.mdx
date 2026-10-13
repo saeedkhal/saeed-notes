@@ -1,0 +1,205 @@
+---
+title: الـ Registry Directory ومراقبة الـ Health
+short: الـ Directory والـ Health
+order: 10
+label: فصل ١٠
+badge: النشر · فصل ١٠
+en: registries.json · directory.json · status · score · ranking
+keywords: تسجيل namespace · الشروط · Observing/Healthy/Degraded/Unavailable · السكور · الترتيب
+goal: تسجّل الـ namespace بتاعك في الـ Directory الرسمي، وتفهم shadcn بيراقب الـ registry ويحسب السكور والترتيب إزاي.
+part: النشر
+color: c5
+---
+
+## الـ Registry Directory
+
+ده **فهرس لكل الـ registries الـ open source** اللي تشتغل على طول من غير إعداد.
+
+- **لما تكتب `shadcn add @x/...` أو `search @x`** والـ namespace مش متعرّف عندك، الـ CLI بيدوّر عليه في الـ directory، ولو لقاه **بيضيفه لـ `components.json` لوحده**.
+- **القائمة كلها** على `https://ui.shadcn.com/r/registries.json`.
+- **عناوين GitHub** (`owner/repo/item`) مش محتاجة directory خالص. الـ directory للـ namespaces زي `@nile` بس.
+
+## تسجّل إزاي؟
+
+1. **ضيف الـ registry** في `apps/v4/registry/directory.json` في repo بتاع [shadcn-ui/ui](https://github.com/shadcn-ui/ui).
+2. **شغّل `pnpm validate:registries`** عشان تتأكد إن الـ directory سليم.
+3. **افتح pull request.**
+
+الفريق بيراجع ويعمل validate. **وأول ما الـ PR يتعمل merge، الـ registry بتتنشر على طول.** والـ Health بيبدأ يراقب بعد النشر، ومش بيأخر أو يمنع النشر وهو بيجمّع بيانات.
+
+### الشروط
+
+1. **open source** ومتاح للكل.
+2. **JSON صح** ماشي على registry schema.
+3. **flat:** `/registry.json` وملفات الـ items زي `/money-input.json` كلهم في الـ root، من غير items متداخلة.
+4. **مفيش `content`** في `files` جوه الفهرس.
+
+## Registry Health — المراقبة
+
+الـ registry ممكن تتغير أو تقع بعد ما تتضاف. الـ Health بيفضل يفحصها، عشان المستخدم يعرف إنها شغالة وصاحبها يكتشف المشاكل بدري.
+
+<Box type="idea" title="لمين بالظبط؟">
+
+الـ Health للـ registries **اللي في الـ Directory بس**. مش بيراقب ولا بيأثر على الـ registries الـ private، ولا اللي متعرفة في مشروعك على طول، ولا عناوين GitHub. وهو **تجريبي**، فالمعادلات والحدود ممكن تتغير.
+
+</Box>
+
+- **مش بيقرر** الـ registry تتضاف ولا لأ.
+- **الفحص الفاشل مش بيشيلها** من الـ directory.
+- **ممكن في إصدار جاي** الـ registry اللي unavailable تستخبى من التصفح العادي، من غير ما تتشال من الـ API.
+
+### بيفحص إيه؟
+
+| كل قد إيه | بيفحص إيه |
+|---|---|
+| كل ساعة | الفهرس شغال وصحيح ومظبوط |
+| كل يوم | عينة متغيرة من الـ items بتتحمل وتتعمل validate |
+| كل أسبوع | item واحد بيتجرب بـ `shadcn add --dry-run` |
+
+- **الفحص اليومي** بيلف على كل الـ items في حوالي 30 يوم.
+- **الفحص الأسبوعي** بيختار item بـ shuffle ثابت يتكرر بنفس النتيجة، مش بترتيب الفهرس. بيفضّل اللي ما اتفحصش من فترة، وبيحاول ميكررش آخر واحد.
+- **دي عينة**، مش فحص لكل item.
+- **المواعيد best-effort**، فالحساب بيعتمد على وقت كل فحص حصل فعلًا، مش على إن كل فحص اتعمل في ميعاده.
+
+## الـ Status
+
+- **Observing:** لسه بيجمّع أول 24 فحص للفهرس، على مدار 24 ساعة على الأقل.
+- **Healthy:** فترة المراقبة الأولى خلصت، والفحوصات الأخيرة ناجحة.
+- **Degraded:** الـ registry شغالة، بس فيه فحص أو أكتر بيفشل مؤخرًا.
+- **Unavailable:** الفهرس ما نجحش في أي فحص من 24 ساعة على الأقل. وممكن تحصل قبل ما الـ Observing يخلص.
+
+### إمتى تبقى Degraded؟
+
+- **الفهرس فشل** 3 مرات ورا بعض.
+- **آخر فهرس** مش ماشي على الـ schema.
+- **أقل من 90%** من الـ items اللي اتاخدت عينة نجحت، بعد 10 فحوصات على الأقل.
+- **آخر فحصين** بالـ CLI فشلوا.
+
+### حاجات تانية عن الـ status
+
+- **الـ status بيتغير أسرع من السكور**، فممكن registry سكورها عالي وهي Degraded.
+- **كل status ليه سبب قصير:** الـ API بيرجّع `statusReason.code` ثابت و`statusReason.message` للعرض، والـ errors الخام مش بتتنشر.
+- **الرجوع بعد Unavailable** محتاج فحصين ناجحين ورا بعض للفهرس والـ schema.
+- **أي Degradation تاني** بيروح لوحده أول ما الفحوصات الفاشلة ترجع طبيعية.
+
+## السكور من 100
+
+السكور مجموع 4 أجزاء، وكل جزء ليه نصيب، مش كل واحد من 100:
+
+| الجزء | النقط | بيقيس |
+|---|---:|---|
+| Reliability | 45 | الفهرس كان شغال قد إيه في آخر 7 و30 يوم |
+| Correctness | 25 | الفهرس والعينة ماشيين على الـ schema |
+| Installability | 20 | العينة بتتسطب بالـ CLI |
+| Registry setup | 10 | HTTPS وردود JSON وأسماء unique واسم مطابق |
+
+<File name="المعادلات">
+
+```text
+Reliability    = 45 * (0.65 * availability7d + 0.35 * availability30d)
+Correctness    = 10 * indexSchemaPassRate30d + 15 * sampledItemPassRate30d
+Installability = 20 * dryRunPassRate30d
+Registry setup = 4 فحوصات × 2.5 (والفحص اللي لسه ما اتشافش = 1.25)
+```
+
+</File>
+
+- **آخر أسبوع ليه وزن أكبر** من آخر شهر.
+- **كل جزء بيتقرب لـ 3 أرقام عشرية**، والسكور المنشور هو مجموع الأجزاء بعد التقريب.
+- **السكور عن الـ reliability والتوافق**، مش عن الشهرة ولا جودة الكود ولا التصميم ولا عدد الـ items.
+
+### الـ registries الجديدة
+
+الـ registry الجديدة معندهاش تاريخ كفاية، فنتايجها الأولى بتتخلط بمتوسط كل الـ registries، وكل ما الفحوصات تزيد، نتايجها هي بتاخد وزن أكبر:
+
+<File name="smoothing">
+
+```text
+(successes + globalMean * priorWeight) / (observations + priorWeight)
+```
+
+</File>
+
+| الإشارة | الـ prior weight |
+|---|---:|
+| Availability | 24 |
+| Index schema | 12 |
+| Sampled items | 10 |
+| CLI checks | 3 |
+
+- **فحص واحد** ناجح مش بيدي 100، وفحص واحد فاشل مش بيدي صفر. وده سبب إن registry لسه Observing ممكن سكورها قريب من المتوسط.
+- **لو مفيش بيانات كفاية للمتوسط:** بيبدأ بـ 85% للـ availability و90% للباقي.
+- **أي تغيير** في المعادلة أو الأوزان أو الحدود بيطلّع `scoreVersion` جديد.
+
+## الترتيب في الـ Directory
+
+الترتيب بيحسب الـ health **وكمان حجم الكتالوج**:
+
+<File name="ranking">
+
+```text
+rankingScore = 0.8 * healthScore + 20 * min(1, log(1 + itemCount) / log(501))
+```
+
+</File>
+
+- **الـ health** ليه لحد 80 نقطة، و**الحجم** ليه لحد 20.
+- **كل item زيادة بيدي أقل** من اللي قبله، و**الزيادة بتقف عند 500 item**.
+- **مثال على health 98:** item واحد بياخد 80.63 تقريبًا، و100 item بياخدوا 93.248، و500 أو 1000 بياخدوا 98.4.
+- **العدد** هو أسماء الـ items المختلفة في آخر فهرس صحيح. الاسم المكرر مش بيتحسب مرتين، والـ style variants والأيقونات بأسماء مختلفة بتتحسب لوحدها.
+- **الترتيب بالـ ranking score**، والتعادل بالأبجدية.
+- **Degraded** بيترتب بالسكور بتاعه من غير عقوبة زيادة.
+- **الفحوصات اللي فشلت** عشان الـ item محتاج دفع أو auth بتأثر على السكور برضه.
+- **لو بيانات الـ ranking لسه مش موجودة** بيرتّب بالـ health، ومش بيخلط النوعين في نفس القائمة.
+- **في الآخر بالأبجدية:** الـ registries اللي Observing، أو عليها challenge من الـ monitoring، أو فاضية، أو معندهاش ranking. ومش بتاخد صفر.
+- **Unavailable** بتيجي آخر حاجة، بس بتفضل تتلاقي في البحث والـ API.
+- **الترتيب ثابت** وإنت بتدوّر وبتقلّب صفحات.
+- **لو بيانات الـ health مش راضية تتحمل** أو عدّى عليها أكتر من 6 ساعات، الترتيب بيرجع أبجدي.
+- **السكور والـ badges** مش بيظهروا في القائمة.
+
+## في الـ API
+
+`/r/registries.json` بيزوّد object اسمه `health` لكل registry:
+
+- **`status`** و**`statusReason`.**
+- **`score`** و**`breakdown`** بتاعه.
+- **`availability7d`** و**`availability30d`** بعد الـ smoothing، من 0 لـ 1.
+- **`firstObservedAt`** و**`checkedAt`** و**`lastSuccessfulCheck`.**
+- **`schemaVersion`** و**`scoreVersion`.**
+- **`monitoringLimited`:** آخر طلب للفهرس اتمنع بـ challenge من CDN أو WAF. والـ challenge مش بيتحسب فشل.
+- **`hidden`:** بتبقى `true` بعد 7 أيام unavailable ورا بعض، والـ Directory حاليًا مش بيستخدمها.
+
+وبعد أول فهرس صحيح، فيه object منفصل اسمه `ranking`:
+
+<File name="ranking object">
+
+```json
+{ "version": 1, "score": 93.248, "itemCount": 100 }
+```
+
+</File>
+
+- **`itemCount`** هو العدد الحقيقي حتى لو أكتر من 500.
+- **`version`** بيعرّف معادلة الترتيب.
+- **`health.score` و`scoreVersion`** زي ما هما.
+- **الـ API بيرجّع بترتيبه الأصلي**، والـ clients ترتّب بالـ ranking لو عايزة.
+
+## حدود المراقبة
+
+- **كل الفحوصات من runner واحد**، فالـ latency بيتسجل للتشخيص بس ومش بيأثر على السكور، عشان مناطق معينة متاخدش ميزة.
+- **الـ CDN/WAF challenge** معناه إن الـ runner مقدرش يكمّل، مش إن الـ registry واقعة عند الكل.
+
+<Box type="warn" title="السكور مش شهادة أمان">
+
+ترتيب أعلى مش توصية ولا security review. راجع أي كود third-party قبل ما تسطّبه. وممكن بعدين يتضاف health badges وفلترة.
+
+</Box>
+
+<Checklist id="shreg-dir" title="خلّصت الفصل لما" items={["تعرف إن الـ CLI بيضيف namespace من الـ directory لوحده", "تسجّل registry بـ PR على directory.json", "تعرف الشروط الأربعة: open source وschema وflat ومن غير content", "تعرف إن Health للـ directory بس", "تفرق بين Observing وHealthy وDegraded وUnavailable", "تعرف أجزاء السكور 45/25/20/10", "تفهم الـ smoothing للـ registries الجديدة", "تحسب أثر عدد الـ items على الترتيب لحد 500"]} />
+
+<Quiz>
+<Q n={1} q="الفهرس بتاعك فيه content جوه files. ينفع يتسجل في الـ directory؟">لأ. من الشروط إن files في الفهرس من غير content.</Q>
+<Q n={2} q="registry سكورها 96 والـ status Degraded. ينفع؟">أيوه. الـ status بيتأثر بالمشاكل الأخيرة أسرع من السكور.</Q>
+<Q n={3} q="عندك 1000 item وغيرك 500 بنفس الـ health. مين قدام؟">متعادلين في جزء الحجم، لأن الزيادة بتقف عند 500، فبيترتبوا بالأبجدية.</Q>
+<Q n={4} q="الـ Health بيراقب registry private متعرفة في مشروعك؟">لأ. بيراقب اللي في الـ Directory بس.</Q>
+</Quiz>

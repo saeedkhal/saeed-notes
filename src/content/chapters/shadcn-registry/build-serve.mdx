@@ -1,0 +1,322 @@
+---
+title: ابني الـ Registry وقدّمه وجرّبه
+short: البناء والتقديم
+order: 5
+label: فصل ٥
+badge: التطبيق · فصل ٥
+en: shadcn build · public/r · loadRegistry · loadRegistryItem · content negotiation · universal items
+keywords: build · route handlers · Accept header · list/view/add · نشر
+goal: تطلّع الـ JSON بـ build أو تقدّمه dynamic، وتجرّب الـ registry بنفس الأوامر اللي المستخدم هيستخدمها، وتنشره.
+part: التطبيق
+color: c5
+---
+
+## الطريقة الأولى: JSON static بـ `build`
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest build
+```
+
+</File>
+
+- **بيقرا** `./registry.json` (أو مسار تديهوله كـ argument).
+- **بيكتب** ملف لكل item في `./public/r`، زي `public/r/money-input.json`، ومعاهم `public/r/registry.json`.
+- **جوه ملف الـ item:** محتوى كل ملف بيتحط في `content`. وده الفرق بين الـ source والـ output.
+- **لو فيه `include`:** بيتحل، والفهرس الناتج flat.
+- **مكان تاني:** `--output ./public/registry` أو `-o`.
+- **فولدر مختلف:** `--cwd` أو `-c`.
+
+<Tree>
+
+```text
+public/r/
+├── registry.json        ← الفهرس، من غير content
+├── money-input.json     ← فيه content كامل
+└── checkout-card.json
+```
+
+</Tree>
+
+بعدها أي static hosting بيقدّم الفولدر. في Next مثلًا `npm run dev` وبعدها الملفات على `http://localhost:3000/r/money-input.json`.
+
+## الطريقة التانية: route handlers من غير build
+
+لو عايز الـ JSON يتبني **وقت الطلب** من الـ source، استخدم الـ loaders من `shadcn/registry`. ولازم `shadcn` يبقى runtime dependency:
+
+<File name="terminal">
+
+```bash
+npm install shadcn
+```
+
+</File>
+
+<File name="app/r/registry.json/route.ts">
+
+```ts
+import { loadRegistry } from "shadcn/registry"
+
+export async function GET() {
+  try {
+    return Response.json(await loadRegistry())
+  } catch (error) {
+    console.error(error)
+    return Response.json({ error: "الـ registry مش راضي يتحمل." }, { status: 500 })
+  }
+}
+```
+
+</File>
+
+<File name="app/r/[name].json/route.ts">
+
+```ts
+import { loadRegistryItem, RegistryItemNotFoundError } from "shadcn/registry"
+
+export async function GET(_req: Request, ctx: { params: Promise<{ name: string }> }) {
+  const { name } = await ctx.params
+  try {
+    return Response.json(await loadRegistryItem(name))
+  } catch (error) {
+    if (error instanceof RegistryItemNotFoundError) {
+      return Response.json({ error: `مفيش item اسمه "${name}".` }, { status: 404 })
+    }
+    console.error(error)
+    return Response.json({ error: "حصلت مشكلة." }, { status: 500 })
+  }
+}
+```
+
+</File>
+
+- **`loadRegistry`:** بيرجّع الفهرس **من غير محتوى الملفات**، زي `registry.json` الناتج من الـ build.
+- **`loadRegistryItem`:** بيرجّع item واحد، **ومعاه محتوى كل ملف** متقري من الـ disk.
+- **الاتنين بيحلّوا `include`** لوحدهم، فمش محتاج `build` خالص.
+
+## Content negotiation: URL واحد لـ 3 جماهير
+
+الـ CLI بيدعم HTTP content negotiation. يعني **نفس الـ URL** يقدر يرجّع:
+
+- **HTML** للمتصفح: landing page أو docs.
+- **JSON** للـ `shadcn` CLI: item يتسطب.
+- **Markdown** للـ AI agents.
+
+الـ CLI بيعرّف نفسه بالـ headers دي:
+
+<File name="headers">
+
+```text
+User-Agent: shadcn
+Accept: application/vnd.shadcn.v1+json, application/json;q=0.9
+```
+
+</File>
+
+<File name="next.config.ts">
+
+```ts
+import type { NextConfig } from "next"
+
+const cliHeader = { type: "header" as const, key: "accept", value: "(.*)application/vnd\\.shadcn\\.v1\\+json(.*)" }
+const cliAgent = { type: "header" as const, key: "user-agent", value: "shadcn" }
+
+const nextConfig: NextConfig = {
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/", has: [cliHeader], destination: "/r/index.json" },
+        { source: "/", has: [cliAgent], destination: "/r/index.json" },
+      ],
+    }
+  },
+  async headers() {
+    // عشان أي CDN ميخزنش نسخة الـ HTML ويديها للـ CLI
+    return [{ source: "/", headers: [{ key: "Vary", value: "Accept, User-Agent" }] }]
+  },
+}
+
+export default nextConfig
+```
+
+</File>
+
+<File name="server.js (Express)">
+
+```js
+app.get("/", (req, res) => {
+  res.vary("Accept")
+  res.vary("User-Agent")
+  if (req.accepts("application/vnd.shadcn.v1+json")) return res.json(rootItem)
+  if (req.get("User-Agent") === "shadcn") return res.json(rootItem)
+  res.send(landingHtml)
+})
+```
+
+</File>
+
+- **في Next الأحسن rewrite:** القرار بيتاخد في الـ routing، فمش محتاج Proxy function.
+- **الـ item اللي بيتقدم على الـ root** هنا مفترض إنه `/r/index.json`، فغيّره حسب الـ output بتاعك.
+- **النتيجة:** المستخدم يكتب `shadcn add https://ui.nile.dev`، فالـ URL أقصر، ومن غير `/r/`، وأسهل يتفتكر.
+
+## جرّب زي المستخدم بالظبط
+
+القاعدة: **الفهرس** لـ `list` و`search`، و**ملف الـ item** لـ `view` و`add`.
+
+<File name="terminal (بالـ URL)">
+
+```bash
+npx shadcn@latest list   http://localhost:3000/r/registry.json
+npx shadcn@latest search http://localhost:3000/r/registry.json --query money
+npx shadcn@latest view   http://localhost:3000/r/money-input.json
+npx shadcn@latest add    http://localhost:3000/r/money-input.json   # من مشروع تاني
+```
+
+</File>
+
+<File name="terminal (بالـ namespace)">
+
+```bash
+npx shadcn@latest registry add @nile=http://localhost:3000/r/{name}.json
+npx shadcn@latest list   @nile
+npx shadcn@latest search @nile --query money
+npx shadcn@latest view   @nile/money-input
+npx shadcn@latest add    @nile/money-input
+```
+
+</File>
+
+- **`registry add`** محتاج مشروع فيه `components.json`، وبيكتب الـ namespace جواه.
+- **`{name}`** لازم يتحل لملف item. يعني `@nile/money-input` يبقى `.../r/money-input.json`.
+- **الفهرس** بيتقدم لوحده على `.../r/registry.json`.
+
+<Box type="tip" title="جرّبتها بنفسي">
+
+`list` على ملف local (`./public/r/registry.json`) رجّع error بيقول إن اسم الـ registry لازم يبدأ بـ `@`. يعني `list` و`search` محتاجين URL أو namespace. أما `add` فبيقبل مسار local عادي.
+
+</Box>
+
+## Universal items — من غير framework
+
+من إصدار `2.9.0` تقدر تعمل item **يتسطب في أي فولدر**، حتى لو مفيش `components.json` ومفيش framework.
+
+- **الشرط:** **كل** ملف في الـ item يكون ليه `target` صريح.
+- **الاستخدامات:** Cursor rules أو ESLint config أو starter template فيه ملفات Vue.
+
+<File name="agent-rules.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "agent-rules",
+  "type": "registry:item",
+  "files": [
+    { "path": "rules/team.md", "type": "registry:file", "target": "~/AGENTS.md" },
+    { "path": "rules/python.mdc", "type": "registry:file", "target": "~/.cursor/rules/python.mdc" }
+  ]
+}
+```
+
+</File>
+
+وأنا جربت item زي ده على فولدر فاضي: `add` كتب `AGENTS.md` على طول من غير ما يسأل عن `components.json`.
+
+## انشر
+
+- **ارفع المشروع** على URL public.
+- **المستخدم يقدر يسطّب بالـ URL** على طول، أو يضيف الـ namespace مرة واحدة:
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest registry add @nile=https://nile.dev/r/{name}.json
+```
+
+</File>
+
+أو بإيده في `components.json`:
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@nile": "https://nile.dev/r/{name}.json"
+  }
+}
+```
+
+</File>
+
+ولو الـ registry open source، تقدر تسجّل الـ namespace في الـ **Registry Directory**، فالمستخدم يكتب `@nile/...` من غير ما يعرّف حاجة. وده في فصل ١٠.
+
+## 🧪 Lab: registry من الصفر في 10 دقايق
+
+<File name="terminal">
+
+```bash
+mkdir nile-registry && cd nile-registry
+echo '{"name":"nile-registry","private":true}' > package.json
+mkdir -p components/ui rules
+```
+
+</File>
+
+اكتب `components/ui/money-input.tsx` بأي component، و`rules/team.md` بأي كلام، وبعدين الفهرس:
+
+<File name="registry.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "nile",
+  "homepage": "https://nile.dev",
+  "items": [
+    {
+      "name": "money-input",
+      "type": "registry:ui",
+      "description": "Input للمبالغ بالجنيه.",
+      "files": [{ "path": "components/ui/money-input.tsx", "type": "registry:ui" }]
+    },
+    {
+      "name": "agent-rules",
+      "type": "registry:item",
+      "description": "قواعد الفريق للـ AI agents.",
+      "files": [{ "path": "rules/team.md", "type": "registry:file", "target": "~/AGENTS.md" }]
+    }
+  ]
+}
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest registry validate          # ✔ Registry is valid.
+npx shadcn@latest build                      # public/r/*.json
+python3 -m http.server 3999 --directory public &
+
+npx shadcn@latest list http://localhost:3999/r/registry.json
+# - http://localhost:3999/r/money-input.json (ui) — Input للمبالغ بالجنيه.
+# - http://localhost:3999/r/agent-rules.json (item) — قواعد الفريق للـ AI agents.
+
+mkdir ../empty && cd ../empty
+npx shadcn@latest add http://localhost:3999/r/agent-rules.json --yes
+cat AGENTS.md                                # اتكتب في فولدر فاضي
+```
+
+</File>
+
+- **افتح `public/r/money-input.json`** وشوف الـ `content` اللي اتضاف.
+- **جرّب `add` للـ `money-input`** في الفولدر الفاضي، وشوف الفرق: ده مش universal، فمحتاج مشروع فيه `components.json`.
+
+<Checklist id="shreg-build" title="خلّصت الفصل لما" items={["تشغّل shadcn build وتعرف إن الناتج في public/r", "تعرف إن ملف الـ item الناتج فيه content", "تغيّر الـ output بـ --output", "تقدّم الـ registry بـ loadRegistry وloadRegistryItem", "ترجّع 404 لـ RegistryItemNotFoundError", "تعمل content negotiation بالـ Accept والـ User-Agent مع Vary", "تجرّب list/search على الفهرس وview/add على الـ item", "تعمل universal item بـ target لكل ملف"]} />
+
+<Quiz>
+<Q n={1} q="عايز view لـ item. تدي الـ CLI رابط registry.json؟">لأ. view وadd محتاجين رابط ملف الـ item نفسه أو @ns/name.</Q>
+<Q n={2} q="ليه Vary: Accept, User-Agent مهم في content negotiation؟">عشان الـ cache ميرجّعش HTML للـ CLI أو JSON للمتصفح من نفس الـ URL.</Q>
+<Q n={3} q="عندي route handlers بـ loadRegistry والـ source فيه include. محتاج build؟">لأ. الـ loaders بيحلّوا الـ include لوحدهم.</Q>
+<Q n={4} q="إيه شرط الـ universal item؟">كل ملف فيه يكون ليه target صريح.</Q>
+</Quiz>

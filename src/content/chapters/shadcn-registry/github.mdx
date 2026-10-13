@@ -1,0 +1,264 @@
+---
+title: GitHub Repo يبقى Registry
+short: GitHub Registries
+order: 6
+label: فصل ٦
+badge: التطبيق · فصل ٦
+en: owner/repo/item · #ref · registry validate · gh auth · GH_TOKEN
+keywords: من غير سيرفر · refs · private repos · حدود · مراجعة
+goal: تحوّل أي GitHub repo لـ registry، وتثبّت الإصدارات بالـ refs، وتسطّب من repos private بأمان.
+part: التطبيق
+color: c1
+---
+
+## الفكرة
+
+<Hl c="y">أي GitHub repo فيه `registry.json` في الـ root بقى registry.</Hl>
+
+- **من غير سيرفر** ومن غير ما ترفع JSON متبني.
+- **الـ repo نفسه هو الـ source registry**، والـ CLI بيقرا الملفات منه على طول.
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest add <owner>/<repo>/<item>
+```
+
+</File>
+
+## إمتى GitHub؟
+
+- **عندك كود reusable** في repo أصلًا.
+- **عايز المستخدم يسطّب** بـ `owner/repo/item` من غير ما يعرّف حاجة في `components.json`.
+- **عايز توزّع** config أو rules أو docs أو templates من نفس الـ repo.
+- **مش محتاج** سيرفر خاص أو auth على كل request.
+
+## الشروط
+
+- **الـ host:** repo على `github.com`. الـ GitHub Enterprise **مش مدعوم**.
+- **الملف:** `registry.json` في **الـ root**.
+- **الـ schemas:** `registry.json` والـ items لازم يمشوا عليها.
+- **الملفات:** كل ملف متكتب في `files` لازم يكون موجود فعلًا في الـ repo.
+- **public أو private:** الـ public شغال من غير أي إعداد، والـ private محتاج GitHub credentials.
+
+## خطوة ١: ضيف `registry.json`
+
+<File name="registry.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "nile-toolkit",
+  "homepage": "https://github.com/nile-team/toolkit",
+  "items": [
+    {
+      "name": "team-conventions",
+      "type": "registry:item",
+      "title": "Team Conventions",
+      "description": "قواعد الفريق وإعدادات الـ editor وتعليمات الـ agents.",
+      "files": [
+        { "path": "AGENTS.md", "type": "registry:file", "target": "~/AGENTS.md" },
+        { "path": ".editorconfig", "type": "registry:file", "target": "~/.editorconfig" },
+        { "path": "docs/conventions.md", "type": "registry:file", "target": "~/docs/conventions.md" }
+      ]
+    }
+  ]
+}
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+git add registry.json && git commit -m "add registry" && git push
+npx shadcn@latest add nile-team/toolkit/team-conventions   # من أي مشروع
+```
+
+</File>
+
+## خطوة ٢: وزّع أي ملفات
+
+الـ item ممكن يبقى ملف واحد أو كذا ملف بيتسطبوا مع بعض. مثلًا setup كامل للـ testing:
+
+<File name="registry.json (جزء)">
+
+```json
+{
+  "name": "vitest-setup",
+  "type": "registry:item",
+  "files": [
+    { "path": "config/vitest.config.ts", "type": "registry:file", "target": "~/vitest.config.ts" },
+    { "path": "test/setup.ts", "type": "registry:file", "target": "~/test/setup.ts" },
+    { "path": "docs/testing.md", "type": "registry:file", "target": "~/docs/testing.md" }
+  ]
+}
+```
+
+</File>
+
+- **`target`** بيحدد الملف يتكتب فين عند المستخدم، فـ `config/vitest.config.ts` في الـ repo ممكن يتكتب `~/vitest.config.ts` في الـ root.
+- **الـ item نفسه** ممكن يبقى نوعه `registry:file`، مش لازم `registry:item`.
+
+## خطوة ٣: اعمل validate
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest registry validate nile-team/toolkit
+npx shadcn@latest registry validate nile-team/toolkit#v1.0.0   # branch أو tag أو SHA
+```
+
+</File>
+
+الأمر ده بيعمل 4 حاجات:
+
+1. **بيقرا** `registry.json` اللي في الـ root.
+2. **بيحل** الـ includes.
+3. **بيتأكد** إن الـ items مظبوطة على الـ schema.
+4. **بيتأكد** إن كل الملفات المذكورة موجودة.
+
+## خطوة ٤: `list` و`search` و`view`
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest list   nile-team/toolkit
+npx shadcn@latest search nile-team/toolkit -q conventions
+npx shadcn@latest view   nile-team/toolkit/team-conventions
+```
+
+</File>
+
+## `include` في GitHub
+
+نفس الكلام اللي في فصل ٢: الـ root فيه `include`، وكل فولدر ليه `registry.json`، والمسارات نسبية للملف اللي معرّف الـ item.
+
+## الـ dependencies
+
+- **من نفس الـ repo:** اكتب العنوان **كامل** `nile-team/toolkit/agent-rules`. الاسم لوحده (`agent-rules`) هيدوّر في shadcn الرسمي.
+- **من registries تانية:** عادي، زي `@nile/tsconfig` أو `other-org/devtools/prettier-config`.
+- **الـ refs مش بتتورّث:** لو عايز dependency ثابتة، حط الـ ref بتاعها هي.
+
+<File name="registry.json (جزء)">
+
+```json
+{
+  "name": "project-setup",
+  "type": "registry:item",
+  "registryDependencies": [
+    "nile-team/toolkit/agent-rules#v1.0.0",
+    "nile-team/toolkit/tsconfig#c0ffee254729296a45d6691db565cf707a3fef5d",
+    "@nile/prettier-config"
+  ],
+  "files": [
+    { "path": "docs/project-setup.md", "type": "registry:file", "target": "~/docs/project-setup.md" }
+  ]
+}
+```
+
+</File>
+
+## العنوان بيتقري إزاي؟
+
+<Box type="idea" title="أول جزأين بس هما الـ repo">
+
+في `owner/repo/rules/agent`، الجزء الأول هو الـ owner والتاني هو الـ repo، و**كل اللي بعدهم اسم الـ item** (`rules/agent`)، مش مسار ملف. والاستثناء الوحيد: لو العنوان بينتهي بـ `.json`، بيتعامل كمسار ملف.
+
+</Box>
+
+## الـ refs — `#`
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest add nile-team/toolkit/team-conventions#main
+npx shadcn@latest add nile-team/toolkit/team-conventions#v1.0.0
+npx shadcn@latest add nile-team/toolkit/team-conventions#feature/new-rules   # الـ ref ممكن فيه /
+npx shadcn@latest add nile-team/toolkit/team-conventions#c0ffee254729296a45d6691db565cf707a3fef5d
+```
+
+</File>
+
+- **من غير ref:** الـ CLI بياخد الـ **default branch**.
+- **branch أو tag أو SHA مختصر:** الـ CLI بيستخدم Git عشان يحوّلهم لـ commit SHA قبل ما يقرا الملفات.
+- **SHA كامل (40 حرف):** بيتستخدم على طول **من غير Git**، وهو أكتر حاجة reproducible.
+
+## Repos private
+
+مش محتاج سيرفر ولا إعداد في الـ registry. **لو إنت تقدر تقرا الـ repo، الـ CLI يقدر يسطّب منه.**
+
+### على جهازك: GitHub CLI
+
+<File name="terminal">
+
+```bash
+gh auth login     # مرة واحدة
+npx shadcn@latest add nile-team/private-kit/team-conventions
+```
+
+</File>
+
+- **أول مرة** يستخدم الـ credentials بيطبع `✔ Using gh credentials.`
+- **الـ token بيفضل جوه `gh`** وعمره ما بيدخل process بتاع shadcn.
+
+### في الـ CI: token
+
+<File name="terminal">
+
+```bash
+GH_TOKEN=github_pat_xxx npx shadcn@latest add nile-team/private-kit/team-conventions
+```
+
+</File>
+
+- **`GH_TOKEN` أو `GITHUB_TOKEN`:** لو الاتنين موجودين، `GH_TOKEN` هو اللي بيكسب.
+- **الأنسب:** fine-grained personal access token على الـ repo ده بس، بصلاحية **Contents: Read-only**.
+- **وجود token:** بيتستخدم بدل `gh`، وبيتبعت لـ `api.github.com` بس.
+
+<Box type="warn" title="GITHUB_TOKEN في Actions">
+
+الـ `GITHUB_TOKEN` اللي GitHub Actions بيديه غالبًا بيقرا **الـ repo اللي فيه الـ workflow بس**. لو الـ registry في repo تاني private، استخدم fine-grained PAT أو GitHub App installation token.
+
+</Box>
+
+### بيشتغل إزاي من جوه؟
+
+- **الـ repos الـ public** بتتقري anonymous دايمًا، ومن غير ما `gh` يتنادى.
+- **الـ CLI بيجرب anonymous الأول**، وبيستخدم الـ credentials بس لو `registry.json` اللي في الـ root مش public.
+- **تحويل الـ ref** بيبدأ بـ `git ls-remote`، وGit ممكن يستخدم أي credential helper عندك، زي اللي بيعمله `gh auth setup-git`.
+- **الملفات الـ private** بتتقري من GitHub Contents API على الـ commit SHA اللي اتحدد.
+- **GitHub بيرد نفس رد "مش موجود"** للـ repo الـ private والـ repo اللي مش موجود. فلو الـ credentials مش كفاية، الـ CLI مش هيعرف يقولك أنهي فيهم.
+
+<Box type="warn" title="تناقض في الـ docs">
+
+صفحة الـ FAQ لسه مكتوب فيها إن عناوين GitHub للـ repos الـ public بس، وإن الـ private محتاج namespace بـ auth. لكن صفحة GitHub Registries الأحدث بتشرح دعم الـ private بالتفصيل. لو الإصدار عندك قديم وما اشتغلش، حدّث `shadcn@latest` أو استخدم namespace.
+
+</Box>
+
+## الحدود
+
+- **حجم الملف:** 5 MiB كحد أقصى لكل ملف.
+- **GitHub Enterprise:** مش مدعوم، والعناوين دايمًا على `github.com`.
+- **الـ symlinks:** ابعد عنها. القراية الـ anonymous بترجّع مسار الهدف كنص، والقراية بالـ token بترجّع محتوى الملف الحقيقي، فالنتيجة بتختلف.
+
+## راجع قبل ما تسطّب
+
+الـ GitHub item بيكتب كود وملفات في مشروعك، فعامله زي أي dependency من برّه:
+
+- **راجع الـ repo** و`registry.json` اللي في الـ root.
+- **راجع تعريف الـ item:** خصوصًا `files` و`target` و`dependencies` و`devDependencies` و`registryDependencies` و`envVars`.
+- **راجع الـ dependencies الخارجية**، لأنها ممكن تكتب ملفات من registries تانية.
+- **ثبّت الـ ref** في أوامر التثبيت اللي بتنشرها، والـ SHA الكامل هو الأضمن.
+- **اعرض الـ payload** بـ `shadcn view` قبل التثبيت، وممكن تبعته لـ agent يراجعه.
+- **جرّب من غير ما تكتب حاجة:** `shadcn add ... --dry-run`.
+- **شوف التغييرات:** `--diff` يعرض الفرق، و`--view` يعرض محتوى الملفات قبل ما تطبّق.
+
+<Checklist id="shreg-github" title="خلّصت الفصل لما" items={["تحوّل repo لـ registry بـ registry.json في الـ root", "تسطّب بـ owner/repo/item", "تعمل registry validate على branch أو tag", "تكتب dependency من نفس الـ repo بالعنوان الكامل", "تثبّت بـ #tag أو SHA كامل", "تعرف إن أول جزأين بس هما owner وrepo", "تسطّب من private بـ gh أو GH_TOKEN", "تعرف حدود 5 MiB وEnterprise والـ symlinks", "تراجع بـ view و--dry-run و--diff"]} />
+
+<Quiz>
+<Q n={1} q="nile-team/toolkit/rules/agent. اسم الـ item إيه؟">rules/agent. أول جزأين بس owner وrepo.</Q>
+<Q n={2} q='item في GitHub عنده registryDependencies: ["tsconfig"] وtsconfig في نفس الـ repo. هيشتغل؟'>لأ. tsconfig لوحده معناه item من shadcn الرسمي. اكتب nile-team/toolkit/tsconfig.</Q>
+<Q n={3} q="GH_TOKEN وGITHUB_TOKEN الاتنين موجودين. أنهي بيتستخدم؟">GH_TOKEN.</Q>
+<Q n={4} q="أنهي ref مش محتاج Git عشان يتحل؟">الـ commit SHA الكامل (40 حرف).</Q>
+</Quiz>

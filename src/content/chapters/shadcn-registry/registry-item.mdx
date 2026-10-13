@@ -1,0 +1,200 @@
+---
+title: registry-item.json — كل حقل في الوصفة
+short: registry-item.json
+order: 3
+label: فصل ٣
+badge: البداية · فصل ٣
+en: type · dependencies · registryDependencies · files · target · envVars · docs · meta
+keywords: أنواع الـ items · dependencies · target · placeholders · envVars
+goal: تعرف كل حقل في الـ item، وخصوصًا الأنواع والـ dependencies ومكان كتابة الملفات بـ target.
+part: البداية
+color: c3
+---
+
+## شكل الـ item كامل
+
+<File name="public/r/checkout-card.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "checkout-card",
+  "type": "registry:block",
+  "title": "Checkout Card",
+  "description": "كارت دفع بالجنيه فيه money-input وزرار.",
+  "author": "Saeed <saeed@nile.dev>",
+  "registryDependencies": ["button", "@nile/money-input"],
+  "dependencies": ["zod@^3.23.0", "motion"],
+  "devDependencies": ["@types/mdx"],
+  "files": [
+    { "path": "registry/default/checkout-card/checkout-card.tsx", "type": "registry:component" },
+    { "path": "registry/default/checkout-card/use-checkout.ts", "type": "registry:hook" }
+  ],
+  "cssVars": {
+    "light": { "brand": "oklch(0.55 0.17 160)" },
+    "dark": { "brand": "oklch(0.7 0.15 160)" }
+  },
+  "docs": "محتاج NILE_PAY_KEY في .env.local عشان الدفع يشتغل.",
+  "categories": ["checkout", "forms"],
+  "meta": { "version": "1.2.0" }
+}
+```
+
+</File>
+
+## الحقول الأساسية
+
+- **`$schema`:** رابط `registry-item.json` schema.
+- **`name`:** الاسم اللي الـ item بيتعرف بيه، ولازم يكون unique جوه الـ registry بتاعك.
+- **`title`:** عنوان قصير يتقري.
+- **`description`:** شرح أطول من الـ title. مهم جدًا للـ AI والـ MCP.
+- **`author`:** صاحب الـ item، ممكن يختلف عن صاحب الـ registry.
+
+## `type` — نوع الـ item
+
+النوع بيحدد الـ item ده إيه، وبيحدد كمان **الملف هيتكتب فين** في المشروع.
+
+| النوع | تستخدمه لـ |
+|---|---|
+| `registry:ui` | component UI أو primitive في ملف واحد |
+| `registry:component` | component بسيط |
+| `registry:block` | حاجة أكبر من كذا ملف، زي فورم login كامل |
+| `registry:hook` | React hook |
+| `registry:lib` | utils ودوال مساعدة |
+| `registry:page` | صفحة أو route |
+| `registry:file` | أي ملف تاني، زي config |
+| `registry:style` | style كامل زي `new-york` |
+| `registry:theme` | theme ألوان |
+| `registry:font` | خط |
+| `registry:base` | design system كامل بإعداده |
+| `registry:item` | item عام (universal) مش مربوط بنوع |
+
+## الـ dependencies — 3 أنواع
+
+<Grid2>
+<Card title="dependencies" c={1}>
+
+npm packages بتتسطب مع الـ item. الـ version بـ `@`، زي `zod@^3.23.0`.
+
+</Card>
+<Card title="devDependencies" c={2}>
+
+npm packages للـ development بس، زي `tw-animate-css` أو `@types/mdx`.
+
+</Card>
+</Grid2>
+
+### `registryDependencies` — items تانية لازم تتسطب قبله
+
+كل عنصر فيها **عنوان item**، وليه 5 أشكال:
+
+<File name="registry-item.json">
+
+```json
+{
+  "registryDependencies": [
+    "button",
+    "@nile/money-input",
+    "nile-team/ui/otp-input#v1.2.0",
+    "https://nile.dev/r/editor.json",
+    "./editor.json"
+  ]
+}
+```
+
+</File>
+
+- **`button`:** اسم لوحده = item من shadcn الرسمي.
+- **`@nile/money-input`:** item من namespace.
+- **`nile-team/ui/otp-input`:** item من GitHub repo، والأحسن تثبّته بـ tag أو commit SHA كامل في الـ registries المنشورة.
+- **URL:** رابط ملف item مباشر.
+- **`./editor.json`:** ملف item على الـ disk.
+
+<Box type="warn" title="غلطتين مشهورين">
+
+- **الاسم لوحده:** لو الـ registry بتاعك على GitHub وكتبت `button`، ده **مش** الـ button بتاعك، ده بتاع shadcn. للـ item من نفس الـ repo اكتب العنوان كامل `owner/repo/button`.
+- **الـ ref مش بيتورّث:** لو المستخدم سطّب `owner/repo/x#v1` والـ dependency مكتوبة `owner/repo/y` من غير ref، فـ `y` هتيجي من الـ default branch. ثبّت كل dependency بالـ ref بتاعها.
+
+</Box>
+
+## `files` — الملفات
+
+كل ملف ليه `path` و`type`، و`target` اختياري:
+
+- **`path`:** مكان الملف **في الـ registry**. الـ build بيقراه ويحوّله ويحط محتواه في `content`.
+- **`type`:** نوع الملف، بنفس قائمة الأنواع اللي فوق.
+- **`target`:** مكان الملف **في مشروع المستخدم**.
+
+### إمتى `target` إجباري؟
+
+- **إجباري** مع `registry:page` و`registry:file`.
+- **في الباقي:** الـ CLI بيقرا `components.json` بتاع المستخدم ويحدد المكان لوحده حسب الـ type.
+- **`~`:** معناها root المشروع، زي `~/nile.config.ts`.
+
+<File name="registry-item.json">
+
+```json
+{
+  "files": [
+    { "path": "registry/default/checkout/page.tsx", "type": "registry:page", "target": "app/checkout/page.tsx" },
+    { "path": "registry/default/checkout/nile.config.ts", "type": "registry:file", "target": "~/nile.config.ts" },
+    { "path": "registry/default/checkout/.env.example", "type": "registry:file", "target": "~/.env.example" }
+  ]
+}
+```
+
+</File>
+
+### الـ placeholders في `target`
+
+بدل ما تكتب `components/ui` بإيدك وتلاقي المستخدم شغال بـ `src` أو monorepo، استخدم placeholder بيتحل من `aliases` في `components.json` بتاعه:
+
+| الـ placeholder | بيتحل لـ |
+|---|---|
+| `@components/` | `aliases.components` |
+| `@ui/` | `aliases.ui` |
+| `@lib/` | `aliases.lib` |
+| `@hooks/` | `aliases.hooks` |
+
+- **بيشتغل مع أي import prefix:** سواء المشروع بيستخدم `@/` أو `#` أو package imports أو workspace exports.
+- **أي حاجة بعده بتتساب زي ما هي:** `@ui/payments/money-input.tsx` بيتكتب جوه فولدر الـ ui عند المستخدم في `payments/money-input.tsx`.
+- **في أول الـ target بس:** `components/@ui/x.tsx` بيتعامل كمسار عادي.
+- **placeholder مش معروف** زي `@foo/bar.ts` بيتكتب `foo/bar.ts` عادي.
+- **`@utils/` مش مدعوم**، لأن `utils` بيشاور على ملف مش فولدر.
+- **الـ target أقوى من الـ type:** ملف `type` بتاعه `registry:ui` و`target` بتاعه `@lib/format-money.ts` هيتكتب في lib.
+- **في الـ dependencies كمان:** الـ items اللي في `registryDependencies` تقدر تستخدم نفس الـ placeholders.
+
+## `envVars`
+
+<File name="registry-item.json">
+
+```json
+{
+  "envVars": {
+    "NEXT_PUBLIC_APP_URL": "http://localhost:3000",
+    "NILE_PAY_KEY": ""
+  }
+}
+```
+
+</File>
+
+- **مكان الكتابة:** بتتكتب في `.env.local` أو `.env`.
+- **مش بتمسح حاجة:** أي متغير موجود قبل كده **مش بيتكتب فوقه**.
+- **قيم dev بس:** استخدمها لقيم development أو أمثلة، **وأوعى تحط فيها قيم production**، لأن الـ JSON ده بيوصل لأي حد.
+
+## حقول تانية
+
+- **`docs`:** رسالة بتظهر للمستخدم في الـ terminal بعد الـ install، زي "هات الـ key من الموقع الفلاني".
+- **`categories`:** tags لتنظيم الـ items، زي `["sidebar", "dashboard"]`.
+- **`meta`:** أي key/value إنت عايزه، لأدواتك أو scripts بتاعتك.
+- **`cssVars` و`css` و`font` و`tailwind` و`extends` و`config`:** ليهم الفصل الجاي كله.
+
+<Checklist id="shreg-item" title="خلّصت الفصل لما" items={["تختار type مناسب من الـ 12 نوع", "تفرق بين dependencies وdevDependencies وregistryDependencies", "تكتب registryDependencies بالـ 5 أشكال", "تعرف إن الاسم لوحده = shadcn الرسمي", "تثبّت كل GitHub dependency بالـ ref بتاعها", "تحط target إجباري للـ page والـ file", "تستخدم @ui/ و@lib/ بدل مسارات ثابتة", "تحط في envVars قيم dev بس"]} />
+
+<Quiz>
+<Q n={1} q="item فيه ملف registry:file من غير target. إيه المشكلة؟">target إجباري للـ registry:file والـ registry:page.</Q>
+<Q n={2} q="target بتاعه @utils/cn.ts. هيشتغل؟">لأ. @utils/ مش مدعوم لأن utils بيشاور على ملف، فمش هيتحل لفولدر الـ utils عند المستخدم. استخدم @lib/cn.ts.</Q>
+<Q n={3} q="envVars فيها DATABASE_URL والمستخدم عنده DATABASE_URL في .env.local. هيحصل إيه؟">مش هيتغير. الـ CLI مش بيكتب فوق متغير موجود.</Q>
+<Q n={4} q="ملف type بتاعه registry:ui وtarget بتاعه @lib/x.ts. هيتكتب فين؟">في فولدر lib، لأن الـ target هو اللي بيحدد المكان.</Q>
+</Quiz>

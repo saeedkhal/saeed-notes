@@ -1,0 +1,68 @@
+---
+title: "Cheat Sheet: shadcn Registry"
+short: Cheat Sheet
+order: 13
+label: الآخر
+badge: الآخر
+en: registry.json · item · build · GitHub · namespaces · auth · search · directory · MCP · API
+keywords: المشكلة والحل في سطر
+goal: تفتكر كل قاعدة وكل أمر في المذكرة بسرعة.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["الـ registry إيه؟", "نظام توزيع كود بيكتب ملفات في مشروع المستخدم، مش npm package"],
+  ["لـ React بس؟", "لأ، أي framework وأي ملفات، طالما JSON على HTTP أو GitHub repo"],
+  ["الفهرس", "`registry.json` في الـ root: `name` و`homepage` و`items` و`include`"],
+  ["ملف الـ item", "فيه الملفات بالـ `content`، و`view`/`add` بيقروه"],
+  ["`list` و`search`", "على الفهرس، URL أو `@ns`، مش ملف local"],
+  ["`include`", "مسار صريح لـ `registry.json`، من غير اختصار فولدر"],
+  ["`path` مع include", "نسبي للـ `registry.json` اللي معرّف الـ item"],
+  ["أسماء الـ items", "unique في الـ registry كله بعد التجميع"],
+  ["`registryDependencies`", "`button` أو `@ns/x` أو `owner/repo/x#ref` أو URL أو `./x.json`"],
+  ["اسم لوحده زي `button`", "دايمًا item من shadcn الرسمي"],
+  ["npm packages", "`dependencies` و`devDependencies`، والـ version بـ `@`"],
+  ["`target` إجباري", "مع `registry:page` و`registry:file`"],
+  ["`~/`", "root مشروع المستخدم"],
+  ["مسارات المستخدم", "`@ui/` و`@components/` و`@lib/` و`@hooks/`، و`@utils/` مش مدعوم"],
+  ["`envVars`", "بتتكتب في `.env.local` من غير overwrite، وقيم dev بس"],
+  ["لون جديد", "`cssVars.light` و`dark`، فتقدر تستخدم `bg-brand`"],
+  ["متغير Tailwind", "`cssVars.theme`، و`tailwind.config` deprecated"],
+  ["ترتيب الـ CSS", "`@import` ثم `@plugin` ثم الباقي، والـ plugin يتحط في `dependencies`"],
+  ["animation", "`@keyframes` في `css` + `--animate-*` في `cssVars.theme`"],
+  ["خط", "`registry:font` + `font`، و`selector` بيقصّر الـ class على selectors"],
+  ["design system", "`registry:base` + `config`، و`extends: none` للصفر"],
+  ["طلّع JSON", "`shadcn build`، والناتج في `public/r`، وتغيّره بـ `-o`"],
+  ["من غير build", "`loadRegistry` و`loadRegistryItem` في route handlers"],
+  ["URL واحد لكله", "Accept `application/vnd.shadcn.v1+json` + `Vary`"],
+  ["universal item", "كل ملف ليه `target`، ويتسطب من غير `components.json`"],
+  ["GitHub registry", "`registry.json` في الـ root، و`add owner/repo/item`"],
+  ["ثبّت إصدار", "`#v1.0.0` أو SHA كامل، والـ ref مش بيتورّث"],
+  ["GitHub private", "`gh auth login` أو `GH_TOKEN` (Contents: Read-only)"],
+  ["validate", "`shadcn registry validate owner/repo#ref`"],
+  ["namespace", "`shadcn registry add @ns=https://x/r/{name}.json`"],
+  ["الـ URL template", "`{name}` إجباري، و`{style}` اختياري، و`${VAR}` من env"],
+  ["auth", "headers أو params في `components.json`، والقيمة في `.env.local`"],
+  ["ملفين بنفس الـ target", "الأخير في الحل بيكسب، فتعمل override بيه"],
+  ["versioning", "`params: { version }` و`${VAR:-default}`"],
+  ["401 / 403 / 429", "token غلط / مفيش صلاحية / rate limit"],
+  ["رسالة للمستخدم", "`message` في body الـ error"],
+  ["قبل التثبيت", "`view`، و`add --dry-run` و`--diff` و`--view`"],
+  ["registry فيها آلاف items", "dynamic search: `q` و`type` و`limit` و`offset` + `pagination`"],
+  ["Directory", "PR على `directory.json`: open source وflat ومن غير `content`"],
+  ["Health", "Observing / Healthy / Degraded / Unavailable، وسكور 45+25+20+10"],
+  ["الترتيب", "`0.8 × health + 20 × حجم`، والحجم بيقف عند 500"],
+  ["MCP", "فهرس اسمه `registry` في الـ root + `shadcn mcp init --client`"],
+  ["Open in v0", "`v0.dev/chat/api/open?url=`، من غير cssVars/css/envVars/namespaces"],
+  ["API", "`shadcn/registry` و`shadcn/schema` و`shadcn/preset` بس"],
+  ["سيرفر شغال على طول", "`useCache: false`"],
+]} />
+
+<Checklist id="shreg-cheat" title="خلّصت المذكرة لما" items={["تعمل registry وتطلّع JSON بـ build", "تكتب items بـ types وdependencies وtargets صح", "تضيف ألوان وCSS وخطوط", "تنشر من GitHub وتثبّت بالـ refs", "تعرّف namespaces بـ auth", "تعمل override لـ item من registry تانية", "تضيف dynamic search لو الـ registry كبيرة", "تسجّل في الـ Directory وتفهم الـ Health", "توصّل الـ registry بالـ MCP وv0", "تستخدم الـ API البرمجي"]} />
+
+<Quiz>
+<Q n={1} q="عايز توزّع AGENTS.md لكل مشاريع الفريق من غير سيرفر. أسهل طريقة؟">GitHub repo فيه registry.json، وitem نوعه registry:file وtarget بتاعه ~/AGENTS.md، وبعدها add owner/repo/item.</Q>
+<Q n={2} q="عايز تغيّر لون button من vendor. تعمل إيه؟">item بتاعك فيه registryDependencies للـ vendor button وcssVars جديدة.</Q>
+<Q n={3} q="registry private للشركة على سيرفر خاص. GitHub address ولا namespace؟">namespace بـ headers للـ auth والـ token في .env.local.</Q>
+</Quiz>

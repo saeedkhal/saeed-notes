@@ -1,0 +1,283 @@
+---
+title: الألوان والـ CSS والخطوط والـ Design Systems
+short: الألوان والخطوط
+order: 4
+label: فصل ٤
+badge: المحتوى · فصل ٤
+en: cssVars · css · @plugin · @import · registry:font · registry:style · registry:base · extends none
+keywords: cssVars · @layer · @utility · fonts · style · base
+goal: تخلي الـ item يضيف ألوان وCSS وخطوط للمشروع، وتعمل style أو design system كامل.
+part: المحتوى
+color: c4
+---
+
+## `cssVars` — المتغيرات
+
+ليها 3 مفاتيح:
+
+- **`theme`:** متغيرات Tailwind v4 العامة، زي الخطوط والـ spacing والـ animations.
+- **`light`:** قيم الـ light mode.
+- **`dark`:** قيم الـ dark mode.
+
+<File name="registry-item.json">
+
+```json
+{
+  "cssVars": {
+    "theme": { "font-heading": "Cairo, sans-serif" },
+    "light": { "brand": "oklch(0.55 0.17 160)", "brand-accent": "oklch(0.8 0.1 90)" },
+    "dark": { "brand": "oklch(0.7 0.15 160)", "brand-accent": "oklch(0.6 0.1 90)" }
+  }
+}
+```
+
+</File>
+
+- **الـ CLI بيعدّل ملف الـ CSS** بتاع المشروع ويحط القيم.
+- **لون جديد:** حطه في `light` و`dark`، وبعدها تقدر تستخدم `bg-brand` و`text-brand-accent` على طول.
+- **تغيّر متغير Tailwind موجود:** حطه في `theme` بنفس اسمه، زي `"spacing": "0.2rem"` أو `"breakpoint-md": "800px"` أو `"ease-in-out": "cubic-bezier(...)"`.
+
+<Box type="warn" title="tailwind بقى deprecated">
+
+الحقل القديم `tailwind.config` (اللي كان بيضيف `theme.extend` و`plugins`) deprecated في مشاريع Tailwind v4. استخدم `cssVars.theme` بداله، ومعاه `css` للـ keyframes والـ plugins.
+
+</Box>
+
+## `css` — قواعد CSS جديدة
+
+كل key هو at-rule أو selector، والقيمة object:
+
+<File name="registry-item.json">
+
+```json
+{
+  "css": {
+    "@layer base": {
+      "h1": { "font-size": "var(--text-2xl)" }
+    },
+    "@layer components": {
+      "price-tag": { "background-color": "var(--color-brand)", "padding": "var(--spacing-2)" }
+    },
+    "@utility content-auto": { "content-visibility": "auto" },
+    "@utility no-scrollbar": {
+      "&::-webkit-scrollbar": { "display": "none" }
+    },
+    "@utility tab-*": { "tab-size": "var(--tab-size-*)" }
+  }
+}
+```
+
+</File>
+
+- **`@layer base`:** للـ styles العامة زي الـ headings والـ body.
+- **`@layer components`:** لـ classes الـ components.
+- **`@utility`:** utility بسيطة، أو معقدة فيها nested selectors، أو functional بالنجمة `tab-*`.
+
+### `@import` و`@plugin`
+
+<File name="registry-item.json">
+
+```json
+{
+  "dependencies": ["@tailwindcss/typography", "tw-animate-css"],
+  "css": {
+    "@import \"tailwindcss\"": {},
+    "@import url(\"https://fonts.googleapis.com/css2?family=Cairo&display=swap\")": {},
+    "@import \"print.css\" print": {},
+    "@plugin \"@tailwindcss/typography\"": {},
+    "@plugin \"tw-animate-css\"": {},
+    "@plugin \"./my-plugin.js\"": {},
+    "@layer base": { "body": { "font-family": "Cairo, sans-serif" } }
+  }
+}
+```
+
+</File>
+
+- **الـ `@import`** بيتحط في **أول** ملف الـ CSS. وبيقبل string عادي أو `url()` أو media query.
+- **الـ `@plugin`** بيتحط **بعد الـ imports وقبل باقي الـ CSS**. ولو كذا plugin، بيتجمعوا مع بعض ويتشال المكرر.
+- **الترتيب النهائي:** imports، وبعدها plugins، وبعدها أي CSS تاني.
+- **plugin من npm:** لازم يتكتب في `dependencies` كمان، وإلا هيتضاف للـ CSS من غير ما يتسطب.
+
+### الـ animations محتاجة حاجتين
+
+<File name="registry-item.json">
+
+```json
+{
+  "cssVars": { "theme": { "--animate-wiggle": "wiggle 1s ease-in-out infinite" } },
+  "css": {
+    "@keyframes wiggle": {
+      "0%, 100%": { "transform": "rotate(-3deg)" },
+      "50%": { "transform": "rotate(3deg)" }
+    }
+  }
+}
+```
+
+</File>
+
+لازم الـ `@keyframes` في `css`، والـ `--animate-*` في `cssVars.theme`. واحدة من غير التانية مش هتشتغل.
+
+## `registry:font` — الخطوط
+
+<File name="font-cairo.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "font-cairo",
+  "type": "registry:font",
+  "font": {
+    "family": "'Cairo Variable', sans-serif",
+    "provider": "google",
+    "import": "Cairo",
+    "variable": "--font-sans",
+    "weight": ["400", "700"],
+    "subsets": ["arabic", "latin"],
+    "dependency": "@fontsource-variable/cairo"
+  }
+}
+```
+
+</File>
+
+- **`family`** (إجباري): قيمة `font-family` في الـ CSS.
+- **`provider`** (إجباري): حاليًا `google` بس.
+- **`import`** (إجباري): اسم الـ import من `next/font/google`. والأسماء اللي فيها مسافة بتتكتب بـ `_`، زي `JetBrains_Mono`.
+- **`variable`** (إجباري): اسم الـ CSS variable، زي `--font-sans` أو `--font-mono` أو `--font-heading`.
+- **`weight`** و**`subsets`**: اختياريين.
+- **`dependency`**: الـ npm package اللي يتسطب في المشاريع اللي مش Next.
+- **`selector`**: اختياري، والـ default بتاعه `html`.
+
+### `selector` بيغيّر إيه؟
+
+- **من غيره:** الـ font class بتتحط على `html`، فالخط بيبقى على الصفحة كلها.
+- **معاه:** زي `"selector": "h1, h2, h3"`، الـ class (مثلًا `font-heading`) بتتحط بـ `@apply` على الـ selector ده جوه `@layer base`.
+- **الـ variable نفسه** بيفضل متحط على `html` في الحالتين، فتقدر تستخدمه في أي حتة.
+
+## `registry:theme` و`registry:style`
+
+- **`registry:theme`:** ألوان بس في `cssVars`، زي `background` و`primary` و`ring` و`sidebar-*`، لـ light ولـ dark.
+- **`registry:style`:** style كامل بيتطبق وقت `shadcn init`، وممكن يكون فيه `dependencies` و`registryDependencies` و`cssVars` و`css`.
+
+<File name="nile-style.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "nile-style",
+  "type": "registry:style",
+  "dependencies": ["@tabler/icons-react"],
+  "registryDependencies": ["login-01", "calendar", "https://nile.dev/r/money-input.json"],
+  "cssVars": {
+    "theme": { "font-sans": "Cairo, sans-serif" },
+    "light": { "brand": "oklch(0.55 0.17 160)" },
+    "dark": { "brand": "oklch(0.7 0.15 160)" }
+  }
+}
+```
+
+</File>
+
+### `extends: "none"` — من الصفر
+
+- **من غيره:** الـ style **بيبني على shadcn**، يعني بياخد الـ defaults بتاعته ويزوّد عليها.
+- **معاه:** الـ style **مش بيورث أي حاجة** من shadcn، وإنت مسؤول عن كل الـ components والـ vars والـ dependencies.
+
+<File name="nile-from-scratch.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "extends": "none",
+  "name": "nile-scratch",
+  "type": "registry:style",
+  "dependencies": ["cn"],
+  "registryDependencies": ["utils", "https://nile.dev/r/button.json", "https://nile.dev/r/input.json"],
+  "cssVars": {
+    "light": { "main": "#0e7c66", "bg": "#f4f1ea", "text": "#111" },
+    "dark": { "main": "#3fd1ac", "bg": "#14161a", "text": "#eee" }
+  }
+}
+```
+
+</File>
+
+## `registry:base` — design system كامل
+
+الـ base هو أكبر نوع: dependencies وvars وCSS، **ومعاهم إعداد المشروع** في حقل `config`، وده حقل خاص بالـ base بس. كل حاجة فيه اختيارية:
+
+- **`style`:** اسم الـ style.
+- **`iconLibrary`:** مكتبة الأيقونات، زي `lucide`.
+- **`rsc`:** React Server Components، والـ default `false`.
+- **`tsx`:** TypeScript، والـ default `true`.
+- **`rtl`:** دعم right-to-left، والـ default `false`. وده مهم لينا.
+- **`menuColor`:** `default` أو `inverted` أو `default-translucent` أو `inverted-translucent`.
+- **`menuAccent`:** `subtle` أو `bold`.
+- **`tailwind.baseColor`** و**`tailwind.css`** و**`tailwind.prefix`**.
+- **`aliases.components`** و**`utils`** و**`ui`** و**`lib`** و**`hooks`**.
+- **`registries`:** registries تانية تتضاف لمشروع المستخدم، والـ keys لازم تبدأ بـ `@`.
+
+<File name="nile-base.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "nile-base",
+  "type": "registry:base",
+  "config": {
+    "style": "nile-base",
+    "iconLibrary": "lucide",
+    "rtl": true,
+    "tailwind": { "baseColor": "stone" },
+    "registries": { "@nile": "https://nile.dev/r/{name}.json" }
+  },
+  "dependencies": ["class-variance-authority", "tw-animate-css", "lucide-react"],
+  "registryDependencies": ["utils", "font-cairo"],
+  "cssVars": {
+    "light": { "background": "oklch(1 0 0)", "primary": "oklch(0.55 0.17 160)" },
+    "dark": { "background": "oklch(0.15 0 0)", "primary": "oklch(0.7 0.15 160)" }
+  },
+  "css": {
+    "@import \"tw-animate-css\"": {},
+    "@layer base": { "body": { "@apply bg-background text-foreground": {} } }
+  }
+}
+```
+
+</File>
+
+والـ base كمان ينفع يتعمل `extends: "none"` عشان يبقى design system من الصفر.
+
+## Block بيغيّر الـ primitives
+
+ممكن تاخد block من shadcn وتبدّل الـ primitives اللي جواه بتوعك، من غير ولا ملف:
+
+<File name="nile-login.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "nile-login",
+  "type": "registry:block",
+  "registryDependencies": [
+    "login-01",
+    "https://nile.dev/r/button.json",
+    "https://nile.dev/r/input.json"
+  ]
+}
+```
+
+</File>
+
+الـ `login-01` بيتسطب الأول، وبعده الـ button والـ input بتوعك بيتكتبوا **فوق** بتوع shadcn، لأنهم نفس الـ target والأخير بيكسب. وده هيتشرح بالتفصيل في فصل الـ namespaces.
+
+<Checklist id="shreg-styling" title="خلّصت الفصل لما" items={["تضيف لون في light وdark وتستخدمه bg-brand", "تغيّر متغير Tailwind من cssVars.theme", "تكتب @layer و@utility في css", "تعرف ترتيب @import ثم @plugin ثم الباقي", "تحط plugin الـ npm في dependencies", "تعمل animation بـ keyframes + theme", "تعمل registry:font وتعرف أثر selector", "تفرق بين style بيبني على shadcn وextends none", "تكتب registry:base بـ config"]} />
+
+<Quiz>
+<Q n={1} q="ضفت @plugin @tailwindcss/typography في css بس. إيه الناقص؟">تحطه في dependencies عشان يتسطب.</Q>
+<Q n={2} q="font فيها selector: h1. الـ variable هيتحط فين؟">على html زي العادي. الـ class بس اللي بتتطبق على h1.</Q>
+<Q n={3} q="عايز design system مش وارث أي حاجة من shadcn. تعمل إيه؟">extends: none في registry:style أو registry:base.</Q>
+<Q n={4} q="إيه الحقل اللي موجود في registry:base بس؟">config، وهو إعداد المشروع زي iconLibrary وrtl وaliases وregistries.</Q>
+</Quiz>

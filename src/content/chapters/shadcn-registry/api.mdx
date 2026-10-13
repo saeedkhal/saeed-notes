@@ -1,0 +1,218 @@
+---
+title: الـ API البرمجي في shadcn
+short: API Reference
+order: 12
+label: فصل ١٢
+badge: الأدوات · فصل ١٢
+en: getRegistryItems · resolveRegistryItems · addRegistryItems · loadRegistry · registryItemSchema · encodePreset
+keywords: config · useCache · local vs remote · typed errors · zod schemas · presets
+goal: تبني أدوات بتاعتك فوق الـ registry، زي scripts أو MCP أو سيرفر، باستخدام الـ imports الرسمية.
+part: الأدوات
+color: c2
+---
+
+## الفكرة
+
+الـ `shadcn` package فيه API برمجي غير الـ CLI. وكل جزء ليه subpath:
+
+<File name="imports">
+
+```ts
+import { getRegistryItems } from "shadcn/registry"
+import { registryItemSchema } from "shadcn/schema"
+import { encodePreset } from "shadcn/preset"
+```
+
+</File>
+
+<Box type="warn" title="الـ CLI مش API">
+
+أوامر الـ CLI نفسها مش جزء من الـ public API. **الـ imports المذكورة هنا بس** هي الثابتة اللي تعتمد عليها.
+
+</Box>
+
+## `shadcn/registry` — الـ options المشتركة
+
+### `config`
+
+- **النوع:** `Partial<Config>`.
+- **الـ default:** الـ registries المدمجة بس.
+- **`registries`:** بتربط كل namespace بـ URL، ومعاه الـ headers والـ env vars اللي محتاجها.
+
+<File name="script.ts">
+
+```ts
+const items = await getRegistryItems(["@nile/money-input"], {
+  config: { registries: { "@nile": "https://nile.dev/r/{name}.json" } },
+})
+```
+
+</File>
+
+### `useCache`
+
+- **النوع:** `boolean`، والـ default بتاعه `true`.
+- **الـ cache في الـ memory** طول عمر الـ process، والـ key بتاعه هو الـ URL بعد الحل.
+- **الـ promise نفسه بيتخزن**، فلو طلبين لنفس الـ URL في نفس الوقت، بيبقوا fetch واحد.
+- **سيبه `true`** في الـ scripts والـ CLI.
+- **خليه `false`** في الـ processes اللي شغالة على طول، زي السيرفرات والـ watchers والـ MCP server، لأن الـ registry ممكن تتغير بين الطلبات.
+
+## الدوال
+
+### `getRegistriesConfig(cwd)`
+
+بتقرا `components.json` لو موجود. ولو مش موجود، بتقرا حقل `registries` من **`package.json`**.
+
+### `getRegistry(name, opts)`
+
+- **بتجيب registry واحدة** بالاسم (`@nile`)، أو بـ URL، أو بعنوان GitHub.
+- **الفهرس لازم يكون flat:** بترفض أي فهرس remote لسه فيه `include`.
+
+### `getRegistryItems(names, opts)`
+
+- **بتجيب items** بأسمائها الكاملة.
+- **بترجّع array**، وكل item جواه الـ files بالـ `content`.
+
+### `resolveRegistryItems(names, opts)`
+
+- **بتمشي على `registryDependencies`** لكل item.
+- **بتعمل flatten** لكل حاجة في **object واحد** يتسطب: `dependencies` و`files` و`cssVars` و`docs`.
+
+### `addRegistryItems(names, opts)`
+
+ده `shadcn add` بس من الكود: بيكتب الملفات، ويسطّب الـ packages، ويضيف الـ env vars والـ CSS والـ Tailwind config.
+
+<File name="install.ts">
+
+```ts
+import { addRegistryItems, getRegistriesConfig } from "shadcn/registry"
+
+const cwd = process.cwd()
+const config = await getRegistriesConfig(cwd)
+
+await addRegistryItems(["@nile/agent-rules"], { cwd, config, overwrite: false, silent: true })
+```
+
+</File>
+
+- **مش بيقرا ملفات الـ config لوحده.** لازم تديله `config` من `getRegistriesConfig` أو تكتبه بإيدك.
+- **`config` فيه `registries` بس** بيكفي لو كل الـ items والـ dependencies universal، يعني `registry:item` أو `registry:file` وكل ملفاتهم ليها `target` صريح.
+- **الـ items التانية** محتاجة config كامل للمشروع، فيه الـ aliases والـ `resolvedPaths`.
+- **أي namespace** مذكور في item أو dependency لازم يكون موجود في `config`.
+- **بيرمي errors** بدل ما يقفل الـ process، و**عمره ما بيسأل** المستخدم.
+- **الملفات الموجودة بتتساب** إلا لو `overwrite: true`.
+- **مع npm** بيستخدم `--force` لو فيه تعارض peer dependencies مع React 19.
+
+### `getRegistries(opts)`
+
+بتجيب الـ Registry Directory كـ array، وكل عنصر فيه `name` و`url` و`homepage`.
+
+### `searchRegistries(names, opts)`
+
+<File name="search.ts">
+
+```ts
+const results = await searchRegistries(["@shadcn", "@nile"], {
+  query: "button",
+  types: ["registry:ui"],
+  limit: 100,
+  offset: 0,
+  config,
+  continueOnError: true, // لو registry وقعت، يكمّل بالباقي
+})
+```
+
+</File>
+
+- **البحث fuzzy.**
+- **بترجّع `pagination` و`items`**، وكل item فيه `registry` و`addCommandArgument`، زي `@shadcn/button`.
+
+### `loadRegistry(opts)` و`loadRegistryItem(name, opts)`
+
+دول للـ **local**، يعني اللي بتستخدمهم في route handlers (فصل ٥):
+
+<Grid2>
+<Card title="loadRegistry" c={3}>
+
+بيقرا `registry.json` من الـ disk ويحل الـ `include`. وبيرجّع الفهرس **من غير محتوى الملفات**. والـ options بتاعته `cwd` و`registryFile`.
+
+</Card>
+<Card title="loadRegistryItem" c={4}>
+
+بيبني item واحد من الـ source، **ويقرا كل ملف من الـ disk ويحطه في `content`**.
+
+</Card>
+</Grid2>
+
+- **`getRegistry` و`getRegistryItems`:** remote من الشبكة، والفهرس لازم يكون flat.
+- **`loadRegistry` و`loadRegistryItem`:** local من الـ disk، وبيحلّوا `include` لوحدهم.
+
+## الـ errors
+
+كل الـ errors بتورث من `RegistryError`، وتقدر تفرّق بينهم بـ `instanceof` أو بالـ enum `RegistryErrorCode`:
+
+<File name="errors.ts">
+
+```ts
+import { getRegistry, RegistryNotFoundError, RegistryUnauthorizedError } from "shadcn/registry"
+
+try {
+  await getRegistry("@nile")
+} catch (error) {
+  if (error instanceof RegistryNotFoundError) console.log("مش موجودة")
+  else if (error instanceof RegistryUnauthorizedError) console.log("الـ token غلط")
+  else throw error
+}
+```
+
+</File>
+
+<Chips items={["RegistryError", "RegistryNotFoundError", "RegistryUnauthorizedError", "RegistryForbiddenError", "RegistryFetchError", "RegistryNotConfiguredError", "RegistryLocalFileError", "RegistryParseError", "RegistryValidationError", "RegistryItemNotFoundError", "RegistriesIndexParseError", "RegistryMissingEnvironmentVariablesError", "RegistryInvalidNamespaceError"]} />
+
+## `shadcn/schema` — الـ Zod schemas
+
+<File name="validate.ts">
+
+```ts
+import { registryItemSchema } from "shadcn/schema"
+
+const result = registryItemSchema.safeParse(json)
+if (!result.success) console.error(result.error)
+```
+
+</File>
+
+- **الـ schemas:** `registrySchema` و`registryItemSchema` و`registryItemFileSchema` و`registryItemTypeSchema` و`registryItemCssVarsSchema` و`registryItemTailwindSchema` و`registryBaseColorSchema` و`configSchema` و`presetSchema`.
+- **الـ types:** `Registry` و`RegistryItem` و`RegistryBaseItem` و`RegistryFontItem` و`Preset` و`ConfigJson`.
+
+## `shadcn/preset` — الـ theme presets
+
+الـ preset هو **كود قصير** بيختصر إعدادات الـ theme، زي style ولون أساسي وtheme وradius وخط.
+
+<File name="preset.ts">
+
+```ts
+import { encodePreset, decodePreset } from "shadcn/preset"
+
+const code = encodePreset({ style: "vega", baseColor: "stone", theme: "blue", radius: "large", font: "geist" })
+// كود قصير URL-safe وأوله رقم الإصدار، زي "bJ4FLU0"
+
+const config = decodePreset(code)  // كل الحقول، واللي ناقص بياخد الـ default
+decodePreset("not-a-code")         // null
+```
+
+</File>
+
+- **`encodePreset`:** أي حقل مش موجود بياخد قيمته من `DEFAULT_PRESET_CONFIG`.
+- **`decodePreset`:** بيرجّع `style` و`baseColor` و`theme` و`chartColor` و`iconLibrary` و`font` و`fontHeading` و`radius` و`menuAccent` و`menuColor`.
+- **دوال تانية:** `isPresetCode` و`isValidPreset` و`generateRandomConfig` و`generateRandomPreset` و`toBase62` و`fromBase62`.
+- **constants:** `PRESET_BASES` و`PRESET_STYLES` و`PRESET_BASE_COLORS` و`PRESET_THEMES` و`PRESET_ICON_LIBRARIES` و`PRESET_FONTS` و`PRESET_FONT_HEADINGS` و`PRESET_RADII` و`PRESET_MENU_ACCENTS` و`PRESET_MENU_COLORS` و`PRESET_CHART_COLORS` و`DEFAULT_PRESET_CONFIG`.
+
+<Checklist id="shreg-api" title="خلّصت الفصل لما" items={["تستخدم الـ subpaths الرسمية بس", "تمرر config وتعرف إمتى useCache: false", "تفرق بين getRegistryItems وresolveRegistryItems", "تسطّب من الكود بـ addRegistryItems", "تعرف إن addRegistryItems مش بيقرا config لوحده", "تفرق بين get (remote) وload (local)", "تمسك الـ errors بـ instanceof", "تعمل validate بـ registryItemSchema", "تعمل encode وdecode لـ preset"]} />
+
+<Quiz>
+<Q n={1} q="MCP server بتاعك بيستخدم getRegistry. ليه useCache: false؟">لأنه شغال على طول، والـ cache بيفضل طول عمر الـ process، فمش هيشوف التغييرات.</Q>
+<Q n={2} q="getRegistry على فهرس remote فيه include. هيحصل إيه؟">هيرفضه. الفهرس الـ remote لازم يكون flat.</Q>
+<Q n={3} q="addRegistryItems من غير config لـ item نوعه registry:ui. هيشتغل؟">لأ. محتاج config كامل للمشروع فيه aliases وresolvedPaths. الـ registries بس بتكفي للـ universal items.</Q>
+<Q n={4} q="مشروع مفيهوش components.json. getRegistriesConfig هتقرا منين؟">من حقل registries في package.json.</Q>
+</Quiz>

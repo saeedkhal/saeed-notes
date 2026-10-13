@@ -1,0 +1,351 @@
+---
+title: Namespaces — كذا Registry في مشروع واحد
+short: Namespaces
+order: 7
+label: فصل ٧
+badge: التوسع · فصل ٧
+en: components.json registries · {name} · {style} · headers · params · dependency resolution · overrides
+keywords: namespace · URL template · ترتيب الحل · override · versioning · errors
+goal: تعرّف registries كتير في components.json، وتفهم الـ CLI بيحل الـ dependencies ويرتّبها إزاي، وتستغل ده عشان تعدّل items من برّه.
+part: التوسع
+color: c2
+---
+
+## الفكرة
+
+الـ namespace هو **اسم مختصر بيبدأ بـ `@`** بيشاور على registry. وبيه تقدر تسطّب في مشروع واحد من registries كتير: public وthird-party وprivate بتاعة الشركة.
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest add @shadcn/button          # الـ registry الرسمي
+npx shadcn@latest add @nile/money-input       # registry بتاعك
+npx shadcn@latest add @nile/header @lib/auth-utils @ai/chatbot-rules   # كذا item مرة واحدة
+```
+
+</File>
+
+## مفيش جهة مركزية
+
+النظام **decentralized** بالقصد:
+
+- **فيه Registry Directory مركزي** للـ namespaces الـ open source، بس مش إجباري.
+- **تقدر تسمّي namespace بأي اسم**، ومفيش حد هيمنعك.
+- **مفيش تعارض أسماء:** الاسم معرّف في `components.json` بتاعك إنت بس.
+
+وده بيخليك تنظّم بأي شكل:
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@nile-ui": "https://registry.nile.dev/ui/{name}.json",
+    "@nile-docs": "https://registry.nile.dev/docs/{name}.json",
+    "@nile-ai": "https://registry.nile.dev/ai/{name}.json",
+    "@stable": "https://registry.nile.dev/stable/{name}.json",
+    "@experimental": "https://registry.nile.dev/experimental/{name}.json",
+    "@nile-internal": {
+      "url": "https://internal.nile.dev/registry/{name}.json",
+      "headers": { "Authorization": "Bearer ${INTERNAL_TOKEN}" }
+    }
+  }
+}
+```
+
+</File>
+
+- **حسب النوع:** ui وdocs وai وthemes.
+- **حسب الفريق:** design وengineering وmarketing، كل فريق يمسك registry.
+- **حسب الـ visibility:** public وprivate.
+- **حسب الثبات:** stable وbeta وexperimental.
+
+## قواعد الاسم
+
+- **أوله `@`** دايمًا.
+- **الحروف المسموحة:** حروف وأرقام و`-` و`_` بس.
+- **أمثلة صح:** `@v0` و`@nile-ui` و`@my_company`.
+- **شكل الاستخدام:** `@namespace/item-name`.
+
+والـ parser بيستخدم regex بالشكل ده:
+
+<File name="namespace regex">
+
+```text
+/^(@[a-zA-Z0-9](?:[a-zA-Z0-9-_]*[a-zA-Z0-9])?)\/(.+)$/
+```
+
+</File>
+
+يعني كمان الاسم لازم يبدأ وينتهي بحرف أو رقم، مش بـ `-` أو `_`.
+
+## GitHub ولا namespace؟
+
+<Grid2>
+<Card title="عنوان GitHub" c={3}>
+
+`nile-team/ui/button`. مناسب لـ repo public، والمستخدم مش محتاج يعرّف حاجة في `components.json`.
+
+</Card>
+<Card title="namespace" c={4}>
+
+`@nile/button`. مناسب لما تحتاج اسم ثابت، أو hosting خاص، أو auth، أو headers، أو query params، أو registry private.
+
+</Card>
+</Grid2>
+
+## التعريف في `components.json`
+
+### الشكل البسيط: string
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@v0": "https://v0.dev/chat/b/{name}",
+    "@nile": "https://registry.nile.dev/r/{name}.json",
+    "@lib": "https://lib.nile.dev/utilities/{name}"
+  }
+}
+```
+
+</File>
+
+### الشكل المتقدم: object
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@private": {
+      "url": "https://api.nile.dev/registry/{name}.json",
+      "headers": {
+        "Authorization": "Bearer ${REGISTRY_TOKEN}",
+        "X-API-Key": "${API_KEY}"
+      },
+      "params": { "version": "latest", "format": "json" }
+    }
+  }
+}
+```
+
+</File>
+
+- **`${VAR}`** بيتقري من `process.env`، وبيشتغل في الـ `url` والـ `headers` والـ `params`.
+- **`params`** بتتحط كـ query string، يعني `?version=latest&format=json`.
+
+## الـ placeholders في الـ URL
+
+- **`{name}` (إجباري):** بيتبدل باسم الـ item، فـ `@nile/money-input` يبقى `.../money-input.json`.
+- **`{style}` (اختياري):** بيتبدل بالـ style بتاع المشروع. مثلًا `https://registry.nile.dev/{style}/{name}.json` مع style `new-york` يبقى `.../new-york/card.json`. وده مفيد لو عندك نسخة مختلفة من الـ component لكل style.
+
+## الـ CLI بيحل `@ns/item` إزاي؟
+
+1. **Parse:** بيفصل الـ namespace عن اسم الـ item.
+2. **Lookup:** بيدوّر على الـ namespace في `components.json`.
+3. **Build URL:** بيبدّل `{name}` و`{style}` و`${VAR}`.
+4. **Headers:** بيحط الـ auth headers لو موجودة.
+5. **Fetch:** بيجيب الـ JSON.
+6. **Validate:** بيتأكد إنه ماشي على registry-item schema.
+7. **Dependencies:** بيكرر نفس الخطوات لكل `registryDependencies` بشكل recursive.
+
+## ترتيب الـ dependencies — وده مهم جدًا
+
+لما تكتب `npx shadcn@latest add @nile/x`، الـ CLI بيعمل:
+
+1. **بيمسح الـ context** ويبدأ على نضيف.
+2. **بيجيب الـ item الرئيسي.**
+3. **بيجيب الـ dependencies** من الـ registry بتاعة كل واحدة، بشكل recursive.
+4. **بيرتّبهم topological sort**، فالـ dependency تتسطب قبل اللي محتاجها.
+5. **بيشيل الملفات المكررة حسب الـ target، والأخير بيكسب.**
+6. **بيعمل deep merge** للـ `tailwind` و`cssVars` و`css` و`envVars`.
+
+وفيه 3 حاجات بيتعامل معاها لوحده:
+
+- **كل item عارف هو جاي منين**، فمفيش لخبطة لو اسمين متشابهين في registries مختلفة.
+- **الـ circular dependencies** بيكتشفها ويمنعها.
+- **كل registry ليها auth context لوحدها**، فالـ token بتاع registry مش بيروح لـ registry تانية.
+
+<Hl c="o">قاعدة "الأخير بيكسب" هي اللي بتخليك تعدّل أي item من برّه من غير ما تلمسه.</Hl>
+
+<File name="terminal">
+
+```bash
+npx shadcn@latest add @vendor/auth @nile/login-form
+# لو الاتنين فيهم login-form.tsx بنفس الـ target، بتاع @nile هو اللي هيفضل
+```
+
+</File>
+
+## تعدّل item من registry تانية
+
+### غيّر قيم بس
+
+<File name="nile-button.json">
+
+```json
+{
+  "name": "nile-button",
+  "type": "registry:ui",
+  "registryDependencies": ["@vendor/button"],
+  "cssVars": { "light": { "button-bg": "oklch(0.55 0.17 160)" } }
+}
+```
+
+</File>
+
+الـ button الأصلي بيتسطب، وبعدين الـ `cssVars` بتاعتك بتتعمل merge فوق قيمته.
+
+### زوّد من غير ما تبدّل
+
+<File name="nile-table.json">
+
+```json
+{
+  "name": "nile-table",
+  "registryDependencies": ["@vendor/table"],
+  "files": [
+    { "path": "components/ui/table-extended.tsx", "content": "import { Table } from \"@/components/ui/table\"\n// زيادات بتاعتنا\n" }
+  ]
+}
+```
+
+</File>
+
+### بدّل ملف واحد بس من item كبير
+
+<File name="nile-auth.json">
+
+```json
+{
+  "name": "nile-auth",
+  "registryDependencies": ["@vendor/auth"],
+  "files": [
+    { "path": "lib/auth-server.ts", "type": "registry:lib", "content": "// auth server بتاعنا" }
+  ]
+}
+```
+
+</File>
+
+### مثال على الترتيب
+
+<File name="dashboard.json">
+
+```json
+{
+  "name": "dashboard",
+  "registryDependencies": ["@shadcn/card", "@vendor/chart", "@nile/card"]
+}
+```
+
+</File>
+
+1. **`@shadcn/card`** بيتكتب في `components/ui/card.tsx`.
+2. **`@vendor/chart`** بيتكتب في `components/ui/chart.tsx`.
+3. **`@nile/card`** بيكتب **فوق** `card.tsx`، لو الـ target هو نفسه.
+
+## Versioning بالـ params
+
+مفيش versioning جاهز، لكن تقدر تعمله بالـ query params والسيرفر بتاعك يفهمها:
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@pinned": { "url": "https://registry.nile.dev/{name}", "params": { "version": "v2" } },
+    "@env": { "url": "https://registry.nile.dev/{name}", "params": { "version": "${REGISTRY_VERSION}" } },
+    "@range": { "url": "https://registry.nile.dev/{name}", "params": { "semver": "^2.0.0", "prerelease": "${ALLOW_PRERELEASE}" } }
+  }
+}
+```
+
+</File>
+
+- **`@pinned/button`** بيروح لـ `https://registry.nile.dev/button?version=v2`.
+- **`${REGISTRY_VERSION}`:** تحط `v1.2.3` في production وقيمة تانية في staging أو dev.
+- **default value:** استخدم `${VAR:-default}`.
+- **وثّق** طريقة الـ versions، وادعم الـ pinning عشان الـ builds تبقى reproducible.
+- **اعمل endpoint** يعرض الـ versions المتاحة، زي `/versions/{name}`.
+- **حط cache headers** مناسبة للنسخ الـ versioned.
+
+## الأوامر
+
+<File name="terminal">
+
+```bash
+# add: من namespace أو URL أو ملف local
+npx shadcn@latest add @nile/button @lib/utils
+npx shadcn@latest add https://registry.nile.dev/button.json
+npx shadcn@latest add ./local-registry/button.json
+
+# view: تشوف الـ item قبل ما تسطّب
+npx shadcn@latest view @nile/button @shadcn/card
+
+# search و list (list اسم تاني لـ search)
+npx shadcn@latest search @nile --query "auth"
+npx shadcn@latest search @v0 @nile @lib
+npx shadcn@latest search @v0 --limit 10 --offset 20
+npx shadcn@latest list @nile
+```
+
+</File>
+
+- **`view` بيعرض:** الاسم والنوع والوصف، والـ dependencies والـ registry dependencies، ومحتوى الملفات، والـ CSS vars والـ Tailwind config، والـ env vars المطلوبة.
+- **`search` بيعرض:** الاسم والنوع والوصف والـ registry اللي جاي منها.
+- **`search -l` و`-o`:** الـ default بتاع limit هو 100 لكل registry، والـ offset بيبدأ من 0.
+
+### flags مهمة لـ `add`
+
+- **`--dry-run`:** يعرض اللي هيحصل من غير ما يكتب.
+- **`--diff [path]`:** يعرض الفرق لملف.
+- **`--view [path]`:** يعرض محتوى ملف.
+- **`-o, --overwrite`:** يكتب فوق الملفات الموجودة.
+- **`-y, --yes`:** من غير سؤال تأكيد.
+- **`-p, --path`:** يحط الـ component في مسار معين.
+- **`-a, --all`:** يسطّب كل الـ items.
+- **`-s, --silent`:** من غير output.
+- **`-c, --cwd`:** يشتغل في فولدر تاني.
+
+## الـ errors ومعناها
+
+- **`Unknown registry "@x"`:** الـ namespace مش متعرّف في `components.json`، والرسالة بتوريك الشكل اللي تضيفه.
+- **`Registry "@private" requires the following environment variables`:** متغير زي `REGISTRY_TOKEN` ناقص، فحطه في `.env` أو `.env.local`.
+- **404 `was not found`:** الاسم غلط، أو الـ item مش موجود، أو شكل الـ URL غلط.
+- **401 `not authorized`:** الـ token غلط أو مش موجود.
+- **403 `Access forbidden`:** الـ token شغال بس معندوش صلاحية للـ item ده.
+
+## لو هتعمل registry يشتغل بالـ namespaces
+
+1. **رجّع JSON** ماشي على registry-item schema.
+2. **ادعم `{name}`** في شكل الـ URL.
+3. **استخدم types مناسبة** زي `registry:ui` و`registry:lib` و`registry:theme`.
+4. **اقبل الـ auth** في الـ headers أو الـ query params لو محتاج.
+5. **وثّق للمستخدم** السطر اللي يحطه في `components.json`.
+
+### Best practices
+
+- **حط الأسرار في env variables**، مش في `components.json`.
+- **اختار اسم unique وواضح** للـ namespace.
+- **وثّق متطلبات الـ auth.**
+- **رجّع errors مفهومة.**
+- **اعمل cache للـ responses.**
+- **ادعم أكتر من style** لو الـ components بتاعتك ليها themes.
+
+## Troubleshooting
+
+- **الـ item مش لاقيه:** اتأكد من الـ URL ومن وجود `{name}` فيه، وإن الـ item موجود، وإن الـ type مناسب.
+- **مشكلة auth:** اتأكد إن الـ env variables موجودة، والـ token مش expired، والـ headers مكتوبة صح.
+- **تعارض dependencies:** اكتب الأسماء كاملة `@namespace/item`، ودوّر على circular dependencies، وتأكد إن الأنواع متوافقة لما تخلط registries.
+
+<Checklist id="shreg-ns" title="خلّصت الفصل لما" items={["تعرّف namespace بـ string وبـ object", "تعرف قواعد الاسم وإنه لازم يبدأ بـ @", "تستخدم {name} و{style} و${VAR}", "تفرق بين GitHub address وnamespace", "تشرح خطوات الـ resolution", "تعرف إن الأخير بيكسب على نفس الـ target", "تعمل override لـ item من vendor", "تعمل versioning بالـ params", "تستخدم view وsearch وflags بتاعة add", "تقرا رسايل الـ errors"]} />
+
+<Quiz>
+<Q n={1} q="اسم @nile- ينفع؟">لأ. لازم يبدأ وينتهي بحرف أو رقم.</Q>
+<Q n={2} q="@shadcn/card و@nile/card الاتنين بيكتبوا card.tsx. مين بيفضل؟">اللي اتحل في الآخر، وفي registryDependencies ده بيتحدد بالترتيب.</Q>
+<Q n={3} q="عايز تغيّر لون button من vendor من غير ما تلمس كوده. تعمل إيه؟">item بتاعك فيه registryDependencies: @vendor/button وcssVars بالقيمة الجديدة.</Q>
+<Q n={4} q="الـ CLI رجّع 403 مش 401. الفرق إيه؟">401 يعني الـ token غلط أو مش موجود. 403 يعني الـ token شغال بس معندوش صلاحية للـ item.</Q>
+</Quiz>

@@ -1,0 +1,26 @@
+---
+title: shadcn Registry — وزّع كودك زي ما shadcn بيوزّع الـ Button
+highlight: shadcn Registry
+subtitle: registry.json · registry-item.json · build · GitHub · namespaces · auth · MCP
+description: إزاي تعمل registry خاص بيك يوزّع components وhooks وconfig وrules لأي مشروع بأمر shadcn add، من أول ملف JSON لحد الـ auth والـ MCP والـ Registry Directory.
+emoji: 🧩
+order: 23
+tags: [frontend, devops]
+note: شرح بأسلوبي لكل صفحات قسم Registry في docs بتاعة shadcn (أكتوبر 2026)، واتجرّب على shadcn 4.21.4. الأمثلة من عندي باسم @nile. الـ CLI بيتغير بسرعة، فراجع الـ docs و shadcn --help قبل ما تعتمد على flag.
+---
+
+الفكرة كلها في <Hl c="y">سطر واحد</Hl>: shadcn مش npm package بتعمله install، ده **كود بيتنسخ جوه مشروعك**. والـ registry هو إنك تعمل نفس الحكاية لكودك إنت. تكتب component أو hook أو ملف config مرة واحدة، وأي مشروع ياخده بـ `npx shadcn add`.
+
+<Box type="story" icon="🍲" title="تشبيه المذكرة كلها">
+
+عندك محل كشري مشهور وعايز تفتح فروع. مش هتبعت للفرع **طبق كشري جاهز** (ده npm package مقفول)، هتبعتله **الوصفة والمقادير**، والفرع يطبخ في مطبخه ويعدّل الشطة على مزاجه. الـ registry هو كتاب الوصفات. `registry.json` هو الفهرس، وكل `item` وصفة، و`shadcn add` هو الطباخ اللي بيقرا الوصفة وبيحط المقادير في أماكنها في مطبخك.
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+- لازم تكون فاهم مشروع shadcn عادي: `components.json` و`shadcn add button`.
+- الأوامر مكتوبة بـ `npx shadcn@latest`، وتقدر تستبدلها بـ `pnpm dlx shadcn@latest`.
+- الـ registry مش لـ React بس. أي framework وأي نوع ملفات ينفع، طالما في الآخر بيتقدم JSON على HTTP أو موجود في GitHub repo.
+
+</Box>

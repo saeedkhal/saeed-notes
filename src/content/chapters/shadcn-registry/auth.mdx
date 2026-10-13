@@ -1,0 +1,194 @@
+---
+title: Registry Private بـ Authentication
+short: Authentication
+order: 8
+label: فصل ٨
+badge: التوسع · فصل ٨
+en: Bearer · X-API-Key · Basic · query token · 401 · 403 · 429 · trust model
+keywords: tokens · السيرفر · team access · error messages · أمان
+goal: تقفل الـ registry بـ token، وتكتب السيرفر اللي بيتحقق، وترجّع errors مفهومة، وتفهم الـ CLI بيحميك إزاي.
+part: التوسع
+color: c3
+---
+
+## ليه auth؟
+
+- **components private:** business logic أو components داخلية متطلعش برّه الشركة.
+- **حسب الفريق:** كل فريق ياخد components مختلفة.
+- **access control:** حاجات experimental أو حساسة لناس معينة بس.
+- **analytics:** تعرف مين بيستخدم أنهي component.
+- **licensing:** components premium لاشتراك مدفوع.
+
+## الطرق من ناحية المستخدم
+
+كلها في `components.json`، والأسرار في `.env.local`:
+
+<File name="components.json">
+
+```json
+{
+  "registries": {
+    "@bearer": {
+      "url": "https://registry.nile.dev/{name}.json",
+      "headers": { "Authorization": "Bearer ${REGISTRY_TOKEN}" }
+    },
+    "@apikey": {
+      "url": "https://api.nile.dev/registry/{name}.json",
+      "headers": { "X-API-Key": "${API_KEY}", "X-Workspace-Id": "${WORKSPACE_ID}" }
+    },
+    "@basic": {
+      "url": "https://registry.nile.dev/{name}.json",
+      "headers": { "Authorization": "Basic ${BASE64_CREDENTIALS}" }
+    },
+    "@query": {
+      "url": "https://registry.nile.dev/{name}.json",
+      "params": { "token": "${ACCESS_TOKEN}" }
+    },
+    "@enterprise": {
+      "url": "https://api.nile.dev/v2/registry/{name}",
+      "headers": { "Authorization": "Bearer ${ACCESS_TOKEN}", "X-API-Key": "${API_KEY}" },
+      "params": { "version": "latest" }
+    }
+  }
+}
+```
+
+</File>
+
+<File name=".env.local">
+
+```bash
+REGISTRY_TOKEN=xxxxxxxx
+API_KEY=xxxxxxxx
+```
+
+</File>
+
+- **Bearer token:** الأشهر، ومناسب لـ OAuth 2.0. وينفع حتى مع GitHub API نفسه.
+- **API key في header:** زي `X-API-Key`، ومعاه ممكن headers تانية زي workspace id.
+- **Basic:** username وpassword متحولين base64.
+- **Query param:** أبسطهم، و`@query/button` بيروح لـ `.../button.json?token=xxxxxxxx`. وفيه كمان signatures وclient ids.
+- **كذا طريقة مع بعض:** headers وparams في نفس الـ registry.
+- **كذا registry مع بعض:** public وinternal بـ Bearer وpremium بـ `X-License-Key`، وكل واحدة بالـ auth بتاعتها.
+
+## السيرفر
+
+<File name="app/api/registry/[name]/route.ts">
+
+```ts
+import { NextRequest, NextResponse } from "next/server"
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
+  const { name } = await params
+  const token =
+    request.headers.get("authorization")?.replace("Bearer ", "") ??
+    request.nextUrl.searchParams.get("token")
+
+  if (!(await isValidToken(token))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  if (!(await canAccess(token!, name))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const item = await getItem(name)
+  if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  return NextResponse.json(item)
+}
+```
+
+</File>
+
+- **`isValidToken`:** تتحقق من الداتابيز أو من JWT.
+- **`canAccess`:** هنا الـ role-based access، يعني الـ token ده يشوف الـ item ده ولا لأ.
+- **Express:** نفس الفكرة بالظبط. خد الـ header، ورجّع 401 أو 404، أو `res.json(item)`.
+
+### أنماط متقدمة
+
+- **حسب الفريق:** تجيب الفريق من الـ token، وترجّع الـ components بتاعته بس.
+- **personalized:** تجيب تفضيلات المستخدم، زي الـ style والـ framework، وترجّع نسخة الـ component المناسبة ليه.
+- **tokens مؤقتة:** كل token ليه `expiresAt` و`scope`، وأي token expired يترفض.
+
+## رسايل errors مفهومة
+
+الـ CLI بيعرض للمستخدم أي `message` ترجّعه في الـ body:
+
+<File name="route.ts (جزء)">
+
+```ts
+if (!token) {
+  return NextResponse.json(
+    { error: "Unauthorized", message: "حط REGISTRY_TOKEN في .env.local. هتلاقيه في nile.dev/tokens" },
+    { status: 401 }
+  )
+}
+if (isExpired(token)) {
+  return NextResponse.json({ error: "Unauthorized", message: "الـ token خلص. اطلب واحد جديد." }, { status: 401 })
+}
+if (!hasTeamAccess(token, name)) {
+  return NextResponse.json({ error: "Forbidden", message: `الـ '${name}' لفريق الـ Design بس.` }, { status: 403 })
+}
+```
+
+</File>
+
+الـ CLI بيفهم 3 أكواد:
+
+- **401:** الـ token غلط أو مش موجود.
+- **403:** الـ token شغال بس معندوش صلاحية.
+- **429:** عدّى الـ rate limit.
+
+## الأمان من ناحية السيرفر
+
+- **HTTPS دايمًا:** عشان الـ tokens متتسرقش في الطريق، ويتأكد إنك بتكلم السيرفر الحقيقي، ويمنع MITM.
+- **rate limiting:** مثلًا 100 request لكل IP كل 15 دقيقة بـ `express-rate-limit`.
+- **rotate tokens:** اعمل token عشوائي (32 byte) بمدة، زي 30 يوم، وغيّره بانتظام.
+- **log access:** سجّل الوقت والمستخدم والـ component والـ IP والـ user agent.
+- **validate** الـ items قبل ما تقدّمها.
+
+## الـ CLI بيحميك إزاي؟
+
+### الـ items data مش code
+
+- **JSON بس:** الـ item لازم يكون JSON صح.
+- **schema validation:** لازم يمشي على registry-item schema، والـ types بتتراجع (`registry:ui` و`registry:lib`…).
+- **مسارات محددة:** الملفات بتتكتب في الأماكن المتعرفة بس.
+- **مفيش تشغيل كود:** الـ CLI عمره ما بيشغّل كود جاي من registry.
+
+### الـ env variables
+
+- **مش بتتطبع:** الـ CLI عمره ما بيعمل log لقيمتها.
+- **بتتقري وقت الحاجة بس:** ومش بتتخزن.
+- **معزولة:** كل registry ليها auth context لوحدها.
+
+### الـ trust model
+
+- **إنت مسؤول:** ضيف registries إنت واثق فيها بس.
+- **التعريف صريح:** أي registry لازم تبقى متعرّفة في `components.json`.
+- **مفيش اكتشاف تلقائي:** الـ CLI مش بيضيف registries لوحده من الـ items. والاستثناء الوحيد هو الـ namespaces المتسجلة في الـ Registry Directory الرسمي (فصل ١٠).
+- **الـ dependencies باينة** في كل item، وتقدر تشوفها بـ `view` قبل التثبيت.
+
+<Box type="warn" title="متعملش commit للـ tokens">
+
+`components.json` بيتعمل له commit عادي، فخلي فيه `${REGISTRY_TOKEN}` بس، والقيمة الحقيقية في `.env.local` اللي في `.gitignore`.
+
+</Box>
+
+## جرّب
+
+<File name="terminal">
+
+```bash
+curl -H "Authorization: Bearer xxxxxxxx" https://registry.nile.dev/button.json
+REGISTRY_TOKEN=xxxxxxxx npx shadcn@latest add @bearer/button
+```
+
+</File>
+
+<Checklist id="shreg-auth" title="خلّصت الفصل لما" items={["تعرّف registry بـ Bearer وAPI key وBasic وquery", "تحط الأسرار في .env.local مش components.json", "تكتب سيرفر يرجّع 401 و403 و404", "ترجّع message مفهومة يعرضها الـ CLI", "تعرف معنى 401 و403 و429", "تطبّق HTTPS وrate limit وrotation وlogging", "تشرح ليه الـ items data مش code", "تعرف الـ trust model"]} />
+
+<Quiz>
+<Q n={1} q="token صحيح بس الـ item لفريق تاني. ترجّع إيه؟">403 Forbidden، ومعاها message توضح السبب.</Q>
+<Q n={2} q="الـ CLI ممكن يشغّل script جوه item؟">لأ. الـ items JSON بيتعمله validate، والـ CLI مش بيشغّل كود منها.</Q>
+<Q n={3} q="فين تحط قيمة REGISTRY_TOKEN؟">في .env.local أو env الـ CI، وفي components.json بتكتب `${REGISTRY_TOKEN}` بس.</Q>
+</Quiz>

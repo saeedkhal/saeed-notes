@@ -1,0 +1,157 @@
+---
+title: registry.json — فهرس الـ Registry
+short: registry.json
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: $schema · name · homepage · items · include
+keywords: فهرس · include · مسارات نسبية · أسماء unique
+goal: تكتب registry.json صح، سواء ملف واحد أو مقسوم بـ include، وتعرف قواعد المسارات والأسماء.
+part: البداية
+color: c2
+---
+
+## الفكرة
+
+`registry.json` هو **نقطة الدخول** للـ registry. لازم يكون موجود في الـ root بتاع الـ endpoint، يعني المكان اللي الـ registry متقدم عليه.
+
+## الحقول
+
+| الحقل | معناه |
+|---|---|
+| `$schema` | رابط الـ schema عشان الـ editor يكمّل ويصحّح |
+| `name` | اسم الـ registry، بيتستخدم في data attributes وmetadata |
+| `homepage` | موقع الـ registry، برضه للـ metadata |
+| `items` | قائمة الـ items، وكل واحد بيمشي على registry-item schema |
+| `include` | قائمة ملفات `registry.json` تانية تتجمّع في الفهرس |
+
+- الـ root لازم يكون فيه `items` أو `include` أو الاتنين مع بعض.
+- لو `items` مش موجودة، قيمتها الافتراضية array فاضية.
+
+## الطريقة الأولى: ملف واحد
+
+أبسط حاجة: كل الـ items في `items` جوه ملف واحد.
+
+<File name="registry.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "nile",
+  "homepage": "https://nile.dev",
+  "items": [
+    {
+      "name": "money-input",
+      "type": "registry:ui",
+      "title": "Money Input",
+      "description": "Input بيكتب المبلغ بالجنيه ويحط الفواصل.",
+      "files": [
+        { "path": "components/ui/money-input.tsx", "type": "registry:ui" }
+      ]
+    },
+    {
+      "name": "checkout-card",
+      "type": "registry:block",
+      "title": "Checkout Card",
+      "description": "كارت دفع فيه money-input وزرار.",
+      "registryDependencies": ["button", "https://nile.dev/r/money-input.json"],
+      "files": [
+        { "path": "registry/default/checkout-card/checkout-card.tsx", "type": "registry:component" }
+      ]
+    }
+  ]
+}
+```
+
+</File>
+
+- في الطريقة دي، `path` **نسبي لـ root المشروع**.
+
+## الطريقة التانية: `include` للـ registries الكبيرة
+
+لما الـ items تكتر، خلي كل فولدر ليه `registry.json` جنب ملفاته:
+
+<Tree>
+
+```text
+registry.json
+components
+└── ui
+    ├── money-input.tsx
+    ├── otp-input.tsx
+    └── registry.json
+hooks
+├── registry.json
+├── use-copy.ts
+└── use-media-query.ts
+```
+
+</Tree>
+
+<File name="registry.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "nile",
+  "homepage": "https://nile.dev",
+  "include": ["components/ui/registry.json", "hooks/registry.json"]
+}
+```
+
+</File>
+
+<File name="hooks/registry.json">
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "items": [
+    {
+      "name": "use-copy",
+      "type": "registry:hook",
+      "files": [{ "path": "use-copy.ts", "type": "registry:hook" }]
+    }
+  ]
+}
+```
+
+</File>
+
+### قواعد `include`
+
+- **المسار:** كل عنصر في `include` لازم يكون مسار نسبي لملف `registry.json` بالاسم. اختصار الفولدر (`"hooks"` لوحده) مش مدعوم.
+- **`name` و`homepage`:** مطلوبين في الـ root بس. الملفات الـ included تقدر تسيبهم.
+- **مسار الملفات:** `path` بيبقى **نسبي لملف `registry.json` اللي معرّف الـ item**. عشان كده كتبنا `use-copy.ts` مش `hooks/use-copy.ts`.
+- **الأسماء:** اسم كل item لازم يكون unique في الـ registry كله بعد ما الـ includes تتجمع.
+- **بعد الـ build:** `shadcn build` بيجمّع كل الـ includes ويطلّع `registry.json` واحد flat **مفيهوش `include`**، والمسارات بتتكتب نسبية للـ root.
+
+<Box type="tip" title="جرّبتها">
+
+على shadcn 4.21.4 عملت root فيه `include` لملفين و`items` فيها item تالت في نفس الوقت. `registry validate` قال إنه valid، و`build` طلّع فهرس flat فيه الـ 3، وكان المسار `components/ui/button.tsx` بدل `button.tsx`.
+
+</Box>
+
+<Box type="warn" title="الـ include للـ source بس">
+
+الـ registry اللي **متقدّم** للمستخدمين لازم يكون flat. الـ `getRegistry` في الـ API بيرفض أي فهرس remote لسه فيه `include`. يعني إما تعمل `build`، أو تستخدم الـ loaders في route handler (فصل ٥)، لأنهم بيحلّوا الـ include قبل ما يرجّعوا الـ JSON.
+
+</Box>
+
+## نصايح التنظيم
+
+- **مكان الملفات:** حط ملفات الـ item تحت `registry/[STYLE]/[NAME]`، زي `registry/default/checkout-card`. الـ `default` ممكن يبقى أي اسم، المهم يكون تحت `registry`.
+- **الـ imports جوه الـ registry:** خليها دايمًا من `@/registry`، زي `import { MoneyInput } from "@/registry/default/money-input/money-input"`.
+- **الفولدرات جوه الـ item:** الأحسن تقسّم الملفات على `components` و`hooks` و`lib`.
+- **الـ blocks:** لازم يبقى فيها `name` و`description` و`type` و`files`.
+- **`name` و`description` كويسين:** بيساعدوا الـ LLMs تفهم الـ item بيعمل إيه.
+- **كل الـ registry dependencies** تتكتب في `registryDependencies`، وكل الـ npm packages في `dependencies` (والـ version بالشكل `zod@^3.20.0`).
+
+<Checklist id="shreg-catalog" title="خلّصت الفصل لما" items={["تكتب registry.json فيه $schema وname وhomepage وitems", "تقسّم registry كبير بـ include", "تعرف إن الـ include لازم يشاور على ملف registry.json صريح", "تكتب path نسبي للملف اللي معرّف الـ item", "تعرف إن الـ build بيطلّع فهرس flat من غير include", "تحط ملفات الـ items تحت registry/STYLE/NAME"]} />
+
+<Quiz>
+<Q n={1} q="ملف hooks/registry.json فيه item ملفه hooks/use-copy.ts. تكتب path إيه؟">use-copy.ts، لأن المسار نسبي للـ registry.json اللي معرّف الـ item.</Q>
+<Q n={2} q='ينفع أكتب include: ["hooks"]؟'>لأ. لازم المسار الكامل لملف hooks/registry.json.</Q>
+<Q n={3} q="ملف included معندوش name. مشكلة؟">لأ. name وhomepage مطلوبين في الـ root بس.</Q>
+<Q n={4} q="item اسمه button في ملفين included مختلفين. ينفع؟">لأ. الأسماء لازم تبقى unique في الـ registry كله بعد التجميع.</Q>
+</Quiz>
