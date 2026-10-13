@@ -104,7 +104,14 @@ const mix = (s: string) =>
           const cards = [...grid.children].filter((el) => el.classList.contains("topic-card"));
           const matched = cards.filter((card) => !tag || (card.dataset.tags || "").split(/\s+/).includes(tag));
           const pages = Math.max(1, Math.ceil(matched.length / size));
-          const page = matched.length === 0 ? 1 : Math.min(readPage(), pages);
+          const requestedPage = readPage();
+          const page = matched.length === 0 ? 1 : Math.min(requestedPage, pages);
+          if (page !== requestedPage) {
+            const next = new URL(location.href);
+            if (page <= 1) next.searchParams.delete("page");
+            else next.searchParams.set("page", String(page));
+            history.replaceState(null, "", next);
+          }
           const start = (page - 1) * size;
           const shown = new Set(matched.slice(start, start + size));
           cards.forEach((card) => {
@@ -121,6 +128,11 @@ const mix = (s: string) =>
             nav.querySelectorAll("[data-page]").forEach((el) => {
               const n = Number(el.dataset.page);
               if (el.dataset.pageStep) return;
+              el.hidden = n > pages;
+              const next = new URL(location.href);
+              if (n <= 1) next.searchParams.delete("page");
+              else next.searchParams.set("page", String(n));
+              el.setAttribute("href", next.pathname + next.search);
               if (n === page) el.setAttribute("aria-current", "page");
               else el.removeAttribute("aria-current");
             });
@@ -194,5 +206,5 @@ const mix = (s: string) =>
       })();
     </script>
   </div>
-  <footer class="site-footer">✍️ اتعملت بواسطة سعيد بمساعدة الذكاء الاصطناعي — شرح وملخص، مش ترجمة لأي مرجع. راجع الـ docs الرسمية قبل ما تعتمد على أي flag في production.</footer>
+  <footer class="site-footer">✍️ معمول بواسطة سعيد</footer>
 </Base>

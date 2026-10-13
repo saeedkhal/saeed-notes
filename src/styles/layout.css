@@ -304,6 +304,7 @@ a.read-progress:hover { border-color: var(--c3); text-decoration: none; }
   background: var(--bg-elev); color: var(--heading); font-weight: 800;
 }
 .home-pages a:hover { text-decoration: none; border-color: var(--c1); }
+.home-pages a[hidden] { display: none; }
 .home-pages a[aria-current="page"] {
   background: var(--c1); border-color: var(--c1); color: #fff;
 }
