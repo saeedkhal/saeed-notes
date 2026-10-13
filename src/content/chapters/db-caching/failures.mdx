@@ -1,0 +1,155 @@
+---
+title: مشاكل الكاش التانية — Penetration والـ Avalanche والـ Big Keys
+short: مشاكل تانية
+order: 9
+label: فصل ٩
+badge: الحماية · فصل ٩
+en: cache penetration · negative caching · bloom filter · cache avalanche · cache breakdown · big keys · Redis down
+keywords: penetration · negative cache · bloom · big keys · Redis وقع
+goal: تفرق بين كل مشاكل الكاش المشهورة، وتعرف حل كل واحدة، وتعمل إيه لو Redis نفسه وقع.
+part: الحماية
+color: c4
+---
+
+## التلاتة المشهورين
+
+| المشكلة | إيه اللي بيحصل | الحل الأساسي |
+|---|---|---|
+| **Cache Penetration** (اختراق) | requests على keys **مش موجودة** في الداتابيز أصلًا، فالكاش عمره ما بيتملي | negative caching + bloom filter + validation |
+| **Cache Breakdown** (انكسار) | hot key **واحد** خلص، وده موضوع المذكرة | lock / single-flight / stale-while-revalidate |
+| **Cache Avalanche** (انهيار) | keys **كتير** خلصت مع بعض، أو الكاش كله وقع | jitter + warming + حماية الداتابيز |
+
+- **الأسامي دي منتشرة جدًا في الإنترفيوهات** خصوصًا في المصادر الصينية. و"stampede" بيتقال على الـ breakdown وأحيانًا على الاتنين.
+
+## الاختراق (Cache Penetration)
+
+- **السيناريو:** حد بيطلب `product:v1:99999999`. المنتج مش موجود، فالكود مبيحطش حاجة في الكاش، فالطلب الجاي برضه بيروح الداتابيز.
+- **ولو bot بعت مليون id عشوائي:** كلهم miss، وكلهم على الداتابيز. الكاش ملوش أي لازمة.
+- **وأحيانًا هجوم مقصود:** عشان يوقّع الداتابيز من غير ما يلمس الكاش.
+
+<Box type="story" icon="📒" title="البواب والشقة اللي مش موجودة">
+
+حد بيسأل البواب على "شقة ٩٩". البواب طلع العمارة كلها ودوّر ومفيش. لو مكتبش في الكشكول "مفيش شقة ٩٩"، كل مرة حد يسأل هيطلع يدوّر تاني. فالبواب الشاطر **بيكتب إن مفيش**، لمدة قصيرة بس، عشان لو اتبنت شقة ٩٩ بعدين.
+
+</Box>
+
+### الحل الأول: Negative Caching
+
+<File name="negative-cache.mjs">
+
+```js
+const NULL = "__null__";
+
+export async function getProduct(id) {
+  const key = `product:v1:${id}`;
+  const cached = await redis.get(key);
+  if (cached === NULL) return null;           // عارفين إنه مش موجود
+  if (cached !== null) return JSON.parse(cached);
+
+  const { rows } = await pool.query("SELECT id, name, price_cents FROM products WHERE id = $1", [id]);
+  const product = rows[0] ?? null;
+
+  if (product) await redis.set(key, JSON.stringify(product), "EX", 300);
+  else await redis.set(key, NULL, "EX", 30); // TTL قصير للـ "مش موجود"
+  return product;
+}
+```
+
+</File>
+
+- **جرّبته:** طلب id مش موجود خزّن `__null__` بـ TTL 30، والطلب التاني مراحش الداتابيز.
+- **الـ TTL قصير:** عشان لو المنتج اتعمل بعدين، يظهر بسرعة. ولو بتعمل insert امسح الـ key ده كمان.
+- **قيمة مميزة:** استخدم sentinel زي `__null__` مش string فاضي، عشان متتلخبطش مع قيمة حقيقية.
+- **العيب:** مليون id عشوائي = مليون key صغير في Redis. فمعاها محتاج الحل التاني.
+
+### الحل التاني: Bloom Filter
+
+- **إيه ده؟** structure صغير جدًا بيجاوب على سؤال واحد: "الـ id ده **ممكن** يكون موجود؟"
+- **لو قال لأ:** يبقى **أكيد** مش موجود. ارفض على طول من غير كاش ولا داتابيز.
+- **لو قال آه:** يبقى **غالبًا** موجود (فيه نسبة خطأ صغيرة بتختارها). كمّل عادي.
+- **بتملاه منين؟** بكل الـ ids الموجودة، وتضيف عليه مع كل insert. مبيعرفش يمسح (فيه أنواع تانية زي Cuckoo filter بتعرف).
+- **في Redis:** الأوامر `BF.RESERVE` و`BF.ADD` و`BF.EXISTS`، موجودة في Redis Stack وفي Redis 8. مش موجودة في `redis:7-alpine` العادي. راجع الـ docs.
+
+<File name="redis-cli">
+
+```bash
+BF.RESERVE products:ids 0.01 1000000   # نسبة خطأ 1٪، لمليون عنصر
+BF.ADD products:ids 42
+BF.EXISTS products:ids 42         # 1 → ممكن موجود
+BF.EXISTS products:ids 99999999   # 0 → أكيد مش موجود
+```
+
+</File>
+
+### الحل التالت: Validation
+
+- **ارفض الحاجات الغلط من الأول:** id سالب، أو مش رقم، أو أكبر من أكبر id ممكن.
+- **الـ Rate limit:** يوزر أو IP بيعمل آلاف الطلبات على ids مختلفة ده bot.
+
+## الانكسار (Cache Breakdown) = المشكلة الأساسية
+
+- **ده الـ hot key الواحد اللي خلص:** اتشرح بالتفصيل في فصل ٤، والحلول في ٥ و٧.
+- **الملخص:** lock أو single-flight عشان واحد بس يروح الداتابيز، وstale-while-revalidate أو refresh-ahead أو never-expire عشان الـ key ميفضاش أصلًا.
+
+## الانهيار (Cache Avalanche)
+
+- **اتشرح في فصل ٦:** keys كتير بتخلص مع بعض، والحل jitter.
+- **بس فيه نوع أخطر:** الكاش **كله** وقع. ده الجزء الجاي.
+
+## لو Redis نفسه وقع
+
+<Hl c="o">لو Redis وقع والكود بيعمل fallback للداتابيز في كل request، يبقى 100٪ من الـ traffic على الداتابيز مرة واحدة. ده أكبر stampede ممكن.</Hl>
+
+- **أولًا، متعلّقش:** حط timeouts قصيرة على أوامر Redis، عشان الـ request ميستناش Redis ثواني قبل ما يقرر.
+- **ثانيًا، متخليش الداتابيز تاخد كله:** الـ single-flight اللي جوه الـ process لسه شغال من غير Redis، ومعاه circuit breaker وload shedding.
+- **ثالثًا، الـ L1 cache:** لو موجود، هيشيل جزء كبير من القراءات للـ hot keys.
+- **رابعًا، fallback:** للحاجات المش مهمة، رجّع قيمة default أو اخفي الجزء ده من الصفحة.
+- **خامسًا، high availability:** Redis Sentinel أو Redis Cluster أو خدمة managed، عشان الوقعة تبقى ثواني مش دقايق.
+
+<File name="redis-client.mjs">
+
+```js
+import Redis from "ioredis";
+
+export const redis = new Redis(process.env.REDIS_URL, {
+  commandTimeout: 200,      // متستناش أي أمر أكتر من 200ms
+  maxRetriesPerRequest: 1,  // متكررش الأمر كتير وRedis واقع
+  enableOfflineQueue: false, // لو مش متصل، ارمي error على طول بدل ما تخزّن الأوامر
+});
+
+redis.on("error", (err) => console.error("redis", err.message)); // من غيرها الـ process ممكن يطلع warnings كتير
+
+export async function safeGet(key) {
+  try {
+    return await redis.get(key);
+  } catch {
+    return null; // اعتبره miss، والطبقات اللي بعده (single-flight + breaker) تحمي الداتابيز
+  }
+}
+```
+
+</File>
+
+- **راجع الـ docs:** أسامي الـ options دي في ioredis، وفي `node-redis` مختلفة.
+
+## الـ Big Keys
+
+- **إيه هو؟** key قيمته كبيرة جدًا: string بـ عدة MB، أو list/hash فيها مليون عنصر.
+- **ليه مشكلة؟** Redis بيشتغل على thread واحد للأوامر. قراءة أو مسح key كبير **بيوقف** كل الأوامر التانية. وبيملا الشبكة، وفي Cluster بيخلي node واحدة أتقل.
+- **ومع hot key:** big key بيتقري 10,000 مرة في الثانية = جيجات على الشبكة.
+- **اكتشفه:** `redis-cli --bigkeys` أو `--memkeys`، و`MEMORY USAGE key`.
+- **الحل:** قسّمه لـ keys أصغر (مثلًا page لكل 100 عنصر)، خزّن اللي محتاجه بس، استخدم hash وهات fields معينة، واضغطه لو لازم.
+- **امسحه بـ `UNLINK` مش `DEL`:** الـ `UNLINK` بيشيله في الخلفية من غير ما يوقف Redis.
+
+## الـ Hot Keys في الـ Cluster
+
+- **الـ key الواحد على node واحدة:** مهما كبّرت الـ cluster، الـ hot key مش بيتوزع.
+- **الحلول:** L1 cache، أو نسخ الـ key على كذا slot، أو القراءة من الـ replicas (فصل ٧).
+
+<Checklist id="dbcache-failures" title="خلّصت الفصل لما" items={["تفرق بين penetration وbreakdown وavalanche", "تكتب negative caching بـ sentinel وTTL قصير", "تشرح الـ bloom filter بيقول إيه أكيد وإيه غالبًا", "تحط timeouts على أوامر Redis", "تعرف تعمل إيه لو Redis وقع من غير ما الداتابيز تقع", "تكتشف الـ big keys وتعرف ليه `UNLINK` أحسن"]} />
+
+<Quiz>
+<Q n={1} q="bot بيطلب ids عشوائية مش موجودة بـ 5000 في الثانية. اسم المشكلة وحلها؟">cache penetration. negative caching بـ TTL قصير، وbloom filter يرفض اللي أكيد مش موجود، وrate limit.</Q>
+<Q n={2} q="الـ bloom filter قال إن الـ id موجود. يبقى موجود؟">مش أكيد، غالبًا بس. لكن لو قال مش موجود يبقى أكيد مش موجود.</Q>
+<Q n={3} q="Redis وقع والكود بيعمل fallback للداتابيز. إيه الخطر وإيه الحماية؟">كل الـ traffic هيروح للداتابيز. الحماية: timeouts قصيرة على Redis، وsingle-flight، وcircuit breaker، وload shedding، وL1 cache.</Q>
+</Quiz>

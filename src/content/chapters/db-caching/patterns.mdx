@@ -1,0 +1,177 @@
+---
+title: أنماط الكاش — Cache-Aside وأخواته
+short: أنماط الكاش
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: cache-aside · read-through · write-through · write-behind · write-around · TTL · keys
+keywords: cache-aside · write-through · write-behind · TTL · أسماء الـ keys
+goal: تكتب cache-aside كامل بـ Redis والـ Postgres، وتعرف الأنماط التانية وإمتى تستخدم كل واحد.
+part: البداية
+color: c2
+---
+
+## النمط الأشهر: Cache-Aside
+
+ده النمط الأشهر، و<Hl c="g">التطبيق هو اللي بيكلّم الكاش والداتابيز الاتنين بنفسه.</Hl>
+
+- **القراءة:** اسأل الكاش الأول. لو لقيت (hit) رجّع على طول.
+- **لو ملقتش (miss):** هات من الداتابيز، حط في الكاش بـ TTL، ورجّع.
+- **الكتابة:** اكتب في الداتابيز، وامسح الـ key من الكاش (التفاصيل في الفصل الجاي).
+- **ليه اسمه كمان Lazy Loading؟** لأن القيمة مبتدخلش الكاش غير لما حد يطلبها فعلًا.
+
+<Flow items={[{"t": "request", "c": 1}, "→", {"t": "Redis GET", "s": "hit؟ رجّع", "c": 2}, "→", {"t": "miss → Postgres", "s": "SELECT", "c": 3}, "→", {"t": "Redis SET EX", "s": "بـ TTL", "c": 4}, "→", {"t": "response", "c": 5}]} />
+
+<Box type="story" icon="🏢" title="بواب العمارة">
+
+حد بيسأل البواب: "شقة الأستاذ محمود فين؟" البواب لو عارف بيرد على طول. لو مش عارف، بيطلع يسأل في العمارة، وبعدين **بيكتبها في كشكوله** عشان المرة الجاية. ده cache-aside: البواب نفسه (التطبيق) هو اللي بيدوّر ويكتب.
+
+</Box>
+
+## الكود كامل
+
+<File name="products.mjs">
+
+```js
+import Redis from "ioredis";
+import pg from "pg";
+
+const redis = new Redis(process.env.REDIS_URL ?? "redis://127.0.0.1:6379");
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+
+const TTL_SEC = 300; // 5 دقايق
+const keyOf = (id) => `product:v1:${id}`;
+
+export async function getProduct(id) {
+  const key = keyOf(id);
+
+  // 1) الكاش الأول
+  const cached = await redis.get(key);
+  if (cached !== null) return JSON.parse(cached);
+
+  // 2) miss: روح للداتابيز
+  const { rows } = await pool.query(
+    "SELECT id, name, price_cents FROM products WHERE id = $1",
+    [id],
+  );
+  const product = rows[0] ?? null;
+
+  // 3) خزّن بـ TTL (EX بالثواني، PX بالملّي ثانية)
+  if (product) await redis.set(key, JSON.stringify(product), "EX", TTL_SEC);
+  return product;
+}
+
+export async function updatePrice(id, priceCents) {
+  await pool.query("UPDATE products SET price_cents = $2 WHERE id = $1", [id, priceCents]);
+  await redis.del(keyOf(id)); // الطلب الجاي هيجيب القيمة الجديدة
+}
+```
+
+</File>
+
+<File name="test.mjs">
+
+```js
+import { getProduct, updatePrice } from "./products.mjs";
+// قبلها: CREATE TABLE products (id int PRIMARY KEY, name text, price_cents int);
+//        INSERT INTO products VALUES (1, 'iPhone', 5000000);
+console.log(await getProduct(1)); // miss → من Postgres
+console.log(await getProduct(1)); // hit → من Redis
+await updatePrice(1, 4500000);
+console.log(await getProduct(1)); // miss تاني → السعر الجديد
+process.exit(0);
+```
+
+</File>
+
+- **جرّبته:** أول call راحت Postgres، التانية جت من Redis، وبعد الـ update رجع السعر الجديد.
+- **`cached !== null`:** مهم. ioredis بيرجّع `null` لو الـ key مش موجود، فمتكتبش `if (cached)` لأن ممكن تبقى قيمة فاضية صحيحة.
+- **الـ cents:** الفلوس بتتخزن integer، عشان `numeric` في pg بيرجع string و`float` بيغلط في الكسور.
+
+<Box type="warn" title="الكود ده فيه المشكلة بتاعة المذكرة">
+
+لو 10,000 request وصلوا في نفس اللحظة والـ key مش موجود، **كلهم** هيعدّوا خطوة ١ وكلهم هيعملوا الـ `SELECT`. هنشوف ده بالأرقام في فصل ٤ ونحله في فصل ٥.
+
+</Box>
+
+## الـ Read-Through
+
+- **الفكرة:** التطبيق بيكلّم الكاش بس، و**الكاش نفسه** هو اللي بيروح للداتابيز لما ميلاقيش.
+- **إزاي؟** بتدي الكاش function اسمها loader، وهو بيناديها وقت الـ miss.
+- **أمثلة:** مكتبات زي `cache-manager` بـ `wrap()`، أو `DataLoader`، أو كاش في الـ ORM. Redis نفسه مبيعملش كده لوحده.
+- **الفرق عن cache-aside:** الكود أنضف، بس المنطق هو هو. وفيه نفس مشكلة الـ stampede لو المكتبة مبتعملش coalescing (راجع الـ docs بتاعتها).
+
+## الـ Write-Through
+
+- **الفكرة:** كل كتابة بتروح للداتابيز **وللكاش** في نفس العملية.
+- **الميزة:** الكاش دايمًا فيه آخر قيمة، والقراءة بعد الكتابة على طول بتلاقيها.
+- **العيب:** كل write أبطأ (بتكتب في مكانين)، والكاش بيتملي ببيانات ممكن محدش يقراها.
+- **خلي بالك:** لو الكتابة في الداتابيز نجحت والكاش فشل، بقى عندك قيمتين مختلفين. فخلي فيه TTL برضه كشبكة أمان.
+
+## الـ Write-Behind (أو Write-Back)
+
+- **الفكرة:** تكتب في الكاش بس، وفيه حاجة في الخلفية بتنقل للداتابيز بعدين على دفعات.
+- **الميزة:** الكتابة سريعة جدًا، ومفيدة للعدّادات (views، likes) اللي بتتكتب كتير.
+- **العيب الكبير:** لو الكاش وقع قبل ما ينقل، **البيانات ضاعت**. ومفيش consistency بين الكاش والداتابيز لحد ما النقل يحصل.
+- **استخدمه بحذر:** للحاجات اللي تستحمل تضيع منها حبة، مش للفلوس ولا الطلبات.
+
+## الـ Write-Around
+
+- **الفكرة:** الكتابة بتروح للداتابيز بس، والكاش مبيتلمسش. القيمة بتدخل الكاش بعدين لما حد يقراها (يعني مع cache-aside).
+- **الميزة:** الكاش مبيتملاش ببيانات اتكتبت ومحدش قراها، زي logs أو uploads.
+- **العيب:** أول قراءة بعد الكتابة دايمًا miss. ولو فيه قيمة قديمة في الكاش لازم تمسحها أو تستنى الـ TTL.
+
+## مقارنة سريعة
+
+| النمط | القراءة | الكتابة | يكسب في | يخسر في |
+|---|---|---|---|---|
+| Cache-aside | التطبيق: كاش ثم DB | DB ثم مسح الكاش | بسيط، الكاش فيه اللي بيتقري بس | أول قراءة miss، stampede |
+| Read-through | الكاش بيجيب من DB | أي نمط | كود أنضف | محتاج مكتبة/طبقة |
+| Write-through | من الكاش | DB + كاش مع بعض | الكاش دايمًا حديث | write أبطأ، بيانات مش مقروءة |
+| Write-behind | من الكاش | كاش، والـ DB بعدين | write سريع جدًا | ضياع بيانات لو الكاش وقع |
+| Write-around | كاش ثم DB | DB بس | الكاش مبيتملاش زبالة | أول قراءة miss |
+
+<Hl c="b">لو مش متأكد، ابدأ بـ cache-aside + مسح الـ key وقت الكتابة + TTL.</Hl> ده اللي معظم الأنظمة بتعمله.
+
+## تختار الـ TTL إزاي؟
+
+- **اسأل سؤال واحد:** القيمة دي تستحمل تبقى قديمة قد إيه؟ ده الحد الأقصى للـ TTL.
+- **بيانات بتتغير نادر:** (categories، إعدادات) ساعات أو يوم.
+- **بيانات بتتغير كل شوية:** (سعر، مخزون معروض) ثواني لدقايق.
+- **الـ TTL قصير جدًا:** hit rate واطي، والـ keys بتخلص كتير، وفرص الـ stampede أكتر.
+- **الـ TTL طويل جدًا:** بيانات قديمة لو الـ invalidation فوّت حاجة، والـ memory بتتملي.
+- **دايمًا حط TTL:** حتى لو بتمسح وقت الكتابة. ده الضمان إن أي غلطة في الـ invalidation هتتصلح لوحدها في الآخر.
+- **ومتخليهوش رقم ثابت لكل الـ keys:** ده موضوع فصل ٦ (jitter).
+
+## الـ Serialization
+
+- **`JSON.stringify` / `JSON.parse`:** الأسهل وبيتقري بالعين في `redis-cli`. بس `Date` بترجع string، و`BigInt` بيرمي error، و`undefined` بيختفي.
+- **حجم القيمة مهم:** object بـ 2MB كل ما يتقري بيتنقل على الشبكة ويتعمله parse. خزّن اللي محتاجه بس.
+- **بدائل:** MessagePack أو compression للقيم الكبيرة، بس ده تعقيد زيادة. ابدأ بـ JSON.
+- **الـ Redis hashes:** لو بتقرا أو بتعدل field واحد بس، `HSET`/`HGET` أحسن من إنك تقرا الـ object كله.
+
+## تسمية الـ keys والـ versioning
+
+<File name="أمثلة keys">
+
+```text
+product:v1:42                 ← نوع : version : id
+user:v3:42:profile            ← حاجة تبع يوزر
+search:v1:shoes:page=2:sort=price
+tenant:7:product:v1:42        ← multi-tenant: الـ tenant في الأول
+```
+
+</File>
+
+- **الشكل:** `نوع:version:id`، ونقطتين بين الأجزاء. ده الـ convention المعروف في Redis.
+- **الـ version في الـ key:** لما تغيّر شكل الـ object في الكود (زودت field أو غيرت اسم)، غيّر `v1` لـ `v2`. الكود الجديد مش هيقرا القيم القديمة اللي شكلها غلط، والقديمة هتخلص بالـ TTL.
+- **كل حاجة بتغيّر النتيجة لازم تبقى في الـ key:** اللغة، الصفحة، الفلتر، الـ tenant. وإلا يوزر هياخد نتيجة يوزر تاني.
+- **خلي الـ key قصير ومتوقع:** متحطش JSON كامل في الـ key. لو الفلاتر كتير اعملها hash.
+
+<Checklist id="dbcache-patterns" title="خلّصت الفصل لما" items={["تكتب cache-aside كامل بـ ioredis وpg", "تعرف ليه `cached !== null` مش `if (cached)`", "تفرق بين read-through وwrite-through وwrite-behind وwrite-around", "تعرف خطر write-behind على البيانات", "تختار TTL على حسب القيمة تستحمل تبقى قديمة قد إيه", "تسمّي الـ keys بـ version وكل حاجة بتغيّر النتيجة"]} />
+
+<Quiz>
+<Q n={1} q="عدّاد views بيتكتب آلاف المرات في الثانية. أنهي نمط ينفع؟">write-behind: `INCR` في Redis، وjob بينقل للداتابيز كل شوية. لو ضاع شوية views مش مشكلة.</Q>
+<Q n={2} q="زودت field جديد للـ product في الكود، والكاش فيه objects قديمة من غيره. تعمل إيه؟">غيّر version الـ key من `product:v1` لـ `product:v2`، والقديمة هتخلص بالـ TTL.</Q>
+<Q n={3} q="بتمسح الكاش وقت كل update. لسه محتاج TTL؟">أيوه. الـ TTL شبكة أمان لو مسح فشل أو حد عدّل الداتابيز من برة التطبيق.</Q>
+</Quiz>

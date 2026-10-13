@@ -1,0 +1,234 @@
+---
+title: المشكلة — الـ Cache Stampede على Hot Key
+short: الـ Cache Stampede
+order: 4
+label: فصل ٤
+badge: المشكلة · فصل ٤
+en: cache stampede · thundering herd · dogpile · hot key · connection pool exhaustion · cascading failure
+keywords: hot key · TTL خلص · pool اتملى · retries · محاكاة
+goal: تفهم خطوة بخطوة إزاي key واحد بيخلص يوقّع الداتابيز، وتشوفها بعينك في محاكاة.
+part: المشكلة
+color: c4
+---
+
+## السيناريو
+
+ده بالظبط اللي بيحصل:
+
+- **عندك hot key:** مثلًا `product:v1:42` لمنتج عليه عرض، بيتقري **10,000 مرة في الثانية**.
+- **الـ TTL بتاعه خلص:** في لحظة معينة Redis مسحه.
+- **كل الـ requests عملت miss:** كل request وصل في الفترة دي بيلاقي الكاش فاضي.
+- **كلهم راحوا للداتابيز:** كل واحد فيهم بيعمل نفس الـ `SELECT` بالظبط.
+- **ومحدش فيهم بيرجّع القيمة للكاش بسرعة:** لأن الداتابيز بقت بطيئة، فالـ miss بيفضل مستمر.
+
+<Hl c="o">الكاش اللي كان المفروض يحمي الداتابيز بقى هو السبب الرئيسي إنها تقع.</Hl>
+
+<Box type="story" icon="🥖" title="طابور الفرن">
+
+الكشك كان بيبيع ١٠٠٠ رغيف في الدقيقة من غير ما الفرن يحس. الصينية خلصت، وفي نفس الثانية ١٠٠٠ واحد جريوا على شباك الفرن. الفرن عنده ٣ شبابيك، فـ ٩٩٧ واقفين برة. الفرّان بيخبز لكل واحد **لوحده** نفس الرغيف بالظبط، فبقى أبطأ. والناس اللي برة زهقت ومشيت، أو رجعت تاني تزاحم (retry). محدش فكّر إن **واحد بس** يجيب صينية للكشك.
+
+</Box>
+
+## ليها أسامي كتير
+
+- **الـ Cache Stampede:** القطيع اللي بيجري مرة واحدة على الداتابيز.
+- **الـ Thundering Herd:** نفس الفكرة، اسم أعم لأي حاجة كتير بتصحى في نفس اللحظة على نفس المورد.
+- **الـ Dogpile Effect:** الكل بيترمي على نفس الحاجة.
+- **الـ Cache Breakdown:** اسم منتشر في المصادر الصينية لنفس المشكلة دي بالظبط: hot key واحد خلص.
+
+## ليه العدد كبير كده؟
+
+- **الحسبة:** عدد الـ requests اللي بتعمل miss = (الـ requests في الثانية) × (وقت ما الـ query ترجع وتملا الكاش).
+- **لو الـ query بتاخد 50ms عادي:** 10,000 × 0.05 = **500 query** بالظبط نفس الحاجة.
+- **بس الداتابيز مبتفضلش 50ms:** 500 query تقيلة مرة واحدة بتبطّأها. لو بقت 2 ثانية: 10,000 × 2 = **20,000 request** مستنيين.
+- **يعني المشكلة بتكبّر نفسها:** كل ما الداتابيز تبطّأ، الفترة اللي الكاش فاضي فيها تطول، فـ requests أكتر تعمل miss، فالداتابيز تبطّأ أكتر.
+
+## الداتابيز بتبطّأ ليه؟
+
+- **نفس الـ query بتتنفذ مئات المرات:** كل واحدة بتاخد CPU وmemory وdisk I/O.
+- **الـ connections نفسها غالية:** في Postgres كل connection هي process، وفيه حد أقصى `max_connections` (الـ default بتاعه 100).
+- **الـ locks والـ buffers:** queries كتير على نفس الصفوف والصفحات بتتزاحم.
+- **وكل الـ queries التانية بتبطّأ:** حتى الـ endpoints اللي ملهاش علاقة بالـ hot key، لأنهم شايلين نفس الداتابيز.
+
+## الـ Connection Pool بيتملي إزاي؟
+
+<Diagram title="لما الـ hot key يخلص: الكل بيروح للـ pool" height={340} mheight={520} nodes={[{id:"u",t:"Users",s:"10,000 req/s",x:10,y:50,mx:50,my:8,c:1},{id:"c",t:"Redis",s:"miss ✗",x:42,y:15,mx:18,my:36,c:2},{id:"p",t:"App Pool",s:"max 20",x:42,y:85,mx:72,my:36,c:4},{id:"d",t:"Postgres",s:"بطيئة جدًا",x:88,y:85,mx:28,my:88,c:3},{id:"e",t:"Errors",s:"acquire timeout",x:88,y:15,mx:78,my:88,c:5}]} edges={[{from:"u",to:"c",t:"GET"},{from:"u",to:"p",t:"كلهم miss"},{from:"p",to:"d",t:"20 بس"},{from:"p",to:"e",t:"الباقي",dash:true}]} />
+
+- **الـ pool:** كل instance من التطبيق عنده عدد محدود من الـ connections المفتوحة للداتابيز، مثلًا `max: 20`.
+- **أول 20 request:** بياخدوا connection ويبعتوا الـ query.
+- **الـ request رقم 21 وبعده:** بيقفوا في **طابور الـ pool** (pending / waiting) لحد ما connection تفضى.
+- **والـ connections مش بتفضى:** لأن الـ queries بطيئة. فالطابور بيطول بالآلاف.
+- **الـ acquire timeout:** بعد وقت معين (`connectionTimeoutMillis` في `pg`) الـ request بيفشل بـ error زي `timeout exceeded when trying to connect`.
+- **الـ requests الجديدة:** حتى اللي عايزة حاجة تانية خالص، زي login، بتقف في نفس الطابور وتفشل **قبل ما تبدأ**.
+
+<Box type="warn" title="الـ default في pg بيستنى للأبد">
+
+الـ `connectionTimeoutMillis` في `pg.Pool` الـ default بتاعه `0`، يعني **مفيش timeout**. الـ request هيفضل مستني في الطابور لحد ما الـ HTTP request نفسه يعمل timeout أو الـ memory تتملي. حط قيمة صريحة دايمًا (فصل ٨). وراجع الـ docs لأن الـ defaults ممكن تتغير.
+
+</Box>
+
+## الـ Retries بتخليها أوحش
+
+- **اليوزر بيعمل refresh:** request الأول لسه في الطابور، وهو بعت تاني.
+- **الـ client أو الـ gateway بيعمل retry تلقائي:** الـ request الفاشل بيرجع ٢ أو ٣ مرات.
+- **الـ load balancer بيشوف الـ instance بطيء:** يبعت لـ instance تاني، فالـ stampede بيحصل هناك كمان.
+- **النتيجة:** الحمل بيتضاعف بالظبط في اللحظة اللي الداتابيز أضعف ما يكون. ده اسمه **retry storm**.
+
+## الـ Cascading Failure
+
+<Flow items={[{"t": "TTL خلص", "c": 1}, "→", {"t": "آلاف miss", "c": 2}, "→", {"t": "DB بطّأت", "c": 3}, "→", {"t": "pool اتملى", "c": 4}, "→", {"t": "timeouts + retries", "c": 5}, "→", {"t": "كل الـ endpoints وقعت", "c": 1}]} />
+
+- **الوقعة مبتقفش عند المنتج ده:** كل حاجة بتستخدم الداتابيز بتفشل.
+- **وممكن تكمل:** health checks بتفشل، فالـ orchestrator يعمل restart للـ instances، فالـ L1 cache اللي في الـ memory يضيع، فـ misses أكتر.
+- **والأسوأ:** حتى لو الـ query خلصت وملت الكاش، الطابور اللي اتعمل لسه هيكمل يضرب الداتابيز (هتشوف ده في الـ Lab).
+
+## 🧪 تجربة (Lab): شوف المشكلة بعينك
+
+المحاكاة دي مش محتاجة Redis ولا داتابيز. فيها:
+
+- **الـ Pool الوهمي:** زي `pg.Pool` بالظبط، `max: 10` وacquire timeout ثانية واحدة.
+- **داتابيز وهمية:** الـ query بتاخد 50ms لوحدها، وبتزيد 10ms مع كل query شغالة جنبها.
+- **عدد 2000 request:** وصلوا في نفس اللحظة اللي الـ key خلص فيها.
+
+<File name="stampede.mjs">
+
+```js
+// node stampede.mjs           ← من غير حماية
+// node stampede.mjs --lock    ← بـ single-flight
+const useLock = process.argv.includes("--lock");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- Pool شبه pg.Pool: عدد connections محدود + وقت انتظار ----
+class FakePool {
+  constructor({ max, acquireTimeoutMs }) {
+    this.max = max;
+    this.acquireTimeoutMs = acquireTimeoutMs;
+    this.active = 0;
+    this.waiting = [];
+    this.maxWaiting = 0;
+  }
+  acquire() {
+    if (this.active < this.max) {
+      this.active++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve };
+      waiter.timer = setTimeout(() => {
+        this.waiting.splice(this.waiting.indexOf(waiter), 1);
+        reject(new Error("timeout exceeded when trying to connect"));
+      }, this.acquireTimeoutMs);
+      this.waiting.push(waiter);
+      this.maxWaiting = Math.max(this.maxWaiting, this.waiting.length);
+    });
+  }
+  release() {
+    const next = this.waiting.shift();
+    if (next) {
+      clearTimeout(next.timer);
+      next.resolve(); // الـ connection بتتسلّم للي بعده على طول
+    } else {
+      this.active--;
+    }
+  }
+}
+
+// ---- داتابيز وهمية: كل ما الـ queries اللي شغالة تزيد، كل query تبطّأ ----
+let running = 0;
+let dbHits = 0;
+async function slowQuery() {
+  dbHits++;
+  running++;
+  await sleep(50 + running * 10); // 50ms لوحدها، وبتزيد 10ms مع كل query جنبها
+  running--;
+  return { id: 1, name: "iPhone", price: 50000 };
+}
+
+const pool = new FakePool({ max: 10, acquireTimeoutMs: 1000 });
+async function loadFromDb() {
+  await pool.acquire();
+  try {
+    return await slowQuery();
+  } finally {
+    pool.release();
+  }
+}
+
+// ---- الكاش: Map فيها القيمة ووقت انتهائها ----
+const cache = new Map();
+const inflight = new Map();
+
+async function getProduct() {
+  const hit = cache.get("product:1");
+  if (hit && hit.expiresAt > Date.now()) return hit.value;
+
+  if (useLock && inflight.has("product:1")) return inflight.get("product:1");
+
+  const p = loadFromDb().then((value) => {
+    cache.set("product:1", { value, expiresAt: Date.now() + 60_000 });
+    return value;
+  });
+  if (useLock) {
+    inflight.set("product:1", p);
+    p.finally(() => inflight.delete("product:1")).catch(() => {});
+  }
+  return p;
+}
+
+// ---- اللحظة اللي الـ TTL خلص فيها: 2000 request في نفس الوقت ----
+const N = 2000;
+const t0 = Date.now();
+const results = await Promise.allSettled(Array.from({ length: N }, () => getProduct()));
+const ok = results.filter((r) => r.status === "fulfilled").length;
+
+console.log(useLock ? "مع single-flight" : "من غير حماية");
+console.log({
+  requests: N,
+  ok,
+  failed: N - ok,
+  dbHits,
+  maxWaitingInPool: pool.maxWaiting,
+  totalMs: Date.now() - t0,
+});
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+node stampede.mjs
+node stampede.mjs --lock
+```
+
+</File>
+
+النتيجة اللي طلعت عندي (Node 26):
+
+| | من غير حماية | مع single-flight |
+|---|---|---|
+| الـ requests | 2000 | 2000 |
+| نجحوا | 73 | 2000 |
+| فشلوا (acquire timeout) | **1927** | 0 |
+| queries على الداتابيز | 73 | **1** |
+| أقصى طابور في الـ pool | **1990** | 0 |
+| الوقت الكلي | ~1160ms | ~79ms |
+
+- **من غير حماية:** ١٠ queries بس شغالين في نفس الوقت، بس كل واحدة بقت أبطأ. ١٩٩٠ request وقفوا في الطابور، وأغلبهم فشل بعد ثانية.
+- **لاحظ:** حتى بعد ما أول query رجعت وملت الكاش، الـ requests اللي كانت **في طابور الـ pool** كملت وعملت queries. لأنها عدّت مرحلة الكاش من بدري. ده ليه الـ "double-check" بعد ما تاخد الـ lock مهم (فصل ٥).
+- **مع single-flight:** query واحدة، والـ 2000 request استنوا نفس الـ Promise. كلهم نجحوا في أقل من 100ms.
+- **جرّب بنفسك:** غيّر `max` لـ 50 أو `acquireTimeoutMs` لـ 5000، وشوف الأرقام بتتغير إزاي. الطابور بيقل بس الداتابيز بتبطّأ أكتر.
+
+<Box type="interview" title="سؤال إنترفيو">
+
+"عندك hot key بيتقري 10k مرة في الثانية، وكل كام دقيقة الـ latency بتضرب والداتابيز CPU بيوصل 100٪ لثواني. إيه اللي بيحصل؟" الإجابة: <Hl c="b">cache stampede وقت ما الـ TTL بيخلص.</Hl> والحل: request coalescing (lock / single-flight)، وjitter للـ TTLs، وstale-while-revalidate أو refresh قبل الـ expiry للـ hot keys.
+
+</Box>
+
+<Checklist id="dbcache-stampede" title="خلّصت الفصل لما" items={["تحكي السيناريو من أول TTL خلص لحد كل الـ endpoints وقعت", "تحسب عدد الـ misses = QPS × وقت الـ query", "تشرح ليه المشكلة بتكبّر نفسها", "تشرح الـ pool بيتملي إزاي وإيه هو الـ acquire timeout", "تعرف إن default الـ `connectionTimeoutMillis` في pg هو 0", "تشرح الـ retry storm", "شغّلت الـ Lab وشفت الفرق بين الحالتين"]} />
+
+<Quiz>
+<Q n={1} q="hot key بـ 5000 request في الثانية، والـ query بقت تاخد ثانية ونص تحت الحمل. كام request ممكن يعمل miss؟">حوالي 5000 × 1.5 = 7500 request.</Q>
+<Q n={2} q="endpoint الـ login ملوش علاقة بالـ hot key. ليه وقع هو كمان؟">لأنه بيستخدم نفس الـ connection pool ونفس الداتابيز، فوقف في نفس الطابور وفشل بـ acquire timeout.</Q>
+<Q n={3} q="في الـ Lab من غير حماية، ليه dbHits كان 73 مش 1 رغم إن الكاش اتملى بعد أول query؟">لأن الـ requests اللي في طابور الـ pool كانت عدّت خطوة قراءة الكاش قبل ما يتملى، فكملت للداتابيز.</Q>
+</Quiz>

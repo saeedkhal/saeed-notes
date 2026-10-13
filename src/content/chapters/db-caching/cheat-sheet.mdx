@@ -1,0 +1,76 @@
+---
+title: "Cheat Sheet: الكاش قدام الداتابيز"
+short: Cheat Sheet
+order: 11
+label: الآخر
+badge: الآخر
+en: cache-aside · TTL · invalidation · stampede · lock · jitter · SWR · XFetch · pool · breaker · penetration · metrics
+keywords: المشكلة والحل في سطر
+goal: تفتكر كل قاعدة وكل حل في المذكرة بسرعة.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["أكاش إمتى؟", "قراءة أكتر من الكتابة، query غالية، نفس البيانات بتتطلب، وتستحمل تبقى قديمة شوية"],
+  ["مكاشش إمتى؟", "كتابة كتير، consistency قوية (فلوس/مخزون وقت الدفع)، hit rate واطي، بيانات فريدة لكل يوزر"],
+  ["حمل الداتابيز", "QPS × miss rate، ومن 95٪ لـ 99٪ hit يقلل الحمل 5 مرات"],
+  ["الداتابيز تصغر؟", "لأ، لازم تستحمل كاش فاضي (restart، deploy، hot key)"],
+  ["النمط الافتراضي", "cache-aside: GET، لو miss هات من DB و`SET key val EX ttl`"],
+  ["`null` من ioredis", "يعني مش موجود، فاكتب `cached !== null` مش `if (cached)`"],
+  ["write-through", "اكتب في DB والكاش مع بعض، الكاش حديث بس الـ write أبطأ"],
+  ["write-behind", "اكتب في الكاش والـ DB بعدين، سريع بس ممكن تضيع بيانات"],
+  ["write-around", "اكتب في DB بس، والكاش يتملي وقت القراءة"],
+  ["الـ TTL", "على قد ما القيمة تستحمل تبقى قديمة، ودايمًا موجود كشبكة أمان"],
+  ["اسم الـ key", "`نوع:version:id`، وأي حاجة بتغيّر النتيجة جوه الـ key"],
+  ["غيّرت شكل الـ object", "زوّد الـ version: `product:v1` ← `product:v2`"],
+  ["وقت الكتابة", "`UPDATE` الأول وبعدين `DEL`، والمسح أأمن من التحديث"],
+  ["قيمة قديمة بعد المسح", "race بين قراءة بطيئة والمسح، فاعمل delayed double delete"],
+  ["مسح مجموعة keys", "versioned namespace: `INCR category:5:version`"],
+  ["حد بيكتب من بره التطبيق", "CDC (Debezium / WAL) يمسح الكاش"],
+  ["الـ stampede", "hot key خلص، آلاف miss مع بعض، الداتابيز بطّأت، الـ pool اتملى"],
+  ["عدد الـ misses", "QPS × وقت الـ query، وبيكبر لما الداتابيز تبطّأ"],
+  ["pg بيستنى للأبد", "default `connectionTimeoutMillis` هو `0`، فحط قيمة"],
+  ["retry storm", "refresh + retries تلقائية بتضاعف الحمل وقت الضعف"],
+  ["جوه الـ process", "single-flight: Map للـ Promise اللي شغالة + `finally` يمسح"],
+  ["بين الـ instances", "`SET lock:key token NX PX 5000` في أمر واحد"],
+  ["فك الـ lock", "Lua: امسح بس لو القيمة هي الـ token بتاعك"],
+  ["بعد ما تاخد الـ lock", "double-check: اقرا الكاش تاني قبل الـ query"],
+  ["المستنيين", "poll بـ backoff + jitter لحد `waitMs`، أو stale، أو fallback"],
+  ["الـ lock TTL", "أطول من أطول query، ومعاه `statement_timeout`"],
+  ["Redlock", "مش محتاجه للكاش، أسوأ حاجة 2 queries بدل 1"],
+  ["الـ jitter", "`ttl ± 10–20%`، أو ينقص بس لو فيه حد أقصى للقدم"],
+  ["الـ avalanche", "keys كتير خلصت مع بعض أو الكاش وقع: jitter + warming"],
+  ["الـ jitter والـ hot key", "مش كفاية، محتاج lock أو refresh قبل الـ expiry"],
+  ["stale-while-revalidate", "soft TTL جوه القيمة + hard TTL في Redis، ورجّع القديم وجدد في الخلفية"],
+  ["XFetch", "جدد لو `now - delta × beta × ln(rand) >= expiry`، ومعاه single-flight"],
+  ["refresh-ahead", "job بـ lock بيجدد الـ hot keys المعروفة قبل ما تخلص"],
+  ["never expire", "للإعدادات والـ flags، مع job بيصلّح أو TTL طويل"],
+  ["بعد deploy", "cache warming للـ hot keys بـ batches وjitter"],
+  ["Redis نفسه سخن", "L1 بـ `lru-cache` وTTL ثانية أو اتنين"],
+  ["node واحدة في Cluster سخنة", "انسخ الـ key على كذا slot أو اقرا من الـ replicas"],
+  ["الـ pool", "`max` صغير، `connectionTimeoutMillis` قصير، `statement_timeout`"],
+  ["حساب الـ max", "instances × max أقل من `max_connections`، أو PgBouncer"],
+  ["الـ timeouts", "اللي جوه أقصر من اللي بره"],
+  ["load shedding", "`pool.waitingCount` عالي ← `503` + `Retry-After` على طول"],
+  ["circuit breaker", "closed ← open بعد أخطاء ← half-open يجرّب ← closed"],
+  ["bulkheads", "pool منفصل للحاجات المهمة زي checkout"],
+  ["retries", "2–3 مرات، backoff أُسّي، full jitter، في طبقة واحدة"],
+  ["penetration", "keys مش موجودة: `__null__` بـ TTL قصير + bloom filter + validation"],
+  ["bloom filter", "لأ = أكيد مش موجود، آه = غالبًا موجود"],
+  ["breakdown", "اسم تاني للـ hot key اللي خلص = المشكلة الأساسية"],
+  ["Redis وقع", "`commandTimeout` قصير، `enableOfflineQueue: false`، وsingle-flight وbreaker قدام DB"],
+  ["big keys", "`--bigkeys`، قسّمها، وامسح بـ `UNLINK`"],
+  ["أهم metric", "hit ratio لكل نوع key، وmisses في الثانية"],
+  ["أبكر إنذار", "`pool.waitingCount` أكبر من صفر"],
+  ["hot keys", "`redis-cli --hotkeys` مع LFU، أو اعدّ في الكود"],
+  ["labels الـ metrics", "نوع الـ key مش الـ id"],
+]} />
+
+<Checklist id="dbcache-cheat" title="خلّصت المذكرة لما" items={["تقرر تكاش ولا لأ وتحسب الـ hit rate", "تكتب cache-aside بـ TTL وkeys بـ version", "تمسح الكاش وقت الكتابة بالترتيب الصح", "تشرح الـ stampede من أوله لآخره بالـ pool", "تحل الـ hot key بـ single-flight وlock موزّع", "تضيف jitter لكل الـ TTLs", "تستخدم stale-while-revalidate أو XFetch أو refresh-ahead للـ hot keys", "تحمي الداتابيز بـ timeouts وload shedding وbreaker", "تفرق بين penetration وbreakdown وavalanche", "تراقب الـ hit ratio والـ pool والـ locks"]} />
+
+<Quiz>
+<Q n={1} q="hot key بـ 10,000 read في الثانية، والـ TTL بيخلص كل 5 دقايق والداتابيز بتضرب. أقل حاجة تعملها؟">single-flight + lock موزّع بـ SET NX PX، وأحسن منها stale-while-revalidate عشان محدش يستنى.</Q>
+<Q n={2} q="كل ساعة بالظبط الداتابيز بتضرب دقيقة. والـ hot keys محمية. المشكلة غالبًا؟">avalanche: keys كتير بنفس الـ TTL اتملت مع بعض. الحل jitter.</Q>
+<Q n={3} q="Redis وقع، إيه اللي يمنع الداتابيز تقع وراه؟">timeouts قصيرة على Redis، وsingle-flight جوه الـ process، وcircuit breaker، وload shedding، وL1 cache.</Q>
+</Quiz>

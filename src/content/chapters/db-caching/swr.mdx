@@ -1,0 +1,269 @@
+---
+title: حلول تانية — متخليش الـ Key يخلص أصلًا
+short: الـ Stale والتجديد بدري
+order: 7
+label: فصل ٧
+badge: الحلول · فصل ٧
+en: stale-while-revalidate · soft TTL · XFetch · refresh-ahead · cache warming · L1 cache · hot key replication
+keywords: soft/hard TTL · XFetch · refresh-ahead · warming · lru-cache · نسخ الـ hot key
+goal: تعرف إزاي تجدد القيمة قبل ما تخلص أو وانت بترجّع القديمة، عشان اليوزر ميستناش والداتابيز متتضربش.
+part: الحلول
+color: c2
+---
+
+## الفكرة
+
+الـ lock في فصل ٥ بيخلي request واحد يروح للداتابيز، بس **الباقي لسه مستنيين**. الحلول هنا بتروح خطوة أبعد:
+
+- **رجّع القيمة القديمة** وجدد في الخلفية (stale-while-revalidate).
+- **جدد قبل ما تخلص** بشوية (XFetch، refresh-ahead).
+- **قرّب القيمة** من التطبيق أكتر (L1 cache، نسخ الـ hot key).
+
+<Hl c="y">أحسن stampede هو اللي مبيحصلش، لأن الـ key السخن عمره ما بيبقى فاضي.</Hl>
+
+<Box type="story" icon="🫖" title="الترمس التاني">
+
+الجرسون الشاطر مبيستناش الترمس يفضى خالص. أول ما يحس إن الشاي برد شوية، بيصب للزبون من الموجود (لسه كويس)، ويبعت الولد **واحد بس** يعمل ترمس جديد. الزبون عمره ما وقف مستني، والمطبخ عمره ما جاله ١٠ طلبات شاي في نفس اللحظة.
+
+</Box>
+
+## رجّع القديم وجدد: Stale-While-Revalidate
+
+- **الـ hard TTL:** الـ `EX` بتاع Redis. بعده القيمة بتتمسح فعلًا.
+- **الـ soft TTL:** وقت بتخزنه **جوه القيمة نفسها**، أقصر من الـ hard. بعده القيمة "قديمة" بس لسه بتترجّع.
+- **بين الـ soft والـ hard:** رجّع القيمة القديمة على طول، وابدأ refresh في الخلفية. **واحد بس** يعمل الـ refresh بـ lock.
+- **بعد الـ hard:** القيمة مش موجودة خالص، فارجع للـ lock العادي (فصل ٥).
+
+<Flow items={[{"t": "قبل الـ soft", "s": "fresh: رجّع", "c": 1}, "→", {"t": "بين الـ soft والـ hard", "s": "stale: رجّع + refresh", "c": 2}, "→", {"t": "بعد الـ hard", "s": "miss: lock + DB", "c": 3}]} />
+
+<File name="swr.mjs">
+
+```js
+export async function getSWR(redis, key, { softSec, hardSec }, loader) {
+  const raw = await redis.get(key);
+  if (raw !== null) {
+    const entry = JSON.parse(raw);
+    if (Date.now() > entry.softExpiresAt) {
+      refreshInBackground(redis, key, { softSec, hardSec }, loader);
+    }
+    return entry.value; // حتى لو قديمة شوية
+  }
+  return refresh(redis, key, { softSec, hardSec }, loader); // أو getWithLock من فصل ٥
+}
+
+async function refresh(redis, key, { softSec, hardSec }, loader) {
+  const value = await loader();
+  const entry = { value, softExpiresAt: Date.now() + softSec * 1000 };
+  await redis.set(key, JSON.stringify(entry), "EX", hardSec);
+  return value;
+}
+
+function refreshInBackground(redis, key, ttl, loader) {
+  // lock قصير: refresher واحد بس في كل الـ instances
+  redis.set(`refresh:${key}`, "1", "PX", 10_000, "NX").then((ok) => {
+    if (ok !== "OK") return;
+    refresh(redis, key, ttl, loader)
+      .catch((err) => console.error("refresh failed", key, err.message))
+      .finally(() => redis.del(`refresh:${key}`));
+  });
+}
+```
+
+</File>
+
+<File name="الاستخدام">
+
+```js
+// fresh لمدة دقيقة، وتفضل موجودة كـ stale لحد 10 دقايق
+const product = await getSWR(redis, `product:v1:${id}`, { softSec: 60, hardSec: 600 }, () =>
+  pool.query("SELECT id, name, price_cents FROM products WHERE id = $1", [id]).then((r) => r.rows[0] ?? null),
+);
+```
+
+</File>
+
+جرّبتها على Redis بجد بـ soft ثانية واحدة: بعد ما الـ soft خلص بعتت **200 request مع بعض**، كلهم رجعوا القيمة القديمة على طول، والـ loader اتنادى **مرة واحدة بس** في الخلفية، وبعد 300ms الطلب الجاي لقى القيمة الجديدة.
+
+- **اليوزر عمره ما بيستنى الداتابيز:** طول ما القيمة لسه قبل الـ hard TTL.
+- **التمن:** القيمة ممكن تبقى قديمة لحد (الـ soft + وقت الـ refresh). فاختار الـ soft على أساس "تستحمل تبقى قديمة قد إيه".
+- **الـ hard TTL أطول بكتير:** عشان لو الداتابيز وقعت، تفضل عندك قيمة قديمة ترجّعها بدل error.
+- **نفس الفكرة في HTTP:** الـ header `Cache-Control: max-age=60, stale-while-revalidate=600` بيعمل كده في الـ CDN والـ browser.
+
+## التجديد العشوائي بدري: XFetch
+
+- **الفكرة:** كل request بيرمي "زهر". كل ما الـ expiry يقرب، احتمال إنه يقرر يجدد **قبل الميعاد** بيزيد.
+- **النتيجة:** غالبًا request واحد بيجدد بدري، قبل ما الـ key يخلص فعلًا، فمفيش لحظة الكاش فاضي فيها.
+- **ومن غير lock:** القرار عشوائي ومستقل في كل request.
+
+<File name="المعادلة">
+
+```text
+جدّد لو:  now - delta × beta × ln(random()) >= expiry
+
+delta  = الحساب بياخد قد إيه آخر مرة (ms)
+beta   = 1 عادي، أكبر من 1 يجدد بدري أكتر
+random = رقم بين 0 و1، فالـ ln بتاعه سالب، والطرح بيبقى زيادة
+```
+
+</File>
+
+- **احتمال التجديد = e أس (− الوقت الباقي ÷ (delta × beta)).** حسبتها بـ 100,000 محاولة وdelta = 1 ثانية:
+
+| الوقت الباقي على الـ expiry | احتمال إن الـ request يجدد |
+|---|---|
+| 10 ثواني | ~0.005٪ (في التجربة طلع 0.00٪) |
+| ثانية واحدة | ~36.8٪ |
+| 100ms | ~90.6٪ |
+
+- **الـ delta مهم:** الـ query اللي بتاخد وقت أطول بتبدأ تتجدد بدري أكتر، وده منطقي.
+
+<File name="xfetch.mjs">
+
+```js
+import { singleFlight } from "./single-flight.mjs";
+
+const shouldRecomputeEarly = ({ deltaMs, expiresAt }, beta = 1) =>
+  Date.now() - deltaMs * beta * Math.log(Math.random()) >= expiresAt;
+
+async function recompute(redis, key, ttlSec, loader) {
+  const start = Date.now();
+  const value = await loader();
+  const entry = { value, deltaMs: Date.now() - start, expiresAt: Date.now() + ttlSec * 1000 };
+  await redis.set(key, JSON.stringify(entry), "PX", ttlSec * 1000);
+  return value;
+}
+
+export async function getXFetch(redis, key, ttlSec, loader) {
+  const raw = await redis.get(key);
+  if (raw !== null) {
+    const entry = JSON.parse(raw);
+    if (!shouldRecomputeEarly(entry)) return entry.value;
+    if (Date.now() < entry.expiresAt) {
+      // القيمة لسه صالحة: جدد في الخلفية ورجّعها
+      singleFlight(key, () => recompute(redis, key, ttlSec, loader)).catch(() => {});
+      return entry.value;
+    }
+  }
+  return singleFlight(key, () => recompute(redis, key, ttlSec, loader));
+}
+```
+
+</File>
+
+<Box type="warn" title="XFetch لوحده مع traffic عالي">
+
+جرّبت XFetch **من غير** single-flight: 20 request مع بعض كل 50ms لمدة 6 ثواني وTTL ثانيتين، فالـ loader اتنادى **25 مرة**، لأن requests كتير بترمي الزهر وتكسب في نفس اللحظة. **مع** single-flight زي الكود فوق، اتنادى **6 مرات بس** والكاش عمره ما فضي. <Hl c="o">مع 10,000 request في الثانية، XFetch بيقلل المشكلة بس محتاج معاه single-flight أو lock.</Hl>
+
+</Box>
+
+## جدد الـ Hot Keys المعروفة بنفسك (Refresh-Ahead)
+
+- **لو إنت عارف الـ hot keys:** (الـ homepage، المنتج اللي عليه عرض، الإعدادات) متستناش أي request.
+- **اعمل job بيجدّدهم كل شوية:** أقل من الـ TTL. مثلًا TTL 5 دقايق وrefresh كل دقيقة.
+- **مع lock:** عشان لو عندك 20 instance، واحد بس اللي يعمل الـ refresh.
+
+<File name="refresh-ahead.mjs">
+
+```js
+const HOT_IDS = [42, 7, 13];
+
+async function refreshHotProducts() {
+  // واحد بس من كل الـ instances في الدقيقة دي
+  const ok = await redis.set("job:refresh-hot", "1", "PX", 55_000, "NX");
+  if (ok !== "OK") return;
+
+  for (const id of HOT_IDS) {
+    const { rows } = await pool.query("SELECT id, name, price_cents FROM products WHERE id = $1", [id]);
+    if (rows[0]) await redis.set(`product:v1:${id}`, JSON.stringify(rows[0]), "EX", 300);
+  }
+}
+
+setInterval(() => refreshHotProducts().catch(console.error), 60_000);
+```
+
+</File>
+
+- **الـ TTL بيفضل موجود:** لو الـ job وقف لأي سبب، القيم هتخلص عادي ومتفضلش قديمة للأبد.
+- **تعرف الـ hot keys منين؟** من الـ metrics بتاعتك، أو `redis-cli --hotkeys` (فصل ١٠).
+
+## من غير Expiry خالص + تحديث في الخلفية
+
+- **الفكرة:** الـ hot key ملوش TTL خالص (أو TTL طويل جدًا)، وبيتحدّث بس من حدث: الـ write نفسه، أو CDC، أو job.
+- **الميزة:** مفيش لحظة expiry، فمفيش stampede.
+- **العيب:** لو الحدث ضاع، القيمة غلط للأبد. فلازم يبقى فيه job بيصلّح كل فترة، أو TTL طويل كشبكة أمان.
+- **مناسب لـ:** إعدادات، feature flags، قوايم ثابتة، الـ top 10.
+
+## سخّن الكاش وقت الـ Deploy
+
+- **المشكلة:** كاش جديد فاضي (أو version جديد للـ keys)، فأول دقيقة كل حاجة miss.
+- **الحل:** قبل ما الـ instance ياخد traffic، ملّي الـ hot keys الأول.
+- **إزاي؟** script بيقرا أشهر الـ ids (من الـ analytics أو الـ logs) ويحطها في الكاش، **بـ jitter** وببطء (batches) عشان متضربش الداتابيز.
+- **ومع rolling deploy:** الـ instances الجديدة بتدخل واحدة واحدة، فالحمل بيتوزع.
+
+## كاش صغير جوه الـ Process (L1)
+
+- **المشكلة:** الـ hot key بـ 10,000 read في الثانية بيضرب **Redis نفسه**. وفي Redis Cluster الـ key ده على node واحدة، فالـ node دي بتسخن لوحدها.
+- **الحل:** كاش صغير في memory كل instance، بـ TTL **قصير جدًا** (ثانية أو اتنين).
+- **النتيجة:** بدل 10,000 GET على Redis، كل instance بيعمل GET واحد كل ثانية. مع 20 instance يعني 20 في الثانية.
+
+<File name="l1.mjs">
+
+```js
+import { LRUCache } from "lru-cache";
+import { singleFlight } from "./single-flight.mjs";
+import { getWithLock } from "./lock.mjs";
+
+// max: أقصى عدد keys، ttl بالملّي ثانية
+const l1 = new LRUCache({ max: 10_000, ttl: 2000 });
+
+export async function getHot(key, loader) {
+  if (l1.has(key)) return l1.get(key);
+
+  const value = await singleFlight(key, () => getWithLock(redis, key, 300, loader));
+  l1.set(key, value);
+  return value;
+}
+```
+
+</File>
+
+- **`l1.has` مش `l1.get() !== undefined`:** عشان لو القيمة `null` (منتج مش موجود) تتحسب hit. جرّبتها في lru-cache 11.
+- **التمن:** كل instance ممكن يبقى شايف قيمة أقدم بثانيتين من Redis. ومسح الـ key من Redis مش بيمسحه من الـ L1. فخلي الـ TTL قصير، أو ابعت invalidation بـ Redis pub/sub لكل الـ instances.
+- **الـ Redis من 6 وطالع فيه client-side caching:** (الأمر `CLIENT TRACKING`) Redis بيبعتلك لما key عندك يتغير. محتاج client بيدعمه، راجع الـ docs.
+
+## نسخ الـ Hot Key (Replication)
+
+- **لو الـ hot key سخن لدرجة إن node واحدة في Redis Cluster مش مستحملة:** اعمل منه **كذا نسخة** بأسامي مختلفة، فيتوزعوا على nodes مختلفة.
+- **القراءة:** اختار نسخة عشوائية. **الكتابة:** حدّث كل النسخ.
+
+<File name="hot-copies.mjs">
+
+```js
+const COPIES = 8;
+
+export const readHot = (id) =>
+  redis.get(`product:v1:${id}:copy${Math.floor(Math.random() * COPIES)}`);
+
+export async function writeHot(id, value, ttlSec) {
+  const multi = redis.multi();
+  for (let i = 0; i < COPIES; i++) {
+    multi.set(`product:v1:${id}:copy${i}`, JSON.stringify(value), "EX", ttlSec + i); // jitter صغير
+  }
+  await multi.exec();
+}
+```
+
+</File>
+
+- **في Redis Cluster:** الـ `MULTI` لازم كل الـ keys تبقى في نفس الـ slot، والنسخ هنا مقصود إنها في slots مختلفة. فاستخدم `pipeline` أو أوامر منفصلة بدل `multi`. راجع الـ docs بتاعة ioredis Cluster.
+- **أو اقرا من الـ replicas:** Redis Cluster بيسمح بالقراءة من الـ replicas (أمر `READONLY`، وفي ioredis option اسمه `scaleReads`). القيمة ممكن تتأخر شوية.
+- **غالبًا الـ L1 cache أسهل وكفاية.** النسخ ده للحالات المتطرفة.
+
+<Checklist id="dbcache-swr" title="خلّصت الفصل لما" items={["تشرح الـ soft TTL والـ hard TTL وإيه بيحصل في كل فترة", "تكتب stale-while-revalidate بـ refresher واحد", "تكتب معادلة XFetch وتشرح الـ delta والـ beta", "تعرف ليه XFetch محتاج single-flight مع traffic عالي", "تعمل refresh-ahead للـ hot keys بـ lock على الـ job", "تعرف إمتى تستخدم never expire وخطره", "تسخّن الكاش وقت الـ deploy", "تضيف L1 cache بـ lru-cache وتعرف تمنه", "تعرف إمتى تنسخ الـ hot key"]} />
+
+<Quiz>
+<Q n={1} q="soft = 60 ثانية وhard = 600. الداتابيز وقعت 5 دقايق. اليوزرز هيشوفوا إيه؟">هيشوفوا القيمة القديمة طول الـ 5 دقايق، والـ refresh في الخلفية هيفشل من غير ما يأثر عليهم.</Q>
+<Q n={2} q="في XFetch الـ query بقت تاخد وقت أطول. التجديد هيبدأ بدري ولا متأخر؟">بدري أكتر، لأن الـ delta أكبر فالرقم اللي بيتضاف لـ now أكبر.</Q>
+<Q n={3} q="ضفت L1 بـ ttl ثانيتين ومسحت الـ key من Redis بعد update. اليوزر هيشوف إيه؟">ممكن يشوف القيمة القديمة لحد ثانيتين من الـ L1، إلا لو بعت invalidation لكل الـ instances.</Q>
+<Q n={4} q="الـ hot key بيضرب node واحدة في Redis Cluster لحد 100٪ CPU. أول حل تجربه؟">L1 cache صغير في كل instance بـ TTL قصير، ولو مش كفاية تنسخ الـ key على كذا slot.</Q>
+</Quiz>

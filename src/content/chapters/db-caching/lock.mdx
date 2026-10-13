@@ -1,0 +1,304 @@
+---
+title: الحل الأول — طلب واحد بس يروح للداتابيز
+short: طلب واحد بالـ Lock
+order: 5
+label: فصل ٥
+badge: الحلول · فصل ٥
+en: request coalescing · single-flight · mutex · SET NX PX · Lua unlock · Redlock
+keywords: single-flight · SET NX PX · Lua · الانتظار · lock TTL
+goal: تكتب single-flight جوه الـ process، وتعمل lock موزّع بـ Redis بين كل الـ instances، وتعرف الباقيين يعملوا إيه وهما مستنيين.
+part: الحلول
+color: c5
+---
+
+## الفكرة
+
+<Hl c="y">لما الـ key يخلص، request واحد بس يروح للداتابيز ويجيب القيمة ويكتبها في الكاش، وكل الباقيين يستنوه.</Hl>
+
+- **الاسم العام:** request coalescing (تجميع الطلبات المتشابهة في طلب واحد).
+- **جوه process واحد:** اسمها **single-flight**. Map فيها الـ Promise اللي شغالة.
+- **بين كل الـ instances:** محتاج **lock موزّع** في Redis، لأن كل instance ليه memory لوحده.
+- **الأحسن تستخدم الاتنين:** single-flight يقلل الـ requests اللي بتوصل Redis، والـ lock يقلل اللي بيوصل الداتابيز.
+
+<Box type="story" icon="🔑" title="مفتاح الفرن">
+
+قدام الفرن مسمار عليه **مفتاح واحد**. اللي ياخد المفتاح هو بس اللي يدخل يخبز صينية للكشك. الباقي يبصوا على الكشك كل شوية: لو العيش نزل خدوا، لو لسه استنوا. ولو اللي معاه المفتاح أغمى عليه جوه؟ المفتاح عليه **تايمر**، بعد ٥ ثواني بيرجع للمسمار لوحده عشان حد تاني يدخل.
+
+</Box>
+
+## الـ Single-Flight جوه الـ process
+
+<File name="single-flight.mjs">
+
+```js
+const inflight = new Map();
+
+export function singleFlight(key, fn) {
+  const running = inflight.get(key);
+  if (running) return running; // حد بيجيبها دلوقتي، استنى نفس الـ Promise
+
+  const p = Promise.resolve()
+    .then(fn)
+    .finally(() => inflight.delete(key)); // نجحت أو فشلت، امسحها
+
+  inflight.set(key, p);
+  return p;
+}
+```
+
+</File>
+
+<File name="الاستخدام">
+
+```js
+import { singleFlight } from "./single-flight.mjs";
+
+export async function getProduct(id) {
+  const key = `product:v1:${id}`;
+  const cached = await redis.get(key);
+  if (cached !== null) return JSON.parse(cached);
+
+  return singleFlight(key, async () => {
+    const { rows } = await pool.query("SELECT id, name, price_cents FROM products WHERE id = $1", [id]);
+    const product = rows[0] ?? null;
+    if (product) await redis.set(key, JSON.stringify(product), "EX", 300);
+    return product;
+  });
+}
+```
+
+</File>
+
+- **في الـ Lab بتاع فصل ٤:** ده اللي نزّل الـ queries من 73 لـ 1، والفشل من 1927 لـ 0.
+- **`finally` مهمة:** لو الـ query فشلت، الـ key لازم يتمسح من الـ Map عشان الطلب الجاي يجرّب تاني. لو نسيتها، الـ error هيفضل يترجّع للأبد.
+- **لو الـ query فشلت:** كل المستنيين هياخدوا نفس الـ error مرة واحدة. ده أحسن من إن كل واحد فيهم يجرّب لوحده.
+- **الـ Map دي لازم تفضل صغيرة:** الـ keys بتتمسح أول ما الـ Promise تخلص، فمفيش memory leak.
+
+## ليه single-flight لوحده مش كفاية؟
+
+- **عندك 20 instance:** (pods أو PM2 workers أو servers). كل واحد فيهم عنده الـ Map بتاعته.
+- **يعني:** وقت الـ stampede هتوصل الداتابيز **20 query** بدل ألف. أحسن بكتير، بس مش 1.
+- **ولو عندك 200 instance:** 200 query تقيلة مرة واحدة ممكن تكفي توقّع الداتابيز.
+- **الحل:** lock في مكان كل الـ instances شايفينه، وهو Redis.
+
+## الـ Lock الموزّع بـ Redis
+
+الأمر الأساسي سطر واحد:
+
+<File name="redis-cli">
+
+```bash
+SET lock:product:v1:42 "random-token" NX PX 5000
+# OK    ← خدت الـ lock
+# (nil) ← حد تاني معاه الـ lock
+```
+
+</File>
+
+- **`NX`:** اكتب بس لو الـ key **مش موجود**. ده اللي بيخلي واحد بس يكسب.
+- **`PX 5000`:** الـ lock بيخلص لوحده بعد 5000ms. ده اللي بيحميك لو صاحب الـ lock مات.
+- **الـ token:** قيمة random لكل محاولة، عشان تعرف بعدين إن الـ lock ده **بتاعك** إنت.
+- **الأمر واحد atomic:** متعملش `SETNX` وبعدين `EXPIRE` في أمرين. لو الـ process وقع بينهم الـ lock هيفضل للأبد.
+
+## فك الـ Lock بأمان (Lua)
+
+- **المشكلة:** إنت خدت الـ lock بـ 5 ثواني، والـ query أخدت 7. الـ lock خلص لوحده، وrequest تاني خده. لو عملت `DEL` دلوقتي، هتمسح lock **حد تاني**.
+- **الحل:** امسح بس لو القيمة لسه هي الـ token بتاعك. ولازم الـ check والمسح يحصلوا مع بعض atomic، فبنكتبهم Lua script بيتنفذ جوه Redis مرة واحدة.
+
+<File name="unlock.lua">
+
+```lua
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end
+```
+
+</File>
+
+## الكود كامل
+
+<File name="lock.mjs">
+
+```js
+import { randomUUID } from "node:crypto";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// بيمسح الـ lock بس لو لسه بتاعي (نفس الـ token)
+const UNLOCK = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end`;
+
+export async function getWithLock(redis, key, ttlSec, loader, opts = {}) {
+  const { lockMs = 5000, waitMs = 3000 } = opts;
+  const lockKey = `lock:${key}`;
+  const deadline = Date.now() + waitMs;
+  let delay = 20;
+
+  while (true) {
+    const cached = await redis.get(key);
+    if (cached !== null) return JSON.parse(cached);
+
+    const token = randomUUID();
+    const got = await redis.set(lockKey, token, "PX", lockMs, "NX");
+
+    if (got === "OK") {
+      try {
+        // double-check: يمكن حد ملا الكاش بين الـ GET والـ SET
+        const again = await redis.get(key);
+        if (again !== null) return JSON.parse(again);
+
+        const value = await loader();
+        await redis.set(key, JSON.stringify(value), "EX", ttlSec);
+        return value;
+      } finally {
+        await redis.eval(UNLOCK, 1, lockKey, token);
+      }
+    }
+
+    // مش معايا الـ lock: استنى شوية وجرّب تاني
+    if (Date.now() > deadline) throw new Error(`cache lock wait timeout: ${key}`);
+    await sleep(delay / 2 + Math.random() * delay); // backoff + jitter
+    delay = Math.min(delay * 2, 200);
+  }
+}
+```
+
+</File>
+
+- **الـ double-check:** بعد ما تاخد الـ lock اقرا الكاش تاني. ممكن صاحب الـ lock اللي قبلك يكون لسه مالي الكاش وفاكك الـ lock، فإنت خدته من غير لازمة.
+- **`finally`:** الـ lock بيتفك حتى لو الـ loader رمى error.
+- **`redis.eval(script, numKeys, ...keys, ...args)`:** ده شكل ioredis. و`1` معناها إن فيه key واحد (`KEYS[1]`) والباقي `ARGV`.
+- **ممكن تعرّف الـ script مرة واحدة:** بـ `redis.defineCommand` في ioredis عشان يتبعت بـ `EVALSHA`. راجع الـ docs.
+
+### مع الـ single-flight مع بعض
+
+<File name="product.mjs">
+
+```js
+import { singleFlight } from "./single-flight.mjs";
+import { getWithLock } from "./lock.mjs";
+
+export function getProduct(id) {
+  const key = `product:v1:${id}`;
+  // جوه الـ process: request واحد بيكلم Redis، وبين الـ instances: واحد بيكلم الداتابيز
+  return singleFlight(key, () =>
+    getWithLock(redis, key, 300, async () => {
+      const { rows } = await pool.query("SELECT id, name, price_cents FROM products WHERE id = $1", [id]);
+      return rows[0] ?? null;
+    }),
+  );
+}
+```
+
+</File>
+
+## 🧪 تجربة (Lab): 5 instances و1000 request
+
+<File name="lock-test.mjs">
+
+```js
+import Redis from "ioredis";
+import { getWithLock } from "./lock.mjs";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const url = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
+
+// 5 connections = كأنهم 5 instances مختلفين
+const instances = Array.from({ length: 5 }, () => new Redis(url));
+await instances[0].del("product:1", "lock:product:1");
+
+let dbHits = 0;
+const loader = async () => {
+  dbHits++;
+  await sleep(300); // query بطيئة
+  return { id: 1, name: "iPhone" };
+};
+
+const jobs = instances.flatMap((r) =>
+  Array.from({ length: 200 }, () => getWithLock(r, "product:1", 60, loader)),
+);
+const res = await Promise.allSettled(jobs);
+console.log({
+  requests: jobs.length,
+  ok: res.filter((x) => x.status === "fulfilled").length,
+  dbHits,
+  lockLeft: await instances[0].exists("lock:product:1"),
+});
+instances.forEach((r) => r.disconnect());
+```
+
+</File>
+
+النتيجة على Redis 7 بجد:
+
+<File name="output">
+
+```text
+{ requests: 1000, ok: 1000, dbHits: 1, lockLeft: 0 }
+```
+
+</File>
+
+- **ألف request على 5 connections، والداتابيز اتضربت مرة واحدة.**
+- **`lockLeft: 0`:** الـ lock اتفك بعد ما خلصنا، مفيش حاجة فضلت معلقة.
+
+## الباقيين يعملوا إيه وهما مستنيين؟
+
+<Grid2>
+<Card title="يستنوا ويجرّبوا تاني" c={1}>
+
+ده اللي في الكود فوق: كل شوية يبصوا على الكاش، بـ backoff وjitter عشان ميضربوش Redis كلهم في نفس الملّي ثانية. ولازم يبقى فيه **حد أقصى** للانتظار (`waitMs`)، وبعده يرجّعوا error أو fallback.
+
+</Card>
+<Card title="ياخدوا القيمة القديمة" c={2}>
+
+لو عندك نسخة قديمة (stale) من القيمة، رجّعها على طول، وصاحب الـ lock بيحدّث في الخلفية. أحسن تجربة لليوزر، وده الـ stale-while-revalidate في فصل ٧.
+
+</Card>
+<Card title="يرجّعوا fallback" c={3}>
+
+قيمة default أو صفحة مبسطة أو "جرّب تاني بعد شوية". مناسب لحاجات مش مهمة زي recommendations.
+
+</Card>
+<Card title="pub/sub" c={4}>
+
+بدل الـ polling، صاحب الـ lock يعمل `PUBLISH` لما يخلص، والمستنيين عاملين `SUBSCRIBE`. أسرع بس أعقد، وغالبًا الـ polling كفاية.
+
+</Card>
+</Grid2>
+
+## الـ Lock TTL قد إيه؟
+
+- **لازم أطول من أطول query متوقعة:** لو الـ query بتاخد لحد 2 ثانية تحت الحمل، خلي الـ lock 5 ثواني مثلًا.
+- **لو أقصر من الـ query:** الـ lock هيخلص وصاحبه لسه شغال، وrequest تاني ياخده ويعمل query تانية. جرّبتها: lock بـ 100ms وquery بـ 300ms طلّعت **2 queries** بدل 1. والـ Lua unlock منع الأول إنه يمسح lock التاني.
+- **لو أطول من اللازم جدًا:** لو صاحب الـ lock مات، الكل هيستنى لحد ما الـ lock يخلص. فالـ `waitMs` بتاع المستنيين لازم يتظبط معاه.
+- **ممكن تمد الـ lock:** صاحبه يجدد الـ TTL كل شوية وهو شغال (watchdog)، بنفس فكرة الـ Lua: مد بس لو الـ token بتاعك. مكتبات زي Redisson بتعمل كده. غالبًا مش محتاجه للكاش.
+- **وحط `statement_timeout` على الـ query:** عشان الـ query نفسها متعدّيش وقت الـ lock (فصل ٨).
+
+## لو صاحب الـ Lock وقع؟
+
+- **الـ process مات أو الشبكة قطعت:** الـ `finally` مش هتتنفذ، والـ lock مش هيتفك.
+- **الـ `PX` هو الحماية:** بعد الوقت ده الـ lock بيختفي لوحده، وأول مستني بيلاقي الـ `SET NX` نجح فياخده.
+- **المستنيين في الفترة دي:** بيفضلوا يستنوا لحد `waitMs`. عشان كده خلي الـ stale value متاحة (فصل ٧) لو تقدر.
+
+## الـ Redlock باختصار
+
+- **المشكلة:** الـ lock على Redis واحد. لو الـ primary وقع قبل ما يعمل replicate للـ lock، الـ replica اللي هتبقى primary مش هتعرف إن فيه lock، فاتنين ياخدوه.
+- **الـ Redlock:** algorithm بياخد الـ lock على أغلبية من كذا Redis مستقلين (مثلًا 3 من 5).
+- **عليه جدل:** فيه نقد معروف (Martin Kleppmann) إنه مش آمن للحاجات اللي محتاجة correctness، بسبب الـ GC pauses وفرق الساعات، والحل ليها fencing tokens.
+- **للكاش ده مش مهم:** لو اتنين خدوا الـ lock بالغلط، أسوأ حاجة إن الداتابيز تاخد **2 queries** بدل 1. <Hl c="g">lock على Redis واحد كفاية جدًا هنا.</Hl> لكن لو بتستخدم lock عشان تمنع إن فلوس تتخصم مرتين، ده موضوع تاني خالص.
+
+<Checklist id="dbcache-lock" title="خلّصت الفصل لما" items={["تكتب single-flight بـ Map وتعرف ليه `finally` مهمة", "تشرح ليه single-flight لوحده مش كفاية مع instances كتير", "تعرف `SET key token NX PX ms` وكل جزء فيه بيعمل إيه", "تكتب الـ Lua unlock وتشرح ليه الـ DEL العادي خطر", "تعمل double-check بعد ما تاخد الـ lock", "تختار الـ lock TTL والـ waitMs", "تعرف 4 حاجات المستنيين ممكن يعملوها", "تعرف ليه Redlock مش ضروري للكاش"]} />
+
+<Quiz>
+<Q n={1} q="عندك 50 pod وبتستخدم single-flight بس. وقت الـ stampede الداتابيز هتاخد كام query للـ key ده تقريبًا؟">حوالي 50، واحدة من كل pod.</Q>
+<Q n={2} q="ليه متعملش SETNX وبعدين EXPIRE؟">لو الـ process وقع بين الأمرين، الـ lock هيفضل من غير TTL للأبد ومحدش هيعرف ياخده.</Q>
+<Q n={3} q="الـ query أخدت 8 ثواني والـ lock كان 5. صاحب الـ lock عمل DEL عادي في الآخر. إيه المشكلة؟">مسح lock حد تاني خده بعد ما الأول خلص، فـ request تالت هيقدر ياخده ويعمل query زيادة. الحل Lua compare-and-delete.</Q>
+<Q n={4} q="ليه الـ double-check بعد ما تاخد الـ lock؟">ممكن حد يكون ملا الكاش وفك الـ lock بين الـ GET بتاعك والـ SET NX، فمتعملش query من غير لازمة.</Q>
+</Quiz>

@@ -1,0 +1,149 @@
+---
+title: تشوف المشكلة قبل ما تحصل — Metrics والـ Alerts
+short: الـ Metrics والـ Alerts
+order: 10
+label: فصل ١٠
+badge: الحماية · فصل ١٠
+en: hit ratio · miss rate · DB QPS · pool wait · lock contention · hot keys · alerts
+keywords: hit ratio · DB QPS · pool waiting · lock · hotkeys · alerts
+goal: تعرف تقيس إيه في الكاش والداتابيز والـ pool، وتحط alerts تقولك إن stampede بيحصل.
+part: الحماية
+color: c5
+---
+
+## ليه تقيس؟
+
+- **الـ stampede بيحصل في ثواني:** من غير metrics هتشوف "الداتابيز وقعت" بس، ومش هتعرف ليه.
+- **بالأرقام الصح:** هتشوف إن الـ miss rate لـ key واحد ضرب، وفي نفس الثانية الـ DB QPS طلع، والـ pool waiting طلع.
+- **وكمان بتعرف الكاش بيفيد أصلًا ولا لأ:** hit rate واطي = الكاش خطوة زيادة.
+
+<Box type="story" icon="🌡️" title="ترمومتر الفرن">
+
+صاحب الفرن الشاطر حاطط عدّاد على باب الكشك (كام واحد لقى عيش وكام واحد ملقاش)، وعدّاد على شباك الفرن (كام واحد واقف في الطابور). أول ما عدّاد "ملقاش" يطلع فجأة والطابور يطول، بيعرف إن صينية خلصت قبل ما الناس تتخانق.
+
+</Box>
+
+## الكاش
+
+- **الـ Hit ratio:** `hits / (hits + misses)`. ده الرقم الأهم. قيسه **لكل نوع key** (products، users…) مش للكل بس، لأن المتوسط بيخبّي المشاكل.
+- **الـ Miss rate في الثانية:** الرقم المطلق مهم أكتر من النسبة وقت الـ stampede. 1٪ من 10,000 غير 1٪ من 100.
+- **الـ Latency بتاع Redis:** p50 وp99 لأوامر الـ `GET`/`SET`.
+- **الـ Evictions:** لو Redis بيمسح keys عشان الـ memory اتملت (`evicted_keys`)، الـ hit rate هيقع.
+- **الـ Expired keys:** عدد الـ keys اللي خلصت في الثانية. لو فيه spike كل ساعة بالظبط، ده avalanche ومحتاج jitter.
+
+<File name="redis-cli">
+
+```bash
+redis-cli INFO stats | grep -E "keyspace_(hits|misses)|expired_keys|evicted_keys"
+# keyspace_hits:1207
+# keyspace_misses:4019
+# expired_keys:4
+# evicted_keys:0
+```
+
+</File>
+
+- **الأرقام دي تراكمية:** من أول ما Redis اشتغل. الـ monitoring بيحسب الفرق كل فترة. والأحسن تعد الـ hits والـ misses في الكود بنفسك لكل نوع key.
+
+### في الكود
+
+<File name="metrics.mjs">
+
+```js
+// counters بسيطة، وفي الحقيقة تبعتها لـ Prometheus أو StatsD أو OpenTelemetry
+export const metrics = { hit: 0, miss: 0, dbLoad: 0, lockWait: 0, lockTimeout: 0, staleServed: 0 };
+
+export function count(name, keyType) {
+  metrics[name]++;
+  // مثلًا: cacheCounter.inc({ result: name, type: keyType })
+}
+
+// جوه getProduct
+// cached !== null ? count("hit", "product") : count("miss", "product");
+// جوه الـ loader: count("dbLoad", "product");
+// لما متاخدش الـ lock: count("lockWait", "product");
+```
+
+</File>
+
+- **الـ labels:** نوع الـ key (`product`) مش الـ key نفسه (`product:v1:42`). الـ id في الـ label بيعمل ملايين time series ويوقّع الـ monitoring نفسه.
+
+## الداتابيز
+
+- **الـ DB QPS:** عدد الـ queries في الثانية. الـ spike المفاجئ مع spike في الـ miss = stampede.
+- **الـ Query latency:** p99 بالذات. الـ stampede بيبان هنا الأول.
+- **الـ Active connections:** من `pg_stat_activity`. قريب من `max_connections` = خطر.
+- **الـ CPU والـ I/O:** على سيرفر الداتابيز.
+
+<File name="psql">
+
+```sql
+-- الـ connections حسب الحالة
+SELECT state, count(*) FROM pg_stat_activity GROUP BY state;
+
+-- نفس الـ query شغالة كام مرة دلوقتي؟ (stampede بيبان هنا)
+SELECT left(query, 80) AS q, count(*)
+FROM pg_stat_activity
+WHERE state = 'active'
+GROUP BY q
+ORDER BY count(*) DESC
+LIMIT 5;
+```
+
+</File>
+
+## الـ Pool
+
+- **`pool.waitingCount`:** عدد الـ requests المستنية connection. ده **أهم إنذار مبكر**. المفروض يبقى صفر أغلب الوقت.
+- **وقت الانتظار (pool wait time):** الـ request استنى قد إيه لحد ما أخد connection.
+- **الـ Acquire timeouts:** عدد الـ errors بتاعة `timeout exceeded when trying to connect`.
+- **`totalCount` و`idleCount`:** لو الـ idle دايمًا صفر والـ total هو الـ max، الـ pool مزنوق.
+
+<File name="pool-metrics.mjs">
+
+```js
+setInterval(() => {
+  // ابعتهم كـ gauges
+  console.log({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount });
+}, 5000);
+```
+
+</File>
+
+## الـ Locks
+
+- **الـ Lock contention:** كام request لقى الـ lock مع حد تاني واستنى. رقم عالي على key واحد = الـ key ده سخن.
+- **الـ Lock wait timeouts:** كام واحد استنى لحد `waitMs` وفشل. لو ده بيحصل، الـ query أبطأ من الـ lock أو صاحب الـ lock بيموت.
+- **الـ Lock held time:** صاحب الـ lock مسكه قد إيه. لو قرّب من الـ `PX`، زوّد الـ lock TTL أو سرّع الـ query.
+- **الـ Stale served:** لو بتستخدم stale-while-revalidate، كام مرة رجّعت قيمة قديمة. ومتوسط عمرها.
+
+## تلاقي الـ Hot Keys إزاي؟
+
+- **`redis-cli --hotkeys`:** محتاج `maxmemory-policy` يكون من نوع LFU (زي `allkeys-lfu`)، وإلا هيرجّع error. وبيعمل `SCAN` على كل الـ keys، فخليه بره أوقات الذروة.
+- **`OBJECT FREQ key`:** عداد الاستخدام لـ key معين (برضه مع LFU).
+- **من الكود:** أحسن طريقة. اعد الـ reads لكل key في sample صغير من الـ requests، وطلّع الـ top 10.
+- **`redis-cli --bigkeys` و`--memkeys`:** للـ big keys (فصل ٩).
+
+## الـ Alerts
+
+| الـ alert | الشرط (مثال) | معناه غالبًا |
+|---|---|---|
+| hit ratio وقع | أقل من 90٪ لمدة 5 دقايق لنوع key | invalidation غلط، deploy، أو evictions |
+| miss spike | الـ misses في الثانية × 5 عن المعتاد | stampede أو avalanche بيبدأ |
+| pool waiting | `waitingCount` أكبر من 0 لمدة دقيقة | الداتابيز بطيئة أو الـ pool صغير |
+| acquire timeouts | أي عدد أكبر من 0 | requests بتفشل قبل ما تبدأ |
+| DB p99 | ضعف المعتاد | الداتابيز تحت ضغط |
+| lock wait timeouts | أكبر من 0 | lock TTL أو query بطيئة |
+| evictions | أكبر من 0 بشكل مستمر | Redis محتاج memory أكتر |
+| expired keys spike | spike في نفس الدقيقة كل ساعة | keys بنفس الـ TTL، ضيف jitter |
+
+- **الأرقام دي أمثلة:** ابدأ بيها وظبطها على حسب الـ traffic بتاعك.
+- **اعمل dashboard واحد:** حط الـ hit ratio والـ miss rate والـ DB QPS والـ pool waiting جنب بعض **على نفس محور الوقت**. الـ stampede بيبان فيه كخط رأسي في الأربعة مع بعض.
+
+<Checklist id="dbcache-observability" title="خلّصت الفصل لما" items={["تقيس الـ hit ratio لكل نوع key مش للكل بس", "تقرا `keyspace_hits` و`keyspace_misses` و`evicted_keys` من INFO", "تعرف ليه الـ id مايتحطش في labels الـ metrics", "تراقب `waitingCount` والـ acquire timeouts بتاعة الـ pool", "تطلّع الـ queries المكررة من `pg_stat_activity`", "تقيس الـ lock contention والـ lock wait timeouts", "تلاقي الـ hot keys بـ `--hotkeys` أو من الكود", "تحط alerts على الـ miss spike والـ pool waiting"]} />
+
+<Quiz>
+<Q n={1} q="الـ hit ratio الكلي 97٪ وكويس، بس الداتابيز بتضرب كل شوية. تبص على إيه؟">الـ hit ratio والـ misses لكل نوع key، والـ miss spikes على key معين، لأن المتوسط بيخبّي hot key بيخلص.</Q>
+<Q n={2} q="redis-cli --hotkeys رجّع error. ليه؟">لأن الـ maxmemory-policy مش LFU. محتاج زي allkeys-lfu.</Q>
+<Q n={3} q="أنهي metric بتديك أبكر إنذار إن الـ pool هيتملي؟">pool.waitingCount ووقت الانتظار، قبل ما الـ acquire timeouts تبدأ.</Q>
+</Quiz>

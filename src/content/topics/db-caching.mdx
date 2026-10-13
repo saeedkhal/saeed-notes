@@ -1,0 +1,52 @@
+---
+title: الكاش قدام الداتابيز — من Cache-Aside لحد الـ Cache Stampede
+highlight: Cache Stampede
+subtitle: cache-aside · TTL · invalidation · stampede · lock · jitter · stale-while-revalidate · pool
+description: إمتى وليه تحط كاش قدام الداتابيز، وإزاي hot key واحد بيخلص الـ TTL بتاعه ممكن يوقّع الداتابيز ويملا الـ connection pool، وإزاي تحلها بالـ lock والـ jitter والـ stale-while-revalidate.
+emoji: 🧊
+order: 24
+tags: [backend, database]
+note: شرح بأسلوبي. الكود اتجرّب على Node 26 وioredis 6 وpg 8 وRedis 7 وPostgres 16، والمحاكاة اتشغّلت والأرقام اللي في المذكرة طالعة منها. الـ options بتتغير بين الإصدارات، فراجع الـ docs قبل ما تنسخ حاجة على production.
+---
+
+المذكرة دي بتجاوب على <Hl c="y">سؤالين</Hl>. الأول: إمتى وليه وإزاي تحط كاش قدام الداتابيز؟ والتاني: إزاي الكاش اللي المفروض **يحمي** الداتابيز يبقى هو نفسه **السبب** إنها تقع؟
+
+المشكلة بالظبط كده:
+
+- **عندك key سخن:** بيتقري أكتر من 10,000 مرة في الثانية.
+- **الـ TTL بتاعه خلص:** فجأة كل الـ requests مش لاقية القيمة في الكاش.
+- **كلهم راحوا للداتابيز:** في نفس اللحظة، بنفس الـ query.
+- **الداتابيز بطّأت:** فالـ requests فضلت مستنية، والـ connection pool اتملى للآخر.
+- **الـ requests الجديدة بتفشل:** قبل ما تبدأ أصلًا، لأنها مش لاقية connection.
+
+<Hl c="p">الحل الأساسي: request واحد بس يروح للداتابيز ويجيب القيمة ويحطها في الكاش، والباقي يستنوه.</Hl> ومعاه: إن الـ TTLs كلها متخلصش في نفس اللحظة (jitter).
+
+<Box type="story" icon="🥖" title="تشبيه المذكرة كلها">
+
+فيه فرن عيش في الحتة، وقدامه **كشك** صغير فيه عيش جاهز. الناس بتاخد من الكشك على طول، والفرن مرتاح. ده الكاش.
+
+الكشك بيرمي العيش اللي عدّى عليه ساعة (ده الـ TTL). فجأة الساعة خلصت والكشك فضي، و**ألف واحد** في الطابور جريوا على الفرن مرة واحدة. الفرن عنده ٣ شبابيك بس (الـ connection pool)، والفرّان اتلخبط وبقى بيخبز أبطأ. الطابور طوّل، والناس الجديدة مش لاقية حتى مكان تقف فيه. **الكشك اللي كان بيحمي الفرن هو اللي وقّعه.**
+
+الحل؟ واحد بس من الطابور يدخل الفرن ويجيب صينية للكشك، والباقي يستنوا ثانيتين (ده الـ lock). ومتخليش كل العيش اللي في الكشك يخلص في نفس الدقيقة (ده الـ jitter).
+
+</Box>
+
+<Box type="idea" title="قبل ما تبدأ">
+
+- **الكود كله Node.js:** بـ ESM (`import`)، ومعاه `ioredis` لـ Redis و`pg` لـ Postgres.
+- **محاكاة المشكلة مش محتاجة حاجة:** ملف Node لوحده من غير Redis ولا داتابيز، في فصل ٤.
+- **لو عايز تجرب بـ Redis وPostgres بجد:** شغّلهم بـ Docker:
+
+</Box>
+
+<File name="terminal">
+
+```bash
+docker run -d --rm --name redis -p 6379:6379 redis:7-alpine
+docker run -d --rm --name pg -e POSTGRES_PASSWORD=pass -p 5432:5432 postgres:16-alpine
+mkdir cache-lab && cd cache-lab && pnpm init && pnpm add ioredis pg lru-cache
+export REDIS_URL=redis://127.0.0.1:6379
+export DATABASE_URL=postgres://postgres:pass@127.0.0.1:5432/postgres
+```
+
+</File>

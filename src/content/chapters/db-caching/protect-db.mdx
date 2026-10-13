@@ -1,0 +1,201 @@
+---
+title: احمي الداتابيز حتى لو الكاش فشل
+short: حماية الداتابيز
+order: 8
+label: فصل ٨
+badge: الحماية · فصل ٨
+en: pool sizing · acquire timeout · statement timeout · circuit breaker · load shedding · backpressure · bulkhead · retry backoff
+keywords: pool · timeouts · circuit breaker · load shedding · bulkhead · retries
+goal: تظبط الـ pool والـ timeouts، وتضيف الـ circuit breaker والـ load shedding والـ retries صح، عشان لو حصل stampede يفشل بسرعة ومن غير ما يوقّع كل حاجة.
+part: الحماية
+color: c3
+---
+
+## ليه محتاج ده؟
+
+- **الكاش هيفشل في يوم:** restart، deploy، bug في الـ invalidation، key سخن نسيته.
+- **الحلول اللي فاتت بتقلل الاحتمال:** بس مش بتخليه صفر.
+- **فالداتابيز محتاجة حماية لوحدها:** <Hl c="g">لو جه حمل أكبر من اللي تستحمله، ارفض جزء منه بسرعة بدل ما الكل يقع ببطء.</Hl>
+
+<Box type="story" icon="🚪" title="بواب الفرن">
+
+الفرن الشاطر حاطط **بواب**. البواب عارف إن جوه ٣ شبابيك بس، فبيدخّل ٣ ويخلي ١٠ يستنوا في طابور قصير، والباقي بيقولهم "تعالوا بعد خمس دقايق" على طول. أحسن من إن ٥٠٠ واحد يدخلوا ويتخنقوا جوه ومحدش ياخد عيش. ولو الفرن نفسه عطلان، البواب **بيقفل الباب** شوية ومبيدخّلش حد (circuit breaker).
+
+</Box>
+
+## ظبط الـ Pool
+
+<File name="db.mjs">
+
+```js
+import pg from "pg";
+
+export const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,                       // أقصى connections من الـ instance ده
+  connectionTimeoutMillis: 2000, // acquire timeout: متستناش أكتر من 2 ثانية connection
+  idleTimeoutMillis: 30_000,     // اقفل الـ connection اللي فاضية بعد 30 ثانية
+  statement_timeout: 3000,       // Postgres يلغي أي query أطول من 3 ثواني
+});
+```
+
+</File>
+
+جرّبتهم على Postgres 16 بجد:
+
+- **`statement_timeout`:** `SELECT pg_sleep(3)` مع timeout ثانية رجعت `canceling statement due to statement timeout`.
+- **`connectionTimeoutMillis`:** pool بـ `max: 2` وكل الـ connections مشغولة، الـ `connect()` التالت رجع `timeout exceeded when trying to connect` بعد الوقت المحدد.
+
+### الـ max يبقى كام؟
+
+- **مش "أكبر أحسن":** الداتابيز عندها `max_connections` (في Postgres الـ default بتاعه 100)، وكل connection بتاخد memory، وأكتر من عدد الـ cores بكتير بيبطّأ الكل.
+- **الحسبة:** عدد الـ instances × `max` لازم يبقى **أقل** من `max_connections` ناقص connections الـ admin والـ migrations والـ jobs.
+- **مثال:** 20 pod × 10 = 200 connection. لو الداتابيز 100، هتفشل. يا تقلل الـ `max`، يا تحط **PgBouncer** في النص.
+- **الـ pool الصغير مع timeout قصير** أحسن من pool كبير: الـ requests الزيادة بتفشل بسرعة بدل ما الداتابيز كلها تبطّأ.
+
+### الـ timeouts المهمة
+
+| الـ timeout | بيحميك من إيه | قيمة بداية |
+|---|---|---|
+| `connectionTimeoutMillis` (acquire) | الطابور في الـ pool يطول للأبد | 1–3 ثواني |
+| `statement_timeout` | query واحدة تفضل ماسكة connection | 2–10 ثواني حسب الـ endpoint |
+| `query_timeout` (في pg client) | الـ client يستنى رد مهما حصل | أطول شوية من الـ statement |
+| timeout الـ HTTP request | الـ request كله | أقل من timeout الـ load balancer |
+
+- **القاعدة:** كل timeout جوه لازم يبقى **أقصر** من اللي براه. وإلا الـ client يمشي والسيرفر لسه بيشتغل على request محدش مستنيه.
+- **راجع الـ docs:** أسامي الـ options بتختلف بين `pg` و`postgres.js` وPrisma وKnex.
+
+## ارفض بدري (Load Shedding)
+
+- **الفكرة:** لو الطابور في الـ pool طويل، الـ request الجديد هيفشل غالبًا. فارفضه **دلوقتي** بـ `503` بدل ما ياخد مكان ويفشل بعد ثانيتين.
+- **`pg.Pool` بيديك الأرقام:** `totalCount` و`idleCount` و`waitingCount`.
+
+<File name="shed.mjs">
+
+```js
+import { pool } from "./db.mjs";
+
+const MAX_WAITING = 50;
+
+// Express middleware
+export function shedLoad(req, res, next) {
+  if (pool.waitingCount > MAX_WAITING) {
+    res.set("Retry-After", "2");
+    return res.status(503).json({ error: "busy, try again" });
+  }
+  next();
+}
+```
+
+</File>
+
+- **ده نوع من backpressure:** السيستم بيقول للي قبله "أبطأ شوية" بدل ما يبلع كل حاجة.
+- **`Retry-After`:** بيقول للـ client يستنى قد إيه قبل ما يجرّب.
+- **الـ Rate limiting:** حد لكل يوزر أو IP (مثلًا في Redis أو الـ API gateway)، عشان يوزر واحد أو bot ميعملش stampede لوحده.
+- **حدد الأولويات:** ارفض الـ recommendations قبل الـ checkout.
+
+## الـ Circuit Breaker
+
+- **الفكرة:** لو الداتابيز بتفشل كتير ورا بعض، **بطّل تبعتلها** شوية. سيبها تفوق.
+- **عنده 3 حالات:**
+  - **مقفولة (closed):** كله شغال عادي، وبنعد الأخطاء.
+  - **مفتوحة (open):** الأخطاء عدّت حد معين، فبنرفض على طول من غير ما نكلم الداتابيز.
+  - **نص مفتوحة (half-open):** بعد وقت، بنسيب request يجرّب. لو نجح نقفلها، لو فشل نفتحها تاني.
+
+<File name="breaker.mjs">
+
+```js
+export class CircuitBreaker {
+  constructor({ failureThreshold = 5, resetAfterMs = 10_000 } = {}) {
+    this.failureThreshold = failureThreshold;
+    this.resetAfterMs = resetAfterMs;
+    this.failures = 0;
+    this.state = "closed"; // closed | open | half-open
+    this.openedAt = 0;
+  }
+
+  async call(fn) {
+    if (this.state === "open") {
+      if (Date.now() - this.openedAt < this.resetAfterMs) {
+        throw new Error("circuit open: DB محمية، جرّب بعدين");
+      }
+      this.state = "half-open"; // نسيب request يجرّب
+    }
+    try {
+      const result = await fn();
+      this.failures = 0;
+      this.state = "closed";
+      return result;
+    } catch (err) {
+      this.failures++;
+      if (this.state === "half-open" || this.failures >= this.failureThreshold) {
+        this.state = "open";
+        this.openedAt = Date.now();
+      }
+      throw err;
+    }
+  }
+}
+
+// الاستخدام
+const dbBreaker = new CircuitBreaker({ failureThreshold: 5, resetAfterMs: 10_000 });
+const product = await dbBreaker.call(() => pool.query("SELECT ...", [id]));
+```
+
+</File>
+
+- **جرّبته:** بـ threshold = 3، أول 3 أخطاء عدّت للداتابيز، والـ call الرابعة والخامسة اترفضت على طول بـ `circuit open`، وبعد الـ reset أول نجاح رجّعها `closed`.
+- **وهي مفتوحة رجّع إيه؟** القيمة الـ stale لو موجودة (فصل ٧)، أو fallback، أو `503`.
+- **النسخة دي مبسطة:** في half-open ممكن كذا request يعدّوا مع بعض. للـ production استخدم مكتبة زي `opossum` وراجع الـ docs بتاعتها.
+
+## افصل الأحواض (Bulkheads)
+
+- **الاسم جاي من المراكب:** المركب مقسومة لأوض مقفولة، لو واحدة غرقت الباقي يفضل عايم.
+- **في الكود:** **pool منفصل** لكل نوع شغل. مثلًا pool للـ checkout، وpool للتقارير والـ endpoints التقيلة.
+- **النتيجة:** لو الـ stampede ملا pool التقارير، الـ checkout لسه عنده connections بتاعته.
+- **نفس الفكرة:** حد أقصى للـ concurrency لكل endpoint أو لكل dependency (مثلًا مكتبة `p-limit`).
+
+## الـ Retries صح
+
+- **الـ retry من غير تفكير هو اللي بيعمل retry storm** (فصل ٤).
+- **عدد محدود:** 2 أو 3 مرات بالكتير.
+- **الـ Backoff أُسّي:** استنى 100ms، بعدين 200، بعدين 400…
+- **وJitter:** الوقت عشوائي عشان كل الـ clients ميرجعوش مع بعض. الطريقة المعروفة بـ "full jitter": رقم عشوائي بين 0 والـ backoff.
+- **متعملش retry لكل حاجة:** الـ `400` والـ validation errors مش هتتصلح بالـ retry. والـ `503` اللي معاه `Retry-After` احترمه.
+- **الـ retry في طبقة واحدة بس:** لو الـ client بيعمل 3 والـ gateway 3 والسيرفر 3، يبقى الـ request الواحد ممكن يبقى 27.
+
+<File name="retry.mjs">
+
+```js
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function retry(fn, { attempts = 3, baseMs = 100, maxMs = 2000 } = {}) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i >= attempts - 1) throw err;
+      const cap = Math.min(maxMs, baseMs * 2 ** i);
+      await sleep(Math.random() * cap); // full jitter
+    }
+  }
+}
+```
+
+</File>
+
+## افشل بسرعة (Fail Fast)
+
+<Hl c="p">request فشل في 50ms أحسن من request فشل في 30 ثانية.</Hl>
+
+- **الفشل السريع بيرجّع الـ connection والـ memory بسرعة،** فالـ requests التانية تلحق تشتغل.
+- **الفشل البطيء** بيمسك موارد، ويخلي الطابور يطول، ويخلي اليوزر يعمل refresh (retry تاني).
+- **كل اللي في الفصل ده** (timeouts قصيرة، load shedding، circuit breaker) هدفه واحد: افشل بسرعة لما لازم تفشل.
+
+<Checklist id="dbcache-protect" title="خلّصت الفصل لما" items={["تظبط `max` و`connectionTimeoutMillis` و`statement_timeout` في pg.Pool", "تحسب الـ max على أساس عدد الـ instances و`max_connections`", "ترتب الـ timeouts من جوه لبره", "تعمل load shedding بـ `pool.waitingCount`", "تشرح الـ 3 حالات بتاعة الـ circuit breaker", "تفصل pools للحاجات المهمة (bulkheads)", "تكتب retry بـ backoff وfull jitter وعدد محدود", "تشرح ليه الفشل السريع أحسن"]} />
+
+<Quiz>
+<Q n={1} q="30 pod كل واحد pool max 10، والـ Postgres بـ max_connections 100. إيه المشكلة والحل؟">300 connection أكبر من 100. قلل الـ max لكل pod، أو استخدم PgBouncer.</Q>
+<Q n={2} q="الـ circuit مفتوح ويوزر طلب المنتج. ترجّع إيه؟">القيمة القديمة من الكاش لو موجودة، أو fallback، أو 503 بسرعة من غير ما تكلم الداتابيز.</Q>
+<Q n={3} q="ليه full jitter في الـ retry؟">عشان الـ clients اللي فشلوا مع بعض ميرجعوش يضربوا مع بعض في نفس اللحظة.</Q>
+</Quiz>

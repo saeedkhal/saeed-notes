@@ -1,0 +1,107 @@
+---
+title: الحل التاني — TTL Jitter ضد الـ Cache Avalanche
+short: الـ TTL Jitter
+order: 6
+label: فصل ٦
+badge: الحلول · فصل ٦
+en: TTL jitter · cache avalanche · mass expiry · cold start · bulk load
+keywords: jitter · avalanche · deploy · bulk load · ±10٪
+goal: تفهم ليه الـ TTLs متخلصش كلها مع بعض، وتضيف jitter بسطر واحد.
+part: الحلول
+color: c1
+---
+
+## المشكلة: كله بيخلص مع بعض
+
+- **السيناريو:** عملت deploy، أو الكاش اتمسح، أو job ملا 100,000 key مرة واحدة الساعة 3:00.
+- **وكلهم بنفس الـ TTL:** مثلًا `EX 3600`.
+- **النتيجة:** الساعة 4:00 بالظبط، **كل الـ keys** بتخلص في نفس الثانية، وكل الـ requests بتعمل miss مع بعض.
+- **ده اسمه Cache Avalanche:** انهيار. مش key واحد زي الـ stampede، ده آلاف keys مرة واحدة.
+- **وبيتكرر:** لأنهم اتملوا تاني مع بعض، فهيخلصوا تاني مع بعض بعد ساعة. موجة كل ساعة.
+
+<Box type="story" icon="🧺" title="العيش اللي اتخبز مع بعض">
+
+لو الكشك جاب كل عيش اليوم في صينية واحدة الساعة ٨، كله هيبات الساعة ٩ في نفس اللحظة، والكشك هيفضى مرة واحدة والطابور كله يجري على الفرن. لكن لو الصواني بتيجي على مدار الساعة، كل شوية جزء صغير بس اللي يخلص، والفرن يلحق.
+
+</Box>
+
+## الحل: TTL عشوائي شوية
+
+<Hl c="p">بدل ما كل الـ keys تاخد 3600 ثانية بالظبط، كل key ياخد رقم عشوائي بين 3240 و3960 مثلًا (±10٪).</Hl>
+
+<File name="jitter.mjs">
+
+```js
+// ±ratio حوالين الرقم الأساسي: jitter(300, 0.1) → بين 270 و330
+export function jitter(baseSec, ratio = 0.1) {
+  const delta = baseSec * ratio;
+  return Math.round(baseSec - delta + Math.random() * 2 * delta);
+}
+
+// الاستخدام
+await redis.set(key, JSON.stringify(value), "EX", jitter(300));
+```
+
+</File>
+
+جرّبتها بـ `jitter(300, 0.2)` عشر مرات وطلعت:
+
+<File name="output">
+
+```text
+338 294 274 251 247 316 325 335 266 254
+```
+
+</File>
+
+- **لو 100,000 key اتملوا مع بعض بـ `jitter(300, 0.2)`:** هيخلصوا على مدى دقيقتين (من 240 لـ 360 ثانية) بدل ثانية واحدة.
+- **الحمل على الداتابيز:** بدل 100,000 miss في ثانية، هتبقى حوالي 830 في الثانية على مدى الدقيقتين دول.
+
+## تختار النسبة إزاي؟
+
+- **نسبة 10٪ إلى 20٪:** كفاية في أغلب الحالات.
+- **كل ما الـ TTL أطول:** نفس النسبة بتفرّق على وقت أطول، فـ 10٪ من ساعة = 6 دقايق كاملة.
+- **لو الـ TTL قصير جدًا:** (مثلًا 10 ثواني) ممكن تحتاج نسبة أكبر أو رقم ثابت زي ± 3 ثواني.
+- **خلي بالك من الحد الأقصى:** لو البيانات لازم متبقاش أقدم من 5 دقايق، خلي الـ jitter **ينقص** بس: بين 4 و5 دقايق.
+
+<File name="jitter-down.mjs">
+
+```js
+// مش هيعدّي الـ base أبدًا: بين base × (1 - ratio) و base
+export const jitterDown = (baseSec, ratio = 0.2) =>
+  Math.round(baseSec * (1 - Math.random() * ratio));
+```
+
+</File>
+
+## الـ Jitter مش حل للـ hot key
+
+- **الـ jitter بيفرّق keys كتير عن بعض.** بيحل الـ avalanche.
+- **بس key واحد سخن؟** مهما كان الـ TTL بتاعه عشوائي، في الآخر هيخلص في لحظة، وكل الـ 10,000 request هيعملوا miss.
+- **فإنت محتاج الاتنين:** jitter لكل الـ keys، و**lock** (فصل ٥) أو **refresh قبل الـ expiry** (فصل ٧) للـ hot keys.
+
+| | المشكلة | الحل الأساسي |
+|---|---|---|
+| Stampede / Breakdown | key واحد سخن خلص | lock / single-flight / stale-while-revalidate |
+| Avalanche | keys كتير خلصت مع بعض أو الكاش وقع | jitter + warming + حماية الداتابيز |
+
+## إمتى الـ Avalanche بيحصل؟
+
+- **بعد deploy أو restart للكاش:** الكاش فاضي (cold start)، فكل حاجة miss في نفس الوقت. حلها: cache warming (فصل ٧) + lock + rate limit على الداتابيز.
+- **بعد bulk load:** job ملا آلاف keys مع بعض. حلها: jitter.
+- **بعد ما غيّرت version الـ keys:** `product:v1` بقى `product:v2`، فكل المنتجات miss مرة واحدة. حلها: اعمل الـ deploy تدريجي، أو سخّن الـ keys الجديدة الأول.
+- **لما Redis نفسه وقع:** كل الـ requests رايحة للداتابيز. ده أخطر واحد (فصل ٩).
+
+## متنساش الـ Jitter في حاجات تانية
+
+- **الـ retries:** لو كل الـ clients عملوا retry بعد ثانية بالظبط، هيرجعوا كلهم مع بعض. خلي الـ backoff عشوائي (فصل ٨).
+- **الـ cron jobs:** لو 100 instance عاملين refresh كل دقيقة بالظبط، ضيف تأخير عشوائي.
+- **الـ polling بتاع المستنيين على الـ lock:** زي `sleep(delay / 2 + Math.random() * delay)` في فصل ٥.
+
+<Checklist id="dbcache-jitter" title="خلّصت الفصل لما" items={["تفرق بين الـ avalanche والـ stampede", "تكتب function للـ jitter بنسبة ± وتستخدمها مع `EX`", "تعرف تخلي الـ jitter ينقص بس لو فيه حد أقصى للقدم", "تعرف ليه الـ jitter مش بيحل الـ hot key", "تعرف 4 مواقف بيحصل فيها الـ avalanche", "تستخدم jitter في الـ retries والـ cron والـ polling"]} />
+
+<Quiz>
+<Q n={1} q="ملّيت 50,000 key بـ EX 600 بالظبط. إيه اللي هيحصل بعد 10 دقايق؟">كلهم هيخلصوا في نفس الثانية، فـ 50,000 miss مرة واحدة على الداتابيز (avalanche)، وهيتكرر كل 10 دقايق.</Q>
+<Q n={2} q="jitter(600, 0.1) بيطلّع أرقام بين كام وكام؟">بين 540 و660 ثانية.</Q>
+<Q n={3} q="ضفت jitter لكل الـ TTLs. الـ hot key اتحل؟">لأ. الـ hot key لوحده لما يخلص الكل هيعمل miss. محتاج lock أو refresh قبل الـ expiry.</Q>
+</Quiz>
