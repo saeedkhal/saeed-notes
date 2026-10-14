@@ -1,0 +1,60 @@
+---
+title: بلوك الـ server فين يتكتب
+short: بلوك الـ server
+order: 3
+label: فصل ٣
+badge: البداية · فصل ٣
+en: server · listen · server_name · location · sites-enabled
+keywords: listen · server_name · location · ملف الإعداد
+goal: تكتب بلوك server فيه listen وserver_name وlocation، وتحطه في المكان اللي Ubuntu بيقراه.
+part: البداية
+color: c2
+---
+
+## تلات مفاتيح
+
+كل موقع بلوك `server`:
+
+- **`listen`:** البورت اللي Nginx سامع عليه. من غيره البورت 80.
+- **`server_name`:** الدومين اللي البلوك ده يخصه. Nginx يختار البلوك بالاسم، وده SNI مع SSL.
+- **`location`:** مسار جوه الموقع، وده مكان قرار التوجيه.
+
+<File name="/etc/nginx/sites-available/app">
+
+```nginx
+server {
+    listen 80;
+    server_name app.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
+```
+
+</File>
+
+مكان الملف بيعتمد على **مين اللي نزّل الحزمة**:
+
+- **حزمة Ubuntu نفسها:** الملف في `sites-available`، وNginx يقرا اللي متوصل في `sites-enabled`.
+- **حزم nginx.org:** مفيش `sites-enabled`. حط بلوك `server` في ملف جوه `/etc/nginx/conf.d/` وخليه يخلص بـ `.conf`.
+
+```bash
+sudo ln -s /etc/nginx/sites-available/app /etc/nginx/sites-enabled/app
+sudo nginx -t
+```
+
+الوصلة دي لحزمة Ubuntu. مع حزم nginx.org يكفي الملف جوه `conf.d`. البلوك نفسه واحد.
+
+<Box type="tip" title="default_server">
+
+لو الطلب جه من غير دومين مطابق، Nginx يديه للبلوك المعلم `default_server` على نفس البورت. علّم بلوك واحد بس: `listen 80 default_server;`.
+
+</Box>
+
+<Checklist id="nginx-server" title="خلّصت الفصل لما" items={["تكتب listen وserver_name وlocation", "تحط الملف في sites-enabled أو في conf.d حسب مصدر الحزمة", "تشغّل nginx -t قبل إعادة التحميل", "تعرف إن default_server بيلقط اللي مالوش دومين"]} />
+
+<Quiz>
+<Q n={1} q="البلوك اتكتب في sites-available ومفيش وصلة، والحزمة من Ubuntu. هيتطبّق؟">لأ. حزمة Ubuntu بتقرا sites-enabled. حزم nginx.org بتقرأ conf.d ومفيهاش الوصلة دي.</Q>
+<Q n={2} q="طلب على نفس البورت بدومين مش متسجل. يروح فين؟">لبلوك default_server على البورت ده، لو موجود.</Q>
+</Quiz>

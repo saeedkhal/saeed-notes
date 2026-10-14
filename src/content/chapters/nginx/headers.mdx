@@ -1,0 +1,55 @@
+---
+title: الهيدرز والـ WebSocket وحجم الطلب
+short: الهيدرز
+order: 7
+label: فصل ٧
+badge: التشغيل · فصل ٧
+en: Host · X-Forwarded-For · X-Forwarded-Proto · Upgrade · client_max_body_size
+keywords: هوية الطلب · الويب سوكت · حجم الرفع · المهلة
+goal: تخلّي التطبيق يعرف الدومين الأصلي والبروتوكول، وتمرّر WebSocket، وترفع حد حجم الطلب لو محتاج.
+part: التشغيل
+color: c5
+---
+
+## التطبيق محتاج يعرف الزائر جه إزاي
+
+من غير الهيدرز، التطبيق يشوف إن الطلب من `127.0.0.1` وعلى HTTP، حتى لو الزائر فاتح HTTPS على الدومين.
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+- **`Host`:** الدومين اللي الزائر كتبه. من غيره الكوكيز واللينكات تتظبط على اسم غلط.
+- **`X-Real-IP` و`X-Forwarded-For`:** عنوان الزائر، مش عنوان Nginx.
+- **`X-Forwarded-Proto`:** `https` أو `http`. التطبيق يبني لينكات صح.
+
+## WebSocket والرفع
+
+WebSocket بيطلب ترقية الاتصال. من غير السطرين دول الاتصال يقع بعد أول رسالة:
+
+```nginx
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+```
+
+وحد الرفع الافتراضي صغير. لرفع صور أو فيديو:
+
+```nginx
+client_max_body_size 20m;
+```
+
+ولو التطبيق بيطوّل، زوّد `proxy_read_timeout`. راجع الـ docs للقيمة المناسبة، لأن المهلة القصيرة بتقطع طلب سليم.
+
+<Checklist id="nginx-headers" title="خلّصت الفصل لما" items={["تبعت Host وX-Forwarded-Proto", "تبعت عنوان الزائر في X-Forwarded-For", "تمرّر Upgrade لو فيه WebSocket", "ترفع client_max_body_size قبل ما الرفع يرجع 413"]} />
+
+<Quiz>
+<Q n={1} q="التطبيق شايف البروتوكول HTTP رغم إن الزائر على HTTPS. ناقص إيه؟">`X-Forwarded-Proto` بقيمة `$scheme`.</Q>
+<Q n={2} q="الرفع بيفشل برسالة 413. التوجيه صح. السبب الأغلب؟">حجم الجسم أكبر من `client_max_body_size`.</Q>
+</Quiz>
