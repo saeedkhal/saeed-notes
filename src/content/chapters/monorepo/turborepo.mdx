@@ -110,6 +110,35 @@ my-turbo/
   { t: "api", s: "build (بالتوازي مع ui)", c: 4 },
 ]} />
 
+### الـ `inputs` — `$TURBO_DEFAULT$` و`.env*`
+
+الـ `inputs` هي الملفات اللي Turbo بيحطها في الـ hash. لو الملف اتغيّر، الكاش يبقى miss والـ task يشتغل تاني.
+
+من غير المفتاح ده، الافتراضي هو: <Hl c="b">كل الملفات اللي داخلة Git جوه الـ package</Hl>. وTurbo بيحترم `.gitignore`، فملف `.env` المتجاهل **مش** داخل الحساب.
+
+عشان كده السطر ده موجود:
+
+<File name="turbo.json">
+
+```json
+"inputs": ["$TURBO_DEFAULT$", ".env*"]
+```
+
+</File>
+
+- **`$TURBO_DEFAULT$`:** رجّع السلوك الافتراضي. مجرد ما تكتب `inputs`، Turbo بيسيبه. من غيره، السطر `[".env*"]` لوحده معناه إن الكاش يتغيّر بس لما ملف env يتغيّر، وتعديل في `src` يفضل cache hit.
+- **`.env*`:** زود ملفات الـ env على الافتراضي. النجمة بتمسك `.env` و`.env.local` و`.env.production` وأي اسم بيبدأ كده. الملفات دي عادة في `.gitignore`، فمن غيرها تغيير الـ API URL في الملف مش بيكسّر الكاش، وتاخد build قديم.
+- **Turbo مش بيقرأ الملف:** مش بيحمّل القيم جوه الـ process. Next أو Vite أو `dotenv` هما اللي بيعملوا كده. الـ `inputs` بس بتدخل **محتوى الملف** في الـ hash.
+- **الـ `env` حاجة تانية:** `env` بيحط قيمة المتغير اللي موجودة في البيئة (زي secret في الـ CI). `.env*` بيحط الملف اللي على الديسك. الاتنين محتاجين بعض لو الـ build بيستخدم الاتنين.
+- **الاستثناء:** علامة `!` بتطلّع ملف من الحساب، زي `"!README.md"`، بس بعد `$TURBO_DEFAULT$`.
+- **مكان الملف:** الـ glob نسبته للـ package. ملف `.env` في جذر الريبو مش هيتحسب من السطر ده. ساعتها تحطه في `globalDependencies`، أو تكتب المسار بـ `$TURBO_ROOT$`. راجع الـ docs لو المسار مش جوه الـ package.
+
+<Box type="warn" title="متكتبش inputs من غير الافتراضي">
+
+`"inputs": [".env*"]` لوحدها بتلغي متابعة السورس. الصح إن `$TURBO_DEFAULT$` يفضل أول عنصر، وبعدين تزود أو تستثني.
+
+</Box>
+
 ### الـ `outputs` و `persistent`
 
 - `outputs`: الملفات اللي Turbo هيخزنها في الكاش ويرجّعها لما يحصل hit. <Hl c="p">لو نسيتها، هتلاقي "cache hit" بس فولدر dist فاضي!</Hl>
@@ -212,6 +241,7 @@ pnpm turbo build --graph                # اطلع صورة للـ task graph
 <Checklist id="monorepo-w2" title="Checklist الأسبوع التاني" items={[
   "فاهم الفرق بين `^build` و `build` و `pkg#build`.",
   "عارف إيه اللي بيدخل في الـ hash وليه الـ `env` مهم.",
+  "عارف ليه `inputs` فيها `$TURBO_DEFAULT$` و`.env*`، وإيه اللي يحصل لو شلت الافتراضي.",
   "عارف إمتى أحط `outputs` وإمتى `cache: false` و `persistent`.",
   "أقدر أشرح local vs remote cache وأعمل link.",
   "حافظ `web...` و `...ui` و `...[main]`.",
@@ -222,4 +252,5 @@ pnpm turbo build --graph                # اطلع صورة للـ task graph
   <Q n={2} q="عاوز تشغّل الـ tests لكل حاجة ممكن تتأثر بتعديلك في `@repo/types`. الأمر؟">`turbo test --filter=...@repo/types`</Q>
   <Q n={3} q="الـ staging build بيكلّم production API. إيه اللي غالبًا نسيته؟">ماحطّيتش الـ env var في `env` فالكاش اتشارك بين الاتنين.</Q>
   <Q n={4} q="ليه الـ `dev` task مالهاش لازمة تتكيّش؟">لأنها persistent ومش بتطلّع output نهائي؛ وظيفتها تفضل شغالة.</Q>
+  <Q n={5} q="كتبت `inputs` فيها `.env*` بس من غير `$TURBO_DEFAULT$`. غيّرت ملف في `src`، والكاش فضل hit. ليه؟">لأن كتابة `inputs` بتلغي الافتراضي. من غير `$TURBO_DEFAULT$` Turbo بيتابع ملفات الـ env بس، ومش ملفات السورس.</Q>
 </Quiz>
