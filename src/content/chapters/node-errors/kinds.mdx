@@ -1,0 +1,58 @@
+---
+title: أنواع الأخطاء اللي Node بيرميها
+short: أنواع الأخطاء
+order: 3
+label: فصل ٣
+badge: الأخطاء · فصل ٣
+en: TypeError · ReferenceError · RangeError · URIError · AggregateError · ENOENT · EADDRINUSE
+keywords: أخطاء اللغة · أخطاء النظام · الكود · الاسم
+goal: تميّز غلط JavaScript عن غلط النظام، وتمسك الاثنين لما يكونوا جوه try أو await.
+part: الأخطاء
+color: c3
+---
+
+## أخطاء اللغة
+
+دي كائنات `Error`. المهم `name` و`message`، وفي أخطاء النظام كمان `code`. اللي تحت ده اتقاس:
+
+| النوع | مثال اتقاس | الرسالة |
+| --- | --- | --- |
+| `TypeError` | `null.x` | `Cannot read properties of null (reading 'x')` |
+| `ReferenceError` | اسم مش متعرّف | `notDefined is not defined` |
+| `RangeError` | `array.length = -1` | `Invalid array length` |
+| `URIError` | `decodeURI("%")` | `URI malformed` |
+| `SyntaxError` | ملف ناقص | `Unexpected end of input` |
+
+وفي أنواع تانية لازم تعرفها حتى لو مش كلها بتيجي كل يوم:
+
+- **`EvalError`:** موجودة في اللغة، وNode تقريبًا مش بيرميها في الشغل العادي.
+- **`AggregateError`:** لما عملية مجمّعة تفشل كلها، زي `Promise.any` وكل الوعود تترفض. جواها `errors` فيها الأسباب.
+- **`AssertionError`:** من `node:assert` لما تأكيد يفشل. في الاختبارات دي إشارة إن التوقع غلط، ومش المفروض تتعالج كطلب يوزر.
+- **خطأ من `throw` بتاعك:** `throw new Error("...")` أو كلاس بيرث من `Error`.
+
+لو الغلط ده جوه `try` أو ورا `await`، تمسكه. لو طالع من غير حد، يبقى فصل ٤.
+
+## أخطاء النظام والشبكة
+
+دي مش غلط في فكرة البرنامج. النظام أو الشبكة رفضت العملية. الخاصية `code` نص ثابت، زي:
+
+- **`ENOENT`:** الملف مش موجود. `readFile` على مسار وهمي اتقاس، واتمسك، والكود طلع `ENOENT` والعملية خرجت `0` لأن الـ `catch` اشتغل.
+- **`EACCES`:** مفيش صلاحية تقرا أو تكتب.
+- **`EADDRINUSE`:** البورت متاخد. اتعمله `server.on("error")` وطبع `EADDRINUSE` من غير ما العملية تقع.
+- **`ECONNREFUSED`:** مفيش حد سامع على العنوان ده.
+- **`ECONNRESET`:** الطرف التاني قفل الاتصال في النص.
+- **`ETIMEDOUT`:** الاستنظار خلّص.
+- **`ENOTFOUND`:** الـ DNS ملاقىش الاسم.
+- **`EPIPE`:** كتبت على مقبس الطرف التاني قفله.
+
+<Hl c="g">أخطاء النظام دي تقدر تتمسك.</Hl> الفرق عن فصل ٤ إن السقوط بيحصل لما تسيبها من غير `catch`، مش لأن نوعها غير قابل للمسك.
+
+متفرّقش على `message` الإنجليزي. فرّق على `code` وعلى `name`، لأن نص الرسالة ممكن يتغيّر بين النسخ.
+
+<Checklist id="nodeexit-kinds" title="خلّصت الفصل لما" items={["تسمّي TypeError وReferenceError وRangeError وURIError وSyntaxError", "تعرف AggregateError وAssertionError بيجوا منين", "تمسك ENOENT وEADDRINUSE من `code` مش من نص الرسالة", "تفرّق بين غلط تتمسكه وغلط سابوه من غير catch"]} />
+
+<Quiz>
+<Q n={1} q="`readFile` على ملف مش موجود. تميّزه إزاي؟">من `error.code` وقيمته `ENOENT`، مش من جملة الرسالة.</Q>
+<Q n={2} q="`Promise.any` وكل الوعود رفضت. نوع الخطأ؟">`AggregateError`، والأسباب جوه `errors`.</Q>
+<Q n={3} q="`EADDRINUSE` لازم يوقع العملية؟">لأ، لو سمعت `error` على السيرفر وتعاملت معاه. من غير مستمع، الحدث ده بيوقع العملية.</Q>
+</Quiz>

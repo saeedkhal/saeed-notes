@@ -1,0 +1,55 @@
+---
+title: اللي بيقع بره try/catch ويوقف العملية
+short: إيقاف العملية
+order: 4
+label: فصل ٤
+badge: الأخطاء · فصل ٤
+en: uncaughtException · unhandledRejection · error event · SyntaxError · SIGKILL
+keywords: استثناء متتمسكش · رفض من غير catch · حدث error · أخطاء متتمسكش
+goal: تعرف كل طريق بيوصّل لخروج بكود 1 من غير ما يكون عندك catch، وإيه اللي try أصلاً مش هيقدر عليه.
+part: الأخطاء
+color: c4
+---
+
+## Uncaught exception
+
+أي `throw` مفيش `catch` في الطريق لحد ما يطلع من الشوط الحالي. Node يطبع الـ stack ويخرج بكود `1`. الحدث اسمه `uncaughtException`.
+
+ده يشمل:
+
+- `throw` في أول الملف أو في دالة محدش حواليها `try`.
+- `throw` جوه `setTimeout` أو `setImmediate` أو `queueMicrotask` أو `process.nextTick`.
+- رفض `async` محدش عامل لها `await`.
+
+## Unhandled rejection
+
+`Promise.reject` أو `async` وقعت، ومفيش `await` ومفيش `.catch`. على Node 26 التجربة طلعت `Error: nope` وخرجت بكود `1`. مفيش تحذير بس. الرفض اللي متتمسكش بقى بيوقف العملية.
+
+ده أشهر تسريب: نداء دالة `async` من غير `await`، أو `fetch` من غير `catch`، أو `setTimeout` بينادي دالة async والرفض بيضيع.
+
+<Hl c="o">الـ unhandled rejection مش نوع خطأ جديد. هو وعد اترفض ومحدش مسكه، فـ Node بيوقّف العملية.</Hl>
+
+## حدث `error` من غير مستمع
+
+`EventEmitter` لو عمل `emit("error")` ومفيش `on("error")`، Node يرمي الاستثناء. التجربة طلعت `Error: no listener` ومكتوب `Emitted 'error' event`، والكود `1`.
+
+اللي بيعمل كده كتير:
+
+- سيرفر `listen` على بورت متاخد، من غير `server.on("error")`.
+- ستريم أو سوكيت قطع، ومحدش سامع `error`.
+- `child_process` فشل، ومحدش سامع `error`.
+
+## حاجات try/catch مش هينقذك منها
+
+- **`SyntaxError` وهو بيحمّل الملف:** التركيب بيحصل قبل أي سطر من كودك.
+- **الذاكرة خلّصت:** خطأ قاتل من جوّه Node. متبنيش عليه `catch`.
+- **`SIGKILL`:** النظام قفل العملية بالقوة. مفيش handler.
+- **استمرار بعد `uncaughtException`:** الحالة ممكن تكون بايظة (قفل نص مفتوح، طلب نص مكتوب). المستمع ده للتسجيل والخروج المرتب، مش عشان العملية تكمل كأنها سليمة.
+
+<Checklist id="nodeexit-crash" title="خلّصت الفصل لما" items={["تربط `throw` من غير catch بحدث `uncaughtException` وخروج 1", "تعرف إن unhandled rejection على Node الحديث بيوقف العملية", "تحط `on(\"error\")` على السيرفر والستريم والعملية الابنة", "متكمّلش الشغل بعد استثناء متتمسكش"]} />
+
+<Quiz>
+<Q n={1} q="`async` اتنداهت من غير `await` ووقعت. إيه اللي يحصل على Node 26؟">Unhandled rejection، والعملية تخرج بكود 1.</Q>
+<Q n={2} q="سيرفر عمل emit لـ `error` ومفيش مستمع. try في مكان تاني هيمسكه؟">لأ. من غير `on(\"error\")` الاستثناء بيطلع ويوقف العملية.</Q>
+<Q n={3} q="ينفع تمسك `uncaughtException` وتكمّل طلبات جديدة؟">متعملش كده. سجّل الغلط واخرج، وخلي مدير العمليات يرجّع العملية نظيفة.</Q>
+</Quiz>

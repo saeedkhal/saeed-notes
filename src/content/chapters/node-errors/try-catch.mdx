@@ -1,0 +1,65 @@
+---
+title: try/catch بيمسك إيه
+short: try/catch
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: try · catch · finally · await · setTimeout · Promise
+keywords: التزامن · await · مؤقت · promise من غير catch
+goal: تمساك الغلط في مكانه، وتعرف الحالات اللي try من غير await أو حوالين setTimeout مش هيشوفها.
+part: البداية
+color: c2
+---
+
+## بيمسك throw حصل جواه
+
+`try/catch` بيمسك استثناء حصل **في نفس الشوط** جوه الـ `try`، أو `await` لـ promise اترفضت جواه. لو مسكته، العملية **متخرجش**. تطبع أو ترد على الطلب، وتكمّل.
+
+```js
+try {
+  await Promise.reject(new Error("caught"));
+} catch (e) {
+  console.log("caught", e.message);
+}
+```
+
+ده طبع `caught caught` وخرج بكود `0`.
+
+`finally` بيشتغل في الحالتين: نجح الـ `try` أو وقع. ينفع تقفل ملف أو اتصال هناك، بس متبلعش الغلط جواه من غير ما ترجّعه.
+
+## تلات حاجات مش هيشوفها
+
+<Hl c="p">الـ catch مش شبكة حوالين العملية كلها. هو حوالين البلوك ده بس.</Hl>
+
+- **Promise من غير `await` ومن غير `.catch`:** الـ `try` بيخلّص قبل ما الرفض يحصل. التجربة طلعت `Error: missed` والكود `1`، وجملة `caught` متطبتش.
+- **`setTimeout` أو `setImmediate`:** الـ callback بييجي بعدين، بره الـ `try`. التجربة طلعت `Error: later` والكود `1`.
+- **`SyntaxError` في نفس الملف:** الملف متركّبش أصلاً، فالسطر اللي فيه `try` منفّذش. غلط التركيب في `syn.js` خرج بكود `1`.
+
+```js
+try {
+  Promise.reject(new Error("missed"));
+} catch (e) {
+  console.log("caught");
+}
+```
+
+```js
+try {
+  setTimeout(() => {
+    throw new Error("later");
+  }, 10);
+} catch (e) {
+  console.log("caught");
+}
+```
+
+الصح في الوعد: `await` جوه `try`، أو `.catch` على نفس الـ promise. الصح في المؤقت: `try` **جوه** الـ callback، مش برّاه.
+
+دالة `async` لو عملت `throw` من غير ما حد يعمل لها `await`، الرفض يبقى unhandled. الـ `try` اللي حوالي استدعاء من غير `await` مش هينفع.
+
+<Checklist id="nodeexit-try" title="خلّصت الفصل لما" items={["تحط `await` جوه `try` عشان تمسك رفض الـ promise", "تعرف إن `try` حوالي `setTimeout` مش بيمسك اللي جوه الـ callback", "تعرف إن `SyntaxError` في نفس الملف بيحصل قبل التشغيل", "تستخدم `finally` للقفل من غير ما تبلع الغلط"]} />
+
+<Quiz>
+<Q n={1} q="`try` حوالي `Promise.reject` من غير `await`. الـ catch هيشتغل؟">لأ. الرفض بيحصل بعد ما الـ try خلّص، والعملية بتخرج بكود 1.</Q>
+<Q n={2} q="فين تحط `try` لو الغلط جوه `setTimeout`؟">جوه الـ callback، مش حوالي `setTimeout` نفسه.</Q>
+</Quiz>

@@ -1,0 +1,18 @@
+---
+title: أخطاء Node وإمتى التطبيق يقف
+highlight: Node
+subtitle: try/catch · exit code · unhandledRejection · uncaughtException · event loop
+description: ليه node index.js بيخلّص ويطلع 0، إيه اللي try/catch بيمسكه، وأنواع الأخطاء اللي بتوقف العملية زي unhandled rejection، وإمتى السيرفر يفضل شغال.
+emoji: 🛑
+order: 28
+tags: [backend]
+note: الأمثلة اتشرحت على Node 26.8. شكل رسائل الخطأ ورقم الخروج بيتأكدوا من التشغيل. راجع الـ docs لو نسخة Node عندك أقدم، لأن unhandled rejection كان تحذير قبل ما يبقى إيقاف.
+---
+
+المقال ماشي بالترتيب ده: <Hl c="y">التطبيق بيخرج إمتى، وبعدين try/catch بيمسك إيه، وبعدين أنواع الأخطاء، وبعدين اللي بيوقف العملية، وبعدين إمتى تسيبه شغال.</Hl>
+
+<Box type="story" icon="🍽️" title="المطعم">
+
+`try/catch` الجرسون اللي بيمسك الطبق قبل ما يقع عند ترابيزة واحدة. الـ unhandled rejection طبق وقع في المطبخ ومحدش شافه، والمفتش بيقفل المحل. الخروج بكود `0` يعني المحل قفل آخر اليوم بإرادته بعد ما الزباين مشيوا، مش إنه وقع.
+
+</Box>
