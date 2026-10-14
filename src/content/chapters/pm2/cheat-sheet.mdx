@@ -36,6 +36,8 @@ color: dark
   ["reload يقفل بأدب", "`server.close` على `SIGINT`، و`wait_ready` لو محتاج"],
   ["راقب", "`pm2 list` · `pm2 logs` · `pm2 monit` · `pm2 describe`"],
   ["PM2 يقوم مع الـ boot", "`pm2 startup` من غير sudo، ونفّذ الأمر اللي طلع بالظبط"],
+  ["الـ service شغالة؟", "`systemctl is-active pm2-$(whoami)` وبعد reboot تبقى active"],
+  ["أكتر من يوزر", "كل واحد `pm2-<username>` و`dump.pm2` في الهوم بتاعه"],
   ["احفظ الـ apps", "`pm2 save` وبتتكتب في `~/.pm2/dump.pm2`"],
   ["غيّرت أي حاجة", "`pm2 save` تاني"],
   ["غيّرت Node بـ nvm", "`pm2 unstartup` ثم `pm2 startup` ثم `pm2 save`"],

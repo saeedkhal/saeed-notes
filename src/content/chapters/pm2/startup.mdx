@@ -69,25 +69,61 @@ pm2 save
 
 الأمر `pm2 save` بيكتب الـ apps الشغالة حاليًا في ملف `~/.pm2/dump.pm2`. ولما السيرفر يقوم، PM2 بيقرأ الملف ده ويرجّع كل حاجة زي ما كانت.
 
-## ٣. اتأكد إنه شغال
+## ٣. اتأكد إن الـ service شغالة
+
+اسم الـ service هو `pm2-` وبعده اسم اليوزر اللي نفّذ أمر الـ `startup`. يوزر `ubuntu` يبقى `pm2-ubuntu`. يوزر `saeed` يبقى `pm2-saeed`.
 
 <File name="terminal">
 
 ```bash
-sudo systemctl status pm2-ubuntu   # غيّر ubuntu باسم اليوزر بتاعك
-sudo reboot
-# بعد ما يقوم:
-pm2 list
+whoami
+systemctl is-enabled pm2-$(whoami)
+systemctl is-active pm2-$(whoami)
+systemctl status pm2-$(whoami)
 ```
 
 </File>
+
+- **`is-enabled`:** هتقوم مع الـ boot ولا لأ. الناتج المطلوب `enabled`.
+- **`is-active`:** شغالة دلوقتي ولا لأ. `active` يعني systemd هو اللي ماسك الـ daemon. `inactive` أول مرة بعد `pm2 startup` مش دايمًا مشكلة، لأنك ممكن تكون شغّلت الـ apps بإيدك والـ service لسه متعملهاش `start`. بعد أول reboot المفروض تبقى `active`.
+- **`status`:** يجمع الاتنين، ويعرض آخر سطور من اللوج. لو وقعت، دور على `failed`.
+
+بعد reboot، `pm2 list` **من نفس اليوزر** لازم يوريك الـ apps. `systemctl` بيقول إن المنبّه صحّى البواب. `pm2 list` بيقول إن السكان رجعوا.
+
+## كل يوزر له service
+
+الـ service مش بتاع السيرفر كله. مربوطة باليوزر في تلات حتت:
+
+- **الاسم:** `pm2-<username>`.
+- **سطر `User=`** جوه ملف الـ service، وفي `PM2_HOME=/home/<username>/.pm2`.
+- **القائمة:** `pm2 resurrect` بيقرا `dump.pm2` اللي في الهوم ده بس.
+
+لو على الجهاز يوزر `ubuntu` ويوزر `deploy`، وكل واحد شغّل `pm2 startup` وبعدين `pm2 save`، هيبقى فيه خدمتين:
+
+| الـ service | بتقوم بإيه |
+| --- | --- |
+| `pm2-ubuntu` | تطبيقات `/home/ubuntu/.pm2/dump.pm2` |
+| `pm2-deploy` | تطبيقات `/home/deploy/.pm2/dump.pm2` |
+
+مفيش واحدة فيهم بتشوف تطبيقات التانية. كل يوزر لازم ينفّذ `pm2 startup` و`pm2 save` وهو داخل بحسابه. `pm2 list` من غير `sudo` يوريك بتوعك بس.
+
+<File name="terminal">
+
+```bash
+systemctl list-units --type=service 'pm2-*'
+ls /etc/systemd/system/pm2-*.service
+```
+
+</File>
+
+لو عملت `pm2 save` بحساب و`startup` بحساب تاني، الـ service هتقوم وتلاقي قائمة فاضية أو قائمة قديمة بتاعة الحساب التاني.
 
 <Flow items={[{"t": "pm2 startup", "s": "اطبع الأمر", "c": 1}, "→", {"t": "sudo …", "s": "اعمل الـ service", "c": 2}, "→", {"t": "pm2 start", "s": "شغّل الـ apps", "c": 3}, "→", {"t": "pm2 save", "s": "احفظ القائمة", "c": 4}]} />
 
 ## حاجات لازم تاخد بالك منها
 
 - **بعد أي تغيير في الـ apps:** ضفت app أو مسحت واحدة أو غيرت الإعدادات أو عدد الـ instances، اعمل `pm2 save` تاني. وإلا هيرجع للنسخة القديمة بعد الـ restart.
-- **نفّذ الأوامر بنفس اليوزر اللي هيشغّل الـ app.** لو عملت `pm2 save` بيوزر و`startup` بيوزر تاني، مش هتلاقي الـ apps.
+- **نفس اليوزر في `startup` وفي `save`.** الـ service بتقرا هوم اليوزر المكتوب في اسمها، مش هوم اليوزر التاني.
 - **لو بتستخدم nvm وغيرت نسخة Node:** اعمل `pm2 unstartup` وبعدها `pm2 startup` تاني، لأن الـ service فيها مسار الـ node القديم (في سطر `Environment=PATH=...`).
 - **لو حدّثت PM2 نفسه:** اعمل `pm2 update` عشان الـ daemon اللي شغال يتحدث. تحديث الـ package بس مش بيغيّر الـ daemon اللي في الـ memory.
 - **الـ env variables** (زي `SSL_PUBLIC_KEY` و`SERVERHTTPS`): الأضمن تحطها في الـ ecosystem file أو في `.env` يتقري من الكود، مش في الـ shell، عشان تبقى موجودة بعد الـ reboot.
@@ -148,11 +184,13 @@ pm2 unstartup
 
 </Box>
 
-<Checklist id="pm2-startup" title="خلّصت الفصل لما" items={["تشغّل pm2 startup من غير sudo وتنفذ الأمر اللي طلع", "تعرف إن الـ service اسمها pm2-username", "تعمل pm2 save بعد ما الـ apps تشتغل", "تعرف إن save بتكتب في ~/.pm2/dump.pm2", "تعمل save تاني بعد أي تغيير", "تستخدم نفس اليوزر في كل الأوامر", "تعمل unstartup وstartup بعد تغيير Node", "تعمل pm2 update بعد تحديث PM2", "تحط الـ env في ecosystem أو .env مش في الـ shell"]} />
+<Checklist id="pm2-startup" title="خلّصت الفصل لما" items={["تشغّل pm2 startup من غير sudo وتنفذ الأمر اللي طلع", "تعرف إن الـ service اسمها pm2-username وإن كل يوزر له service وقائمة",
+  "تفرّق بين is-enabled وis-active", "تعمل pm2 save بعد ما الـ apps تشتغل", "تعرف إن save بتكتب في ~/.pm2/dump.pm2", "تعمل save تاني بعد أي تغيير", "تستخدم نفس اليوزر في كل الأوامر", "تعمل unstartup وstartup بعد تغيير Node", "تعمل pm2 update بعد تحديث PM2", "تحط الـ env في ecosystem أو .env مش في الـ shell"]} />
 
 <Quiz>
 <Q n={1} q="عملت pm2 save بس. التطبيقات هترجع بعد الـ reboot؟">لأ، لأن مفيش حاجة هتشغّل PM2 مع الـ boot. محتاج pm2 startup.</Q>
 <Q n={2} q="غيرت instances من 4 لـ 8 ومعملتش save. بعد الـ reboot هتلاقي كام؟">4، لأن dump.pm2 لسه فيه النسخة القديمة.</Q>
 <Q n={3} q="عملت nvm install 22 وبقيت تستخدمه. ليه startup تاني؟">لأن الـ service فيها PATH بمسار الـ node القديم، ولو اتمسح الـ service مش هتلاقي node.</Q>
 <Q n={4} q="حدّثت PM2 بـ pnpm add -g pm2. ليه pm2 update؟">عشان الـ daemon اللي شغال في الـ memory يتبدل بالنسخة الجديدة.</Q>
+<Q n={5} q="يوزر ubuntu ويوزر deploy كل واحد عامل pm2 save. كام service محتاجين؟">اتنين: pm2-ubuntu وpm2-deploy. كل واحدة بتقرا dump.pm2 في هوم اليوزر بتاعها بس.</Q>
 </Quiz>
