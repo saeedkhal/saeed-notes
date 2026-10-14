@@ -1,0 +1,75 @@
+---
+title: الإرسال من Express بـ Nodemailer
+short: Express
+order: 4
+label: فصل ٤
+badge: التطبيق · فصل ٤
+en: nodemailer · createTransport · sendMail · env
+keywords: ناقل واحد · مسار POST · متكتبش الباسورد
+goal: تعمل ناقل SMTP مرة واحدة، وتنده sendMail من مسار Express، وتسيب السر في البيئة مش في الملف.
+part: التطبيق
+color: c4
+---
+
+## الناقل ثم الرسالة
+
+Nodemailer مكتبة جوه العملية. مش سيرفر بريد. بتفتح اتصال SMTP وتسلّم الرسالة لشباك الخدمة.
+
+<File name="mail.js">
+
+```js
+import nodemailer from "nodemailer";
+
+export const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: process.env.SMTP_PORT === "465",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+```
+
+</File>
+
+<File name="server.js">
+
+```js
+import express from "express";
+import { mailer } from "./mail.js";
+
+const app = express();
+app.use(express.json());
+
+app.post("/send", async (req, res) => {
+  try {
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM,
+      to: req.body.to,
+      subject: req.body.subject,
+      text: req.body.text,
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(502).json({ ok: false });
+  }
+});
+
+app.listen(7000);
+```
+
+</File>
+
+- **`createTransport` مرة واحدة** بره المسار، مش في كل طلب.
+- **`from`** لازم عنوان الخدمة تسمح بيه. مع Gmail غالباً نفس حساب الدخول، أو اسم متتحقق.
+- **الباسورد في `.env`** ومش في git. لو اتكتب في ملف واترفع، غيّره عند الخدمة.
+- **الـ `catch`** يرجّع 502 للزائر. فشل SMTP مش معناه إن Express يقع. تفاصيل كود الخطأ تتسجل عندك، ومتتبعتش للمستلم.
+
+<Checklist id="email-express" title="خلّصت الفصل لما" items={["تعمل transporter مرة واحدة من متغيرات البيئة", "تبعت من مسار async بـ await sendMail", "ترجع 502 لو الخدمة رفضت، من غير ما توقع العملية", "متكتبش SMTP_PASS في الكود"]} />
+
+<Quiz>
+<Q n={1} q="Nodemailer هنا سيرفر بريد؟">لأ. عميل SMTP جوه Express، بيسلّم الرسالة لسيرفر الخدمة.</Q>
+<Q n={2} q="sendMail رمى خطأ. تعمل إيه في المسار؟">تمسكه، تسجّله، وترد 502. متسيبش الرفض من غير await.</Q>
+</Quiz>
