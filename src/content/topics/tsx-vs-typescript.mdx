@@ -1,0 +1,22 @@
+---
+title: الـ tsx وحزمة TypeScript
+highlight: tsx
+subtitle: tsc · typecheck · esbuild · .tsx · strip types · enum
+description: الفرق بين حزمة typescript اللي بتدي أمر tsc، وحزمة tsx اللي بتشغّل ملفات TypeScript على Node من غير ما تفحص الأنواع.
+emoji: ▶️
+order: 27
+tags: [frontend, backend]
+note: الكود اتشرح على Node 26.8 وtypescript 7.0.2 وtsx 4.23.15. الأوامر بتتغير، فراجع الـ docs قبل ما تنسخ script على production.
+---
+
+المقال ده بيفك لبس اسمه بيتكرر: <Hl c="y">امتداد `.tsx`، وحزمة `typescript`، وحزمة `tsx` تلات حاجات مختلفة.</Hl>
+
+- **حزمة `typescript`:** بتدي أمر `tsc`. بيفحص الأنواع، ويقدر يطلّع JavaScript. مش بيشغّل البرنامج.
+- **حزمة `tsx`:** بتشغّل الملف على Node حالاً. مش بتفحص الأنواع.
+- **ملف `.tsx`:** TypeScript فيه JSX. ده امتداد، مش الحزمة.
+
+<Box type="story" icon="📝" title="المدرس واللي بيقرا بصوت عالي">
+
+`tsc` زي المدرس اللي بيصحح الورقة: يعلّم على الغلطة ويقف. `tsx` زي حد بيقرا الورقة بصوت عالي من غير تصحيح. لو مكتوب إن السن رقم والورقة فيها نص، القارئ هيكمل لحد ما العملية تقع وقت التنفيذ.
+
+</Box>

@@ -1,0 +1,76 @@
+---
+title: حزمة typescript — أمر tsc
+short: حزمة typescript
+order: 2
+label: فصل ٢
+badge: الحزمتين · فصل ٢
+en: tsc · noEmit · emit · TS2322 · strict
+keywords: فحص الأنواع · إخراج JavaScript · tsc مش بيشغّل
+goal: تعرف إن حزمة typescript بتدي tsc، وإنه بيمسك غلط الأنواع وبيطلّع JavaScript من غير ما يشغّل البرنامج.
+part: الحزمتين
+color: c2
+---
+
+## الحزمة بتدي مترجم
+
+`pnpm add -D typescript` بيثبت أمر واحد: `tsc`. النسخة اللي اتجرّبت هنا `7.0.2`.
+
+`tsc` بيعمل حاجتين، ومش بيعمل التالتة:
+
+- **بيفحص الأنواع** على `tsconfig.json`.
+- **يقدر يكتب JavaScript** في `dist` لو `noEmit` مش شغّال.
+- **مش بيشغّل** الملف. مفيش `console.log` هيظهر من `tsc` نفسه.
+
+## الفحص بيقف على الغلط
+
+الملف ده فيه نوع غلط: السن متعرّف `number` والقيمة نص.
+
+<File name="bad.ts">
+
+```ts
+const age: number = "٣٠";
+console.log(age.toFixed(0));
+```
+
+</File>
+
+`pnpm exec tsc --noEmit` وقف وطلع:
+
+```text
+bad.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.
+```
+
+السطر التاني متتنفّذش، لأن `tsc` مش برنامج تشغيل. `--noEmit` يعني افحص بس ومتكتبش ملفات.
+
+## الإخراج بيشيل النوع
+
+ملف سليم:
+
+<File name="src.ts">
+
+```ts
+export const n: number = 1;
+```
+
+</File>
+
+مع `outDir` قيمته `dist`، الأمر `tsc` كتب `dist/src.js` بالشكل ده:
+
+```js
+export const n = 1;
+```
+
+النوع `: number` اختفى. الملف الناتج JavaScript يتشغّل بعد كده بـ `node dist/src.js`.
+
+<Box type="tip" title="حط الحزمة في devDependencies">
+
+`tsc` أداة بناء وفحص، مش جزء من البرنامج وهو شغّال. بعد ما `dist` يطلع، السيرفر يشغّل JavaScript بـ `node` من غير ما حزمة `typescript` تكون موجودة.
+
+</Box>
+
+<Checklist id="tsxvsts-tsc" title="خلّصت الفصل لما" items={["تعرف إن حزمة `typescript` بتثبت `tsc`", "تشغّل `tsc --noEmit` وتقرا خطأ زي TS2322", "تفرّق بين الفحص من غير إخراج، والإخراج لـ `dist`", "تعرف إن `tsc` مش بيشغّل البرنامج"]} />
+
+<Quiz>
+<Q n={1} q="`tsc --noEmit` لقى TS2322. البرنامج اشتغل؟">لأ. الأمر بيفحص وبيوقف. التشغيل مش شغله.</Q>
+<Q n={2} q="ليه النوع `: number` مش موجود في `dist/src.js`؟">لأن `tsc` بيطلّع JavaScript، والأنواع بتتشال في الإخراج.</Q>
+</Quiz>

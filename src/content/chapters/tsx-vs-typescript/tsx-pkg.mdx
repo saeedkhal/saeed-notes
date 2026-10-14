@@ -1,0 +1,62 @@
+---
+title: حزمة tsx — تشغيل من غير فحص
+short: حزمة tsx
+order: 3
+label: فصل ٣
+badge: الحزمتين · فصل ٣
+en: esbuild · tsx watch · --import tsx · TypeError · .tsx
+keywords: تشغيل فوري · مفيش typecheck · JSX على Node · enum
+goal: تعرف إن حزمة tsx بتشغّل الملف على Node بسرعة، وإن غلط الأنواع يعدّي لحد ما يقع وقت التنفيذ.
+part: الحزمتين
+color: c3
+---
+
+## الحزمة بتشغّل
+
+`pnpm add -D tsx` بيثبت أمر `tsx`. النسخة اللي اتجرّبت `4.23.15`، ووصفها في الحزمة: Node متعزّز بـ esbuild عشان يحمّل TypeScript.
+
+اللي بيحصل جوه:
+
+- **esbuild يشيل الأنواع** ويحوّل الملف لـ JavaScript بسرعة.
+- **Node يشغّل** الناتج.
+- **مفيش فحص أنواع.** الحزمة مش محتاجة `typescript` عشان تشتغل، بس من غير `tsc` الغلط النوعي مش هيتصاد.
+
+أوامرها الأساسية: `tsx file.ts`، و`tsx watch file.ts` عشان يعيد التشغيل لما الملف يتغيّر، و`tsx --tsconfig` لو مسار الـ config مش الافتراضي. ينفع كمان `node --import tsx file.ts`.
+
+## نفس الملف الغلط بيعدّي
+
+على `bad.ts` من الفصل اللي فات، `pnpm exec tsx bad.ts` **مشتغلش الفحص**. الملف اشتغل، ووقع هنا:
+
+```text
+TypeError: age.toFixed is not a function
+```
+
+القيمة كانت النص `"٣٠"`، و`toFixed` مش موجودة على النص. `tsc` كان مسك الغلط قبل التنفيذ برسالة `TS2322`. `tsx` ساب الغلط يعدّي.
+
+<Hl c="o">سرعة `tsx` جاية من إنها مش بتعمل شغل `tsc`.</Hl>
+
+## ملف `.tsx` و`enum`
+
+Node 26 بيشيل أنواع TypeScript البسيطة من ملف `.ts` لوحده، من غير حزمة `tsx`. في حاجات لسه محتاجة الحزمة:
+
+- **الامتداد `.tsx`:** `node hi.tsx` طلّع `ERR_UNKNOWN_FILE_EXTENSION` للامتداد `.tsx`. `tsx hi.tsx` طبع الناتج عادي.
+- **الـ `enum`:** `node enum.ts` طلّع `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` وقال إن الـ enum مش مدعوم في وضع الشيل بس. `tsx enum.ts` طبع القيمة `s`.
+
+<File name="enum.ts">
+
+```ts
+enum Size { S = "s", M = "m" }
+console.log(Size.S);
+```
+
+</File>
+
+يعني Node لوحده مش بديل كامل لحزمة `tsx`، و`tsx` مش بديل لفحص `tsc`.
+
+<Checklist id="tsxvsts-tsx" title="خلّصت الفصل لما" items={["تشغّل ملف بـ `tsx` وتعرف إنها مش بتفحص الأنواع", "تشرح ليه `toFixed` وقع وقت التشغيل رغم إن `tsc` كان يمسكه قبل كده", "تعرف إن `.tsx` والـ `enum` مش بيشتغلوا بأمر `node` لوحده في الوضع ده", "تستخدم `tsx watch` لما عايز إعادة تشغيل مع الحفظ"]} />
+
+<Quiz>
+<Q n={1} q="`tsx` عدّى ملف فيه `number` والقيمة نص. ده معناه الأنواع سليمة؟">لأ. الحزمة مش بتفحص. الغلط ظهر بعدين كـ `TypeError` لما اتنده `toFixed`.</Q>
+<Q n={2} q="ليه `node hi.tsx` فشل و`tsx hi.tsx` نجح؟">Node 26 مش بيفهم امتداد `.tsx`. حزمة `tsx` بتحوّله وبعدين تسلّمه لـ Node.</Q>
+<Q n={3} q="`--tsconfig` في أمر `tsx` بيعمل typecheck؟">لأ. ده مسار ملف الإعداد للتحويل. الفحص لسه بأمر `tsc`.</Q>
+</Quiz>

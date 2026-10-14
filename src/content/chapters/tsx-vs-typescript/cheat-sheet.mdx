@@ -1,0 +1,35 @@
+---
+title: "Cheat Sheet: حزمة tsx وحزمة TypeScript"
+short: Cheat Sheet
+order: 5
+label: الآخر
+badge: الآخر
+en: tsc · tsx · noEmit · watch · .tsx · enum · TS2322
+keywords: الفرق في سطر
+goal: تفتكر مين بيفحص ومين بيشغّل، وإمتى تجمع الحزمتين.
+part: الاختيار
+color: dark
+---
+
+<Cheat items={[
+  ["`.tsx`", "امتداد ملف فيه JSX، مش حزمة"],
+  ["حزمة `typescript`", "بتدي `tsc`. بتفحص وبتطلّع JavaScript"],
+  ["حزمة `tsx`", "بتشغّل على Node عن طريق esbuild"],
+  ["`tsc --noEmit`", "فحص بس. مثال الغلط: TS2322"],
+  ["`tsc` مع `outDir`", "يكتب `dist` من غير الأنواع"],
+  ["`tsx file.ts`", "يشغّل حتى لو النوع غلط، ويقع وقت التنفيذ"],
+  ["`tsx watch`", "يعيد التشغيل لما الملف يتغيّر"],
+  ["`node --import tsx`", "نفس الحزمة من جوه Node"],
+  ["`.tsx` على `node` لوحده", "`ERR_UNKNOWN_FILE_EXTENSION`"],
+  ["`enum` على `node` لوحده", "`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`"],
+  ["الإنتاج", "`node dist/main.js`، والحزمتين devDependencies"],
+  ["الـ CI", "`tsc --noEmit` حتى لو التطوير بـ `tsx`"],
+]} />
+
+<Checklist id="tsxvsts-cheat" title="خلّصت المقال لما" items={["تفرّق بين الامتداد والحزمتين", "تشرح ليه `tsx` أسرع ومش بديل للفحص", "تجمع `dev` و`typecheck` و`build` في `package.json`"]} />
+
+<Quiz>
+<Q n={1} q="أمر واحد يفحص الأنواع من غير ما يكتب ملفات ومن غير ما يشغّل؟">`tsc --noEmit` من حزمة `typescript`.</Q>
+<Q n={2} q="عايز تشغّل `App.tsx` على Node 26. أمر `node` يكفي؟">لأ. الامتداد `.tsx` مش مفهوم. استخدم حزمة `tsx`.</Q>
+<Q n={3} q="السن `number` والقيمة نص. مين يمسك الغلط الأول؟">`tsc` برسالة TS2322. `tsx` هيشغّل لحد ما السطر يقع بـ `TypeError`.</Q>
+</Quiz>

@@ -1,0 +1,66 @@
+---
+title: إمتى تستخدم أنهي حزمة
+short: إمتى أنهي
+order: 4
+label: فصل ٤
+badge: الاختيار · فصل ٤
+en: devDependencies · typecheck · build · start · CI
+keywords: الاتنين مع بعض · dev · build · production
+goal: تحط typescript وtsx كل واحدة في الأمر اللي يليق بيها، ومتستبدلش فحص الأنواع بالتشغيل.
+part: الاختيار
+color: c4
+---
+
+## مش اختيار واحد
+
+الحزمتين مش بديل لبعض. الشغل المعتاد يجمعهم:
+
+| عايز إيه | الأمر | الحزمة |
+| --- | --- | --- |
+| تشغّل وأنت بتكتب | `tsx watch src/main.ts` | `tsx` |
+| تتأكد إن الأنواع سليمة | `tsc --noEmit` | `typescript` |
+| تطلّع `dist` للسيرفر | `tsc` | `typescript` |
+| تشغّل الناتج في production | `node dist/main.js` | Node بس |
+
+<File name="package.json">
+
+```json
+{
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "start": "node dist/main.js"
+  }
+}
+```
+
+</File>
+
+<Hl c="g">`dev` يسرّع الكتابة. `typecheck` و`build` هما اللي بيمنعوا غلط الأنواع من ما يوصل للسيرفر.</Hl>
+
+## فين تتحط الحزمة
+
+- **الاتنين `devDependencies`** لو الإنتاج بيشغّل `dist` بـ `node`.
+- **`tsx` تبقى dependency عادية** بس لو السيرفر نفسه بيشغّل ملفات `.ts` بأمر `tsx`. ده أثقل في أول تشغيل، وبرضه مش بيفحص أنواع.
+- **الـ CI يشغّل `typecheck`** حتى لو التطوير كله على `tsx`. محرر الكود بيعرض الغلط وانت بتكتب، بس ده مش خطوة في الـ pipeline.
+
+## إمتى متجيبش tsx
+
+- **ملف `.ts` بأنواع بتتشال بس**، وNode عندك بيشيلها لوحده: التشغيل ممكن من غير الحزمة. الفحص لسه محتاج `tsc`.
+- **مكتبة هتتنشر:** المستهلك عايز JavaScript وملفات `.d.ts` من `tsc`، مش أمر `tsx`.
+- **واجهة React:** المتصفح مش بيشغّل `tsx`. البناء هناك لـ Vite أو أداة تانية، و`tsc --noEmit` يفضل خطوة الفحص.
+
+<Box type="warn" title="التشغيل الناجح مش عقد">
+
+لو `tsx` خلّص من غير ما يقع، ده معناه إن JavaScript اشتغل. مش معناه إن `TS2322` مش موجود. الغلط النوعي يظهر لما السطر الغلط يتنفّذ، أو يفضل مستخبي لو السطر متعملش.
+
+</Box>
+
+<Checklist id="tsxvsts-when" title="خلّصت الفصل لما" items={["تحط `tsx` في سكربت `dev` و`tsc --noEmit` في `typecheck`", "تبني بـ `tsc` وتشغّل `dist` بـ `node` في production", "تخلي الحزمتين devDependencies لما السيرفر مش محتاج `tsx`", "تشغّل الفحص في الـ CI حتى لو المحرر بيوري الغلط"]} />
+
+<Quiz>
+<Q n={1} q="مشروع Node بيتنشر منه مجلد `dist`. `tsx` تتحط dependency عادية؟">لأ. خليها devDependency. الإنتاج يشغّل `node dist/main.js`.</Q>
+<Q n={2} q="الـ dev شغال بـ `tsx` ومفيش أخطاء في الطرفية. الأنواع مضمونة؟">لأ. لازم `tsc --noEmit` في التطوير أو في الـ CI.</Q>
+<Q n={3} q="مكتبة TypeScript هتتنزل عند الناس. تكتفي بـ `tsx`؟">لأ. انشر JavaScript وملفات الأنواع اللي `tsc` بيطلّعها.</Q>
+</Quiz>

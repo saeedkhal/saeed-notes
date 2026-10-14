@@ -1,0 +1,51 @@
+---
+title: تلات أسماء متشابهة
+short: اللبس
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: .tsx · typescript package · tsx package · JSX
+keywords: امتداد الملف · حزمة typescript · حزمة tsx
+goal: تفرّق بين امتداد الملف .tsx وحزمة typescript وحزمة tsx قبل ما تقارن أوامرهم.
+part: البداية
+color: c1
+---
+
+## الاسم مش الوظيفة
+
+الكلمة `tsx` بتيجي في تلات أماكن، وكل مكان معناه مختلف:
+
+| الاسم | ده إيه | بيعمل إيه |
+| --- | --- | --- |
+| `.tsx` | امتداد ملف | TypeScript مكتوب فيه JSX، زي زرار React |
+| `typescript` | حزمة على npm | بتثبت أمر `tsc` عشان الفحص والـ compile |
+| `tsx` | حزمة تانية على npm | بتشغّل `.ts` و`.tsx` على Node |
+
+<Hl c="y">تثبيت `typescript` مش بيدي أمر `tsx`، وتثبيت `tsx` مش بيفحص الأنواع.</Hl>
+
+## ملف `.tsx` مالوش دعوة بالحزمة
+
+الملف ده TypeScript عادي، بس مسموح فيه بـ JSX:
+
+<File name="Button.tsx">
+
+```tsx
+type Props = { label: string };
+
+export function Button({ label }: Props) {
+  return <button>{label}</button>;
+}
+```
+
+</File>
+
+عشان `tsc` يفهم السطر اللي فيه `<button>`، لازم `jsx` في `tsconfig.json`. ده إعداد في حزمة `typescript`، مش الحزمة التانية.
+
+ولو عايز **تشغّل** ملف `.tsx` بأمر `node` لوحده، Node 26 بيرفض الامتداد. ده اللي هنشوفه في فصل حزمة `tsx`.
+
+<Checklist id="tsxvsts-confusion" title="خلّصت الفصل لما" items={["تفرّق بين امتداد `.tsx` وحزمة `tsx`", "تعرف إن حزمة `typescript` بتدي `tsc` مش أمر تشغيل", "تعرف إن JSX في الملف محتاج إعداد `jsx` في الـ tsconfig"]} />
+
+<Quiz>
+<Q n={1} q="نزلت حزمة `typescript`. تقدر تشغّل `pnpm exec tsx file.ts`؟">لأ. أمر `tsx` من حزمة اسمها `tsx`، مش من حزمة `typescript`.</Q>
+<Q n={2} q="ملف `Button.tsx` معناه إيه؟">ملف TypeScript فيه JSX. الامتداد مش الحزمة اللي بتشغّل الملفات.</Q>
+</Quiz>
