@@ -1,0 +1,134 @@
+---
+title: من init لحد apply
+short: دورة الأوامر
+order: 3
+label: فصل ٣
+badge: التطبيق · فصل ٣
+en: terraform init · plan · apply · destroy · fmt · validate
+keywords: init · plan · apply · destroy · 1 to add · replace
+goal: تشغّل الدورة على ملف محلي، وتقرأ رموز الخطة، وتعرف إن مسح الملف بإيدك يخلّي الخطة تعمله تاني.
+part: التطبيق
+color: c3
+---
+
+## الدورة
+
+<Flow items={[{"t": "init", "s": "نزّل الـ provider", "c": 1}, "→", {"t": "plan", "s": "اعرض الفرق", "c": 2}, "→", {"t": "apply", "s": "نفّذ", "c": 3}, "→", {"t": "state", "s": "اكتب الدفتر", "c": 4}]} />
+
+`init` آمن تعيده. مبيمسحش الرسمة ولا الدفتر. لو غيّرت الـ provider أو الـ backend أو الموديول، شغّله تاني.
+
+## 🧪 Lab
+
+الفولدر فيه الملف ده. المتغير الافتراضي `hello from terraform`.
+
+<File name="main.tf">
+
+```hcl
+terraform {
+  required_providers {
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5"
+    }
+  }
+}
+
+variable "greeting" {
+  type        = string
+  description = "text written into the file"
+  default     = "hello from terraform"
+}
+
+resource "local_file" "note" {
+  filename = "${path.module}/hello.txt"
+  content  = "${var.greeting}\n"
+}
+
+output "path" {
+  value = local_file.note.filename
+}
+```
+
+</File>
+
+<File name="terminal">
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+</File>
+
+على 1.16.6 الناتج كان:
+
+- `init` ثبّت `hashicorp/local v2.9.1` وعمّل `.terraform.lock.hcl`.
+- `plan` قال `local_file.note will be created` وبعدين `Plan: 1 to add, 0 to change, 0 to destroy.`
+- `apply` كتب `hello.txt` فيه السطر `hello from terraform`، وطبَع `path = "./hello.txt"`.
+
+`apply` من غير ملف خطة محفوظ بيسألك توافق. `-auto-approve` يعدّي السؤال. على كلاود فيها حاجات شغالة، سيّب السؤال أو راجع خطة محفوظة.
+
+<Box type="warn" title="الخطة من غير -out مش عقد">
+
+الأمر نفسه بيكتب إن `plan` من غير `-out` مش ضمان إن `apply` هينفّذ نفس الأفعال لو الدنيا اتغيرت في النص. في الأتمتة: `terraform plan -out=tfplan` وبعدين `terraform apply tfplan`. تمرير الملف هو الموافقة، و`-auto-approve` بيتتجاهل في الحالة دي.
+
+</Box>
+
+## رموز الخطة
+
+| الرمز | المعنى |
+| --- | --- |
+| `+` | هيتخلق |
+| `~` | هيتعدّل في مكانه |
+| `-/+` | هيتمسح ويتخلق تاني |
+| `-` | هيتمسح |
+
+المعمل ده ورّى `+` و`-/+` و`-`. الرمز `~` يظهر لما الخاصية تتغير من غير ما المورد كله يتبدّل.
+
+## غيّرت النص
+
+<File name="terminal">
+
+```bash
+terraform apply -var 'greeting=hello again'
+```
+
+</File>
+
+الخطة قالت `local_file.note must be replaced` و`Plan: 1 to add, 0 to change, 1 to destroy.` المحتوى عند الـ provider ده بيجبر استبدال، مش تعديل في مكانه. الملف اتمسح واتكتب تاني، والسطر بقى `hello again`.
+
+<Hl c="o">مش كل تغيير استبدال. اقرأ الخطة. لو لقيت `-/+` على سيرفر، ده هدم وبناء، مش تعديل هادي.</Hl>
+
+## مسحت الملف بإيدك
+
+بعد ما `apply` خلّص، الملف اتمسح من الطرفية و`plan` اشتغل تاني. الدفتر لسه فاكر إن `local_file.note` موجود، والقرص فاضي، فالخطة رجعت `+ create` و`1 to add`.
+
+ده الانحراف: الواقع مش زي الدفتر. الفصل الجاي يكمل على الدفتر نفسه.
+
+## destroy
+
+`terraform destroy` خطة مسح لكل اللي في الدفتر. على المعمل: `Destroy complete! Resources: 1 destroyed.` و`hello.txt` اختفى.
+
+الملف `terraform.tfstate` و`terraform.tfstate.backup` فضلوا. المسح مسح المورد، ومسحش الدفتر من القرص.
+
+## fmt و validate
+
+<File name="terminal">
+
+```bash
+terraform fmt
+terraform validate
+```
+
+</File>
+
+`fmt` يرتّب الأقواس والمسافات. `validate` على الملف ده طبع `Success! The configuration is valid.` الاتنين قبل `plan` على أي تغيير هيروح للناس.
+
+<Checklist id="terraform-cycle" title="خلّصت الفصل لما" items={["تشغّل init ثم plan ثم apply على local_file", "تقرأ `1 to add` و`must be replaced`", "تحفظ الخطة بـ `-out` قبل apply في الأتمتة", "تعرف إن destroy يمسح المورد والدفتر يفضل ملف على القرص"]} />
+
+<Quiz>
+<Q n={1} q="init تاني هيمسح terraform.tfstate؟">لأ. init يجهّز الفولدر والـ provider. الدفتر يفضل.</Q>
+<Q n={2} q="plan قال 1 to add و 1 to destroy على نفس المورد. ده معناه إيه؟">استبدال: يتهدّم ويتخلق تاني. في المعمل ده حصل لما النص اتغير.</Q>
+<Q n={3} q="في CI ليه plan -out وبعدين apply على الملف؟">عشان اللي اتراجع هو اللي يتنفّذ، مش خطة جديدة اتعملت وقت التنفيذ.</Q>
+</Quiz>

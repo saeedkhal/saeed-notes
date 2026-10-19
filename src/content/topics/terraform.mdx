@@ -1,0 +1,18 @@
+---
+title: Terraform — البنية من ملف
+highlight: Terraform
+subtitle: init · plan · apply · state · module · tfvars
+description: إزاي Terraform يخلّي السيرفرات والملفات رسمة مكتوبة، وإزاي init وplan وapply يشتغلوا، وليه دفتر الـ state متترفعش على git، وإزاي تقسمه موديول.
+emoji: 🏗️
+order: 31
+tags: [devops]
+note: المعمل اتشغّل على Terraform 1.16.6 مع hashicorp/local 2.9.1. قفل الـ state على S3 بـ use_lockfile من 1.10، وdynamodb_table متعلم عليه deprecated في الدوكس. راجع صفحة الـ backend لو الإصدار اتغير.
+---
+
+Terraform في المقال ده <Hl c="y">دفتر المقاول</Hl>: الرسمة في ملفات، والتنفيذ بأمر، والدفتر فاكر إيه اللي اتبنى.
+
+<Box type="story" icon="🧱" title="المقاول والدفتر">
+
+الكونسول زي ما تبني الحيطة بإيدك وكل مرة الطوبة تطلع في حتة. الملف هو الرسمة. `plan` هو المعاينة قبل الشاكوش. `apply` هو التنفيذ. الـ `state` دفتر فيه رقم كل حيطة اتبنت، عشان المرة الجاية يعدّل الحيطة دي مش يبني واحدة جديدة جنبها.
+
+</Box>

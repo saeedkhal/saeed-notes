@@ -1,0 +1,102 @@
+---
+title: لما الملف يكبر
+short: الموديول
+order: 6
+label: فصل ٦
+badge: بعدها · فصل ٦
+en: module · source · path.module · path.root · for_each · count
+keywords: موديول محلي · عنوان module.note · for_each · count
+goal: تقسّم الرسمة لموديول محلي، وتعرف إن path.module فولدر الموديول، وتختار for_each لما الاسم ثابت.
+part: بعدها
+color: c1
+---
+
+## ليه موديول
+
+الفولدر اللي بتشغّل فيه `terraform` اسمه الـ root module. أول ما نفس بلوك الملف أو السيرفر يتكرر في مشروعين، انقله لفولدر واستدعِه. الموديول مش سيرفر. ده مجموعة بلوكات ليها مدخلات ومخرجات.
+
+<Hl c="u">انسَخ البلوك مرتين هتنسى تعدّل النسخة التانية. الموديول نسخة واحدة من الرسمة، والنداء يمرّر القيم.</Hl>
+
+## الاستدعاء
+
+الموديول اللي اتشغّل:
+
+<File name="modules/note/main.tf">
+
+```hcl
+variable "greeting" {
+  type = string
+}
+
+resource "local_file" "note" {
+  filename = "${path.module}/hello.txt"
+  content  = "${var.greeting}\n"
+}
+
+output "path" {
+  value = local_file.note.filename
+}
+```
+
+</File>
+
+<File name="main.tf">
+
+```hcl
+module "note" {
+  source   = "./modules/note"
+  greeting = "hello from a module"
+}
+
+output "path" {
+  value = module.note.path
+}
+```
+
+</File>
+
+`source` هنا مسار محلي. `init` يجهّز الموديول. `apply` كتب الملف في `modules/note/hello.txt` لأن `path.module` جوه الموديول هو فولدر الموديول، مش الفولدر اللي وقفت فيه. `path.root` هو فولدر الأمر.
+
+العنوان جوه الدفتر بقى `module.note.local_file.note`. المخرج اتقرأ `module.note.path`.
+
+<Box type="idea" title="موديول من الريجستري">
+
+`source` يقدر يبقى عنوان موديول منشور. اقرأ متغيراته ومخرجاته قبل ما تستدعيه، وثبّت إصدار في `source` زي ما بتثبّت نسخة الـ provider. موديول من غير إصدار مثبت ممكن يتغير تحتك في `init` الجاي.
+
+</Box>
+
+## count بيزحزح العناوين
+
+`count = 2` يعمل `local_file.note[0]` و`local_file.note[1]`. لو شلت العنصر الأول من القائمة، اللي كان `[1]` يبقى `[0]`. الخطة تشوف العنوان اتغير، فتهدد مورد وتخلّق واحد تاني حتى لو المحتوى نفسه.
+
+`for_each` على map العنوان فيه المفتاح: `local_file.note["a"]`. شلت المفتاح `b`، الخطة تمس `b` بس.
+
+<File name="main.tf">
+
+```hcl
+variable "notes" {
+  type = map(string)
+  default = {
+    a = "hello"
+    b = "again"
+  }
+}
+
+resource "local_file" "note" {
+  for_each = var.notes
+  filename = "${path.module}/${each.key}.txt"
+  content  = "${each.value}\n"
+}
+```
+
+</File>
+
+استخدم `count` لما العدد هو المعلومة، زي «نسختين متطابقين». استخدم `for_each` لما كل نسخة ليها اسم هيفضل ثابت لو شلت واحدة من النص.
+
+<Checklist id="terraform-module" title="خلّصت الفصل لما" items={["تستدعي موديول محلي بـ source وتمرّر المتغير", "تفرّق path.module عن path.root", "تقرأ المخرج بـ module.note.path", "تختار for_each لما شيل عنصر من النص ميفترضش يهد الباقي"]} />
+
+<Quiz>
+<Q n={1} q="path.module جوه modules/note هيكتب الملف فين؟">جوه `modules/note`، مش في فولدر الـ root. المعمل كتب `modules/note/hello.txt`.</Q>
+<Q n={2} q="إزاي الـ root يقرأ مخرج path من الموديول؟">`module.note.path`</Q>
+<Q n={3} q="ليه شيل أول عنصر في count ممكن يهد الباقي؟">لأن العناوين أرقام. اللي بعد المحذوف بياخد رقم أصغر، والخطة تشوفه مورد جديد.</Q>
+</Quiz>

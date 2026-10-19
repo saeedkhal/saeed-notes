@@ -1,0 +1,43 @@
+---
+title: "Cheat Sheet: Terraform"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: init · plan -out · apply · state · use_lockfile · for_each
+keywords: الدورة · الدفتر · القفل · المتغيرات · الموديول
+goal: تفتكر أمر الدورة، وإيه اللي يتحط في git، ومين يكسب في المتغيرات، وامتى for_each.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["الدور", "رسمة في `.tf`، والـ provider يكلّم الخدمة"],
+  ["أول أمر", "`terraform init`، وتعيده لو الـ provider أو الـ backend اتغير"],
+  ["القفل في git", "`.terraform.lock.hcl` أيوه، وفولدر `.terraform/` لأ"],
+  ["قبل الخطة", "`terraform fmt` وبعدين `terraform validate`"],
+  ["المعاينة", "`terraform plan` يطبع + و~ و-/+ و-"],
+  ["التنفيذ", "`terraform apply`، وفي CI `plan -out=tfplan` ثم `apply tfplan`"],
+  ["-auto-approve", "يعدّي السؤال. بيتتجاهل لو مدّيت ملف خطة"],
+  ["استبدال", "`-/+` و`must be replaced` يعني هدم وبناء"],
+  ["المسح", "`terraform destroy` يمسح الموارد، وملف الـ state يفضل"],
+  ["الدفتر", "`terraform.tfstate` رابط المعرّفات. متعدّلوش بإيدك"],
+  ["سر", "`sensitive` يخبي الطرفية. القيمة تفضل في الـ state"],
+  ["git", "امنع `*.tfstate` و`*.tfstate.*` و`*.tfvars`"],
+  ["قفل بعيد", "backend `s3` مع `use_lockfile = true` من 1.10"],
+  ["DynamoDB", "`dynamodb_table` deprecated. سيّبه بس وقت النقل"],
+  ["ترتيب القيم", "default، ثم `TF_VAR_`، ثم `terraform.tfvars`، ثم `*.auto.tfvars`، ثم `-var`"],
+  ["local", "حساب جوه الملف. `local.name` مش `var.name`"],
+  ["الموديول", "`module \"note\"` و`source`، والمخرج `module.note.path`"],
+  ["path.module", "فولدر البلوك. `path.root` فولدر الأمر"],
+  ["أسماء ثابتة", "`for_each` على map. `count` بيزحزح الأرقام"],
+  ["انحراف", "مسح من الكونسول والرسمة لسه طالبه يخلّي الخطة `create`"],
+]} />
+
+<Checklist id="terraform-cheat" title="خلّصت الموضوع لما" items={["تشغّل init وplan وapply على فولدر صغير", "تقفل الـ state المشترك ومتطلّعوش في git", "تمرّر القيم بالترتيب الصح وتقسم التكرار موديول"]} />
+
+<Quiz>
+<Q n={1} q="إيه اللي يتحط في git: الـ lock ولا الـ state؟">ملف `.terraform.lock.hcl`. الـ state لأ.</Q>
+<Q n={2} q="خطة فيها -/+ على سيرفر إنتاج. تعمل apply على طول؟">اقرأها الأول. الرمز ده استبدال، مش تعديل في مكانه.</Q>
+<Q n={3} q="عايز نسختين بأسماء a وb وممكن تشيل واحدة. count ولا for_each؟">`for_each`، عشان العنوان بالمفتاح ومسح واحد ميهزش التاني.</Q>
+</Quiz>

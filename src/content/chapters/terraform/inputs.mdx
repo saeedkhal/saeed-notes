@@ -1,0 +1,110 @@
+---
+title: المتغيرات والمخرجات
+short: المتغيرات
+order: 5
+label: فصل ٥
+badge: التطبيق · فصل ٥
+en: variable · tfvars · TF_VAR_ · auto.tfvars · output · local
+keywords: ترتيب القيم · tfvars · علم -var · local
+goal: تعرف مين اللي يكسب لو نفس المتغير جاي من البيئة ومن ملف ومن علم -var، وتطلع مخرج من غير ما تكرر النص.
+part: التطبيق
+color: c5
+---
+
+## المتغير
+
+<File name="variables.tf">
+
+```hcl
+variable "greeting" {
+  type        = string
+  description = "text written into the file"
+  default     = "hello from terraform"
+}
+```
+
+</File>
+
+`default` يشتغل لو محدش مدّ قيمة. من غيره، `plan` هيقف ويسأل، أو يفشل لو شغّلت `-input=false` في CI.
+
+## مين اللي يكسب
+
+نفس المتغير اتقاس على 1.16.6. اللي تحت يكسب اللي فوقه:
+
+1. `default` جوه البلوك.
+2. متغير بيئة اسمه `TF_VAR_greeting`.
+3. ملف `terraform.tfvars`.
+4. أي ملف `*.auto.tfvars`، وبالترتيب الأبجدي لو أكتر من ملف.
+5. علم `-var` و`-var-file`. آخر علم في الأمر يكسب.
+
+اللي ظهر في التشغيل: `terraform.tfvars` غطّى البيئة، و`z.auto.tfvars` غطّى `terraform.tfvars`، و`-var 'greeting=from-flag'` غطّى الاتنين.
+
+<Hl c="b">متفتكرش إن ملف tfvars دايمًا آخر كلمة. علم الأمر أقوى، وملف auto أقوى من terraform.tfvars.</Hl>
+
+<File name="terminal">
+
+```bash
+export TF_VAR_greeting="from-env"
+terraform apply -var 'greeting=from-flag'
+```
+
+</File>
+
+في المثال ده اللي هيتكتب في الملف هو `from-flag`.
+
+<Box type="warn" title="متحطّش السر في terraform.tfvars وتسيبه في git">
+
+الملف ده أول حتة الناس بتحط فيها كلمة سر الداتابيز. إمّا تتجاهله، أو تسيّب مثال باسم `example.tfvars` من غير قيم حقيقية، والقيمة الحقيقية تيجي من البيئة في CI.
+
+</Box>
+
+## sensitive يخبي الواجهة
+
+<File name="variables.tf">
+
+```hcl
+variable "greeting" {
+  type      = string
+  sensitive = true
+}
+
+output "greeting" {
+  value     = var.greeting
+  sensitive = true
+}
+```
+
+</File>
+
+الخطة طبعت `(sensitive value)`، وبعد `apply` المخرج اتطبع بكلمة sensitive بين قوسين زاوية. فتح `terraform.tfstate` لقى `secret-value` جوه `outputs` ومعاها `"sensitive": true`. العلامة للعرض. الفصل السابق يحط الملف ده بره git.
+
+## local للمكرر
+
+<File name="locals.tf">
+
+```hcl
+locals {
+  filename = "${path.module}/hello.txt"
+}
+
+resource "local_file" "note" {
+  filename = local.filename
+  content  = "${var.greeting}\n"
+}
+```
+
+</File>
+
+`local` مش مدخل من بره. حساب جوه الملف عشان متكررش المسار في المورد والمخرج. الإشارة `local.filename` من غير `var`.
+
+## المخرج عقد بين الفولدرات
+
+`output` هو اللي الموديول التاني أو سكربت CI يقرأه. في المعمل، `path` طبع مكان `hello.txt`. متطلّعش كل حقول المورد. طلّع اللي المستهلك محتاجه.
+
+<Checklist id="terraform-inputs" title="خلّصت الفصل لما" items={["ترتّب default ثم TF_VAR_ ثم terraform.tfvars ثم auto.tfvars ثم -var", "تسيب أسرار tfvars بره git", "تعلّم السر sensitive وتعرف إن الدفتر لسه فيه القيمة", "تستخدم local للتكرار وoutput للعقد"]} />
+
+<Quiz>
+<Q n={1} q="فيه terraform.tfvars وفيه -var بنفس الاسم. مين يكسب؟">علم `-var`.</Q>
+<Q n={2} q="ملف z.auto.tfvars وملف terraform.tfvars. مين يكسب؟">`z.auto.tfvars`. ملفات auto بعد terraform.tfvars.</Q>
+<Q n={3} q="output حاطط sensitive. القيمة مش في الدفتر؟">لأ. الطرفية بس اللي بتخبيها. الدفتر فيه النص.</Q>
+</Quiz>

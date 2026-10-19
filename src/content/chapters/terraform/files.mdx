@@ -1,0 +1,98 @@
+---
+title: البلوكات جوه الملف
+short: البلوكات
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: resource · variable · output · required_providers · address
+keywords: .tf · عنوان المورد · required_providers · lock
+goal: تقرأ ملف Terraform وتعرف نوع المورد من اسمه المحلي، وتعرف إن init بيثبت النسخة في ملف القفل.
+part: البداية
+color: c2
+---
+
+## كل ملفات tf بتتلم
+
+Terraform يقرا كل ملف اسمه ينتهي بـ `.tf` في الفولدر. ترتيب الملفات مش ترتيب تنفيذ. تقدر تقسّم `main.tf` و`variables.tf` و`outputs.tf`، والأداة تشوفهم كل واحد.
+
+<Hl c="g">الاسم المحلي جوّه البلوك هو عنوانك. اسم الملف مجرد تنظيم.</Hl>
+
+## بلوك terraform
+
+ده بيقول أنهي مترجمين مسموح بيهم، وبأي مدى إصدارات.
+
+<File name="versions.tf">
+
+```hcl
+terraform {
+  required_providers {
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5"
+    }
+  }
+}
+```
+
+</File>
+
+`source` عنوان الـ provider في الريجستري. `~> 2.5` يعني من 2.5 لحد قبل 3.0. على التشغيل ده `init` نزّل **2.9.1** وكتب الاختيار في `.terraform.lock.hcl`.
+
+<Box type="tip" title="ملف القفل يتحط في git">
+
+`.terraform.lock.hcl` يثبت النسخ اللي `init` اختارها، عشان زميلك مينزّلش نسخة تانية بكرة. فولدر `.terraform/` كاش، ومتتحطّش في git.
+
+</Box>
+
+## بلوك resource
+
+سطرين الاسم: الأول نوع المورد عند الـ provider، والتاني اسمك أنت.
+
+<File name="main.tf">
+
+```hcl
+resource "local_file" "note" {
+  filename = "${path.module}/hello.txt"
+  content  = "${var.greeting}\n"
+}
+```
+
+</File>
+
+العنوان يبقى `local_file.note`. `path.module` فولدر الملف اللي فيه البلوك. `var.greeting` قيمة متغير هنعرفه في فصل لوحده.
+
+لو كتبت المورد من غير `file_permission`، خطة النسخة دي طلعت الصلاحية الافتراضية `0777`. على ملف تجربة ده عادي. على ملف فيه سر، حط `file_permission` بنفسك.
+
+## المتغير والمخرج
+
+<File name="variables.tf">
+
+```hcl
+variable "greeting" {
+  type        = string
+  description = "text written into the file"
+  default     = "hello from terraform"
+}
+
+output "path" {
+  value = local_file.note.filename
+}
+```
+
+</File>
+
+`variable` مدخل. `output` حاجة تطبعها بعد `apply` وتقدر تمرّرها لموديول تاني. الوصف للناس، والنوع عشان قيمة غلط تتقفش قبل التنفيذ.
+
+<Box type="idea" title="data مش resource">
+
+`data` يقرا حاجة موجودة أصلًا، زي ملف أو سيرفر اتعمل بره الرسمة. `resource` حاجة Terraform مسؤول يخلّقها ويعدّلها ويمسحها. لو وصفت سيرفر قديم كـ `resource` بالغلط، الخطة ممكن تعرض إنها هتغيّره أو تهدّه.
+
+</Box>
+
+<Checklist id="terraform-files" title="خلّصت الفصل لما" items={["تقرأ عنوان `local_file.note` من نوع المورد والاسم المحلي", "تحط `.terraform.lock.hcl` في git وتسيب فولدر `.terraform`", "تفرّق `variable` عن `output` وعن `data`"]} />
+
+<Quiz>
+<Q n={1} q="عندي main.tf وvariables.tf. أنهي واحد يتنفّذ الأول؟">مفيش ترتيب ملفات. Terraform يلم كل `.tf` في الفولدر.</Q>
+<Q n={2} q="إيه عنوان المورد اللي نوعه local_file واسمه note؟">`local_file.note`</Q>
+<Q n={3} q="ليه ملف القفل في git والكاش لأ؟">القفل يثبت نسخة الـ provider. `.terraform/` يتنزّل تاني بـ init.</Q>
+</Quiz>
