@@ -1,0 +1,82 @@
+---
+title: التقييم من ١٠٠ — والقرار
+short: التقييم
+order: 4
+label: فصل ٤
+badge: القرار · فصل ٤
+en: Scoring Base UI vs React Aria vs Radix vs rc-* for a custom design system
+keywords: styling · animation · a11y · RTL · تغطية · DX · مستقبل
+goal: تقارن الأربعة بأرقام على ٧ معايير، وتطلع بقرار واضح حسب احتياجك.
+part: القرار
+color: c4
+---
+
+## الأربعة ينفعوا… بس المجهود مختلف
+
+تقدر تطبّق الـ design system والـ animation بتاعتك على الأربعة. الفرق إن rc-\* <Hl c="o">مش headless بجد</Hl>: الـ animation ماشية بـ `rc-motion` اللي بيعتمد على classes بأسماء معينة (`motionName`)، وشكل الـ DOM ثابت، فانت بتعمل override بدل ما تبني من الأول.
+
+## جدول التقييم (من ١٠٠)
+
+| المعيار | Base UI | React Aria | Radix | rc-\* |
+| --- | --- | --- | --- | --- |
+| حرية الـ styling والـ design system | 95 | 95 | 90 | 55 |
+| التحكم في الـ animation | 92 | 88 | 88 | 55 |
+| الـ Accessibility | 88 | 98 | 88 | 60 |
+| الـ RTL والـ i18n | 82 | 97 | 78 | 75 |
+| تغطية الـ components | 82 | 90 | 75 | 92 |
+| الـ DX وسهولة الاستخدام | 90 | 72 | 88 | 70 |
+| الـ ecosystem ومستقبل الصيانة | 90 | 88 | 70 | 70 |
+| **الإجمالي** | **88** | **87** | **80** | **60** |
+
+<Box type="warn" title="ده رأي، مش benchmark">
+
+الأرقام دي تقديري الشخصي حسب احتياجاتي (عربي، RTL، design system خاص). لو أولوياتك مختلفة، الترتيب ممكن يتغير.
+
+</Box>
+
+## تعليق على كل واحدة
+
+<Grid2>
+<Card title="Base UI — 88" c={1}>
+
+أحسن توازن. API نضيف، و animation معمولة كويس (`data-starting-style` و `--transform-origin`)، ووراها فريق نشط و shadcn. **ضعفها:** لسه جديدة، وفيه components ناقصة أو أبسط من React Aria.
+
+</Card>
+<Card title="React Aria — 87" c={2}>
+
+أقوى واحدة تقنيًا في الـ a11y والـ RTL والتواريخ والـ forms المعقدة. **بتخسر** في الـ DX لأنها verbose والـ learning curve عالي.
+
+</Card>
+<Card title="Radix — 80" c={3}>
+
+ناضجة ومجرّبة في production. بس التطوير أبطأ لأن الصناع ركزوا على Base UI، والـ RTL أضعف. لمشروع جديد، مفيش سبب قوي تختارها بدل Base UI.
+
+</Card>
+<Card title="rc-* — 60" c={4}>
+
+قوتها الوحيدة: components تقيلة جاهزة (TreeSelect، Cascader، virtual select). كأساس لـ design system خاص هتتعب، وهتفضل شبه antd.
+
+</Card>
+</Grid2>
+
+## القرار
+
+<Flow items={[{t:"عربي و RTL؟",s:"forms وتواريخ كتير",c:2},"→",{t:"React Aria",c:2}]} />
+
+<Flow items={[{t:"سرعة و ecosystem؟",s:"RTL احتياجه بسيط",c:1},"→",{t:"Base UI",c:1}]} />
+
+<Flow items={[{t:"Hybrid",s:"Base UI أساس",c:3},"→",{t:"+ React Aria",s:"DatePicker / Calendar",c:3},"→",{t:"+ rc-*",s:"لو component تقيل بس",c:4}]} />
+
+<Box type="idea" title="لو هتختار واحدة بس">
+
+<Hl c="y">Base UI كـ default</Hl>، وكل ما احتياجك للعربي والـ a11y يزيد، قرّب أكتر من **React Aria**.
+
+</Box>
+
+<Checklist id="headless-ui-w4" title="خلّصت الفصل لما" items={["تعرف ليه rc-* خدت أقل تقييم", "تعرف في أنهي معايير React Aria بتكسب وفي أنهي بتخسر", "تختار الأساس المناسب لمشروعك الجاي", "تعرف إن الأرقام رأي يتغير حسب أولوياتك"]} />
+
+<Quiz>
+<Q n={1} q="Base UI و React Aria قريبين جدًا في الإجمالي، إيه اللي يرجّح واحدة؟">لو العربي و RTL والتواريخ والـ a11y أولوية، React Aria. لو السرعة والـ DX والـ ecosystem أولوية، Base UI.</Q>
+<Q n={2} q="المعيار الوحيد اللي rc-* كسبت فيه؟">تغطية الـ components (92)، لأن فيها components تقيلة جاهزة زي TreeSelect و Cascader.</Q>
+<Q n={3} q='ليه Radix نزلت في "مستقبل الصيانة"؟'>لأن نفس الصناع ركزوا على Base UI، فالتطوير في Radix بقى أبطأ.</Q>
+</Quiz>

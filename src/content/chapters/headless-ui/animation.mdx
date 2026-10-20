@@ -1,0 +1,162 @@
+---
+title: الـ Animation بتاعتك — مش بتاعة المكتبة
+short: الـ Animation
+order: 3
+label: فصل ٣
+badge: الحركة · فصل ٣
+en: data-starting-style · data-ending-style · data-state · data-entering · keepMounted · forceMount · --transform-origin · prefers-reduced-motion
+keywords: exit animation · data attributes · modal · drawer · select · toast · motion tokens
+goal: تتحكم في حركة الـ modal والـ drawer والـ select والـ toast بـ CSS بتاعك، وتخلي الـ lib مرنة للي بيستخدمها.
+part: الاختيار
+color: c3
+---
+
+## الـ headless مابيجيبش animation أصلًا
+
+Base UI و Radix و React Aria <Hl c="y">مابيجيبوش أي animation خالص</Hl>. كل اللي بيعملوه إنهم يقولولك الـ component في أنهي حالة: بيفتح، مفتوح، بيقفل. وانت تحرّك زي ما انت عايز، بـ CSS أو Motion أو أي حاجة.
+
+## المشكلة الحقيقية: الـ exit animation
+
+في React، لو الـ component اتشال من الـ DOM فورًا، مفيش وقت يعمل fade out.
+
+<Box type="story" icon="🚪" title="البواب">
+
+انت عايز تقفل الباب بهدوء، بس البواب (React) بيشيل الباب كله من مكانه أول ما تقول "اقفل". المكتبات دي بتقول للبواب: **"استنى الباب يتقفل الأول، وبعدين شيله."**
+
+</Box>
+
+<Flow items={[{t:"open=true",s:"العنصر يتركب",c:1},"→",{t:"starting-style",s:"أول frame",c:2},"→",{t:"open",s:"الحالة العادية",c:3},"→",{t:"ending-style",s:"الحركة شغالة",c:4},"→",{t:"unmount",s:"بعد ما تخلص",c:5}]} />
+
+## كل مكتبة بتعرّفك الحالة إزاي
+
+| المكتبة | الـ attributes | للـ JS animation (Motion) |
+| --- | --- | --- |
+| **Base UI** | `data-open` / `data-closed`، و `data-starting-style` / `data-ending-style` | `keepMounted` و `render` prop |
+| **Radix** | `data-state="open"` / `"closed"` | `forceMount` |
+| **React Aria** | `data-entering` / `data-exiting` | render props `isEntering` / `isExiting` |
+
+<Box type="tip" title="راجع الـ docs">
+
+أسماء الـ attributes ممكن تتغير بين الإصدارات، فراجع الـ docs بتاعة نسختك.
+
+</Box>
+
+## Modal بـ CSS بس (Base UI)
+
+```css
+.dialog-popup {
+  transition:
+    opacity var(--motion-duration) var(--motion-ease),
+    transform var(--motion-duration) var(--motion-ease);
+}
+
+/* أول frame وهو داخل + وهو خارج = نفس الشكل المخفي */
+.dialog-popup[data-starting-style],
+.dialog-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+```
+
+## Drawer مع RTL
+
+نفس الفكرة، بس بدل `scale` بنحرّك من الجنب، ونعكس الاتجاه في العربي:
+
+```css
+.drawer-popup[data-starting-style],
+.drawer-popup[data-ending-style] {
+  transform: translateX(100%);
+}
+
+[dir="rtl"] .drawer-popup[data-starting-style],
+[dir="rtl"] .drawer-popup[data-ending-style] {
+  transform: translateX(-100%);
+}
+```
+
+## الـ Select والـ dropdowns
+
+الـ popup بياخد `data-side` (top أو bottom)، و Base UI بتديك `--transform-origin`، فالـ scale بيطلع من ناحية الـ trigger بالظبط:
+
+```css
+.select-popup {
+  transform-origin: var(--transform-origin);
+  transition: opacity 150ms, transform 150ms;
+}
+.select-popup[data-starting-style],
+.select-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.95);
+}
+```
+
+<MotionDemo kind="select" title="جرّب: select بيطلع من ناحية الـ trigger" />
+
+## الـ Toast
+
+Base UI فيها Toast headless كمان، وبتديك CSS variables للـ swipe والـ stacking، وانت تكتب الحركة.
+
+<Box type="warn" title="Sonner وأخواتها">
+
+لو استخدمت Sonner بدلها، هتبقى شبه محكوم بالـ animation بتاعتها، وده بالظبط اللي انت مش عايزه.
+
+</Box>
+
+<MotionDemo kind="toast" title="جرّب: toast بحركة بتاعتك" />
+
+## خلّي الـ lib مرنة للي بيستخدمها
+
+### ١. Motion tokens كـ CSS variables
+
+```css
+:root {
+  --motion-duration-fast: 120ms;
+  --motion-duration: 200ms;
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+```
+
+أي مشروع يغيّر السرعة من غير ما يلمس الكود.
+
+### ٢. سيب الـ data attributes ظاهرة
+
+ماتخبيهاش ورا classes بتاعتك، كده المستخدم يعمل override للحركة بـ CSS عادي.
+
+### ٣. ادعم reduced motion من جوه الـ lib
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration: 0ms;
+    --motion-duration-fast: 0ms;
+  }
+}
+```
+
+### ٤. الـ default يبقى CSS transitions
+
+<Hl c="g">أخف ومن غير dependency.</Hl> ولو حد عايز spring أو gestures (زي سحب الـ drawer)، يستخدم Motion عن طريق `render` prop. ماتحطش Motion جوه الـ lib نفسها، عشان ماتجبرش كل اللي بيستخدمها ياخدها.
+
+```tsx
+// المستخدم اللي عايز Motion يجيبها بنفسه
+<Dialog.Popup
+  keepMounted
+  render={(props, state) => (
+    <motion.div {...props} animate={{ opacity: state.open ? 1 : 0 }} />
+  )}
+/>
+```
+
+<Box type="idea" title="الخلاصة">
+
+مع Base UI أو React Aria مفيش حاجة اسمها "animation المكتبة". كل الحركة بتاعتك انت، والـ lib بس بتديك الـ hooks اللي تربط عليها.
+
+</Box>
+
+<Checklist id="headless-ui-w3" title="خلّصت الفصل لما" items={["تفهم ليه الـ exit animation محتاجة مساعدة من المكتبة", "تكتب modal و drawer بـ `data-starting-style` و `data-ending-style`", "تعكس الـ drawer في RTL", "تستخدم `--transform-origin` في الـ select", "تحط motion tokens و reduced motion في الـ lib"]} />
+
+<Quiz>
+<Q n={1} q="ليه الـ fade out صعب في React من غير مساعدة؟">لأن الـ component بيتشال من الـ DOM فورًا لما الحالة تتغير، فمفيش عنصر يتحرك. المكتبة بتأخّر الـ unmount لحد ما الـ transition يخلص.</Q>
+<Q n={2} q="ليه منحطش Motion جوه الـ lib؟">عشان ماتجبرش كل مستخدم ياخد dependency تقيلة. الـ default يبقى CSS، واللي عايز Motion يستخدمها بـ `render` prop.</Q>
+<Q n={3} q="إزاي المستخدم يبطّأ كل الحركات في مشروعه؟">يغيّر `--motion-duration` في الـ `:root` بتاعه، من غير ما يلمس كود الـ lib.</Q>
+</Quiz>

@@ -1,0 +1,38 @@
+---
+title: أبني الـ Component Library بتاعتي على أنهي Headless UI؟
+highlight: Headless UI
+subtitle: Base UI · React Aria · Radix · rc-* · tsdown · Tailwind + cva · Storybook · Animation
+description: لو بتعرف React وعايز تبني component library بالـ design system والـ animation بتوعك، تختار أنهي أساس؟ مقارنة بين Base UI و React Aria و Radix و rc-* بتقييم من ١٠٠، وإزاي تتحكم في حركة الـ modal والـ drawer والـ toast والـ select من غير ما تبقى محكوم بمكتبة.
+emoji: 🧩
+order: 33.7
+tags: [frontend]
+note: ملخص نقاش بأسلوبي (أكتوبر 2026). التقييمات رأيي الشخصي حسب احتياجاتي (عربي و RTL و design system خاص)، مش benchmark رسمي. المكتبات دي بتتحدّث بسرعة، فراجع الـ docs الرسمية لأسماء الـ props والـ attributes قبل ما تعتمد عليها.
+---
+
+السؤال اللي بدأ كل ده: <Hl c="y">أنا بعرف React، عايز أبني الـ component library بتاعتي، أستخدم إيه؟</Hl> الإجابة مش مكتبة واحدة، دي طبقات: أساس للـ behavior، و styling، و build، و docs، و animation.
+
+<Box type="story" icon="🏗️" title="تشبيه المذكرة كلها: عمارة على المحارة">
+
+الـ **headless library** زي عمارة متسلّمة **على المحارة**: الأساسات والسباكة والكهربا (الـ accessibility والكيبورد والـ focus) متعملة صح ومتختبرة.
+
+- انت اللي بتختار الدهان والسيراميك والإضاءة (الـ design system).
+- وانت اللي بتختار الباب بيتفتح إزاي، بهدوء ولا بسرعة (الـ animation).
+
+أما مكتبة زي **rc-\*** فهي شقة **متشطبة**: أسرع تسكن فيها، بس لو عايز تغيّر الديكور هتكسّر وتعيد.
+
+</Box>
+
+<Box type="idea" title="هتطلع من المذكرة بإيه؟">
+
+- الـ stack الكامل لبناء lib: Base UI أو React Aria، Tailwind و `cva`، `tsdown`، Storybook، Vitest، Changesets.
+- الفرق الحقيقي بين Base UI و React Aria و Radix و rc-\* ومتى تختار كل واحدة.
+- إزاي تكتب animation بتاعتك للـ modal والـ drawer والـ select والـ toast بـ CSS بس.
+- جدول تقييم من ١٠٠ يحسم القرار.
+
+</Box>
+
+<Box type="tip" title="قبل ما تبدأ">
+
+المذكرة دي بتكمّل [Motion UI](../motion-ui/) (الـ API بتاع الـ animated components) و [shadcn Registry](../shadcn-registry/) (إزاي توزّع الـ components).
+
+</Box>

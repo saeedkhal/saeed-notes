@@ -1,0 +1,62 @@
+---
+title: "Cheat Sheet: Headless UI في صفحة"
+short: Cheat Sheet
+order: 5
+label: الآخر
+badge: الآخر
+en: One-page recall for choosing a headless base and owning your animation
+keywords: cheatsheet · stack · مكتبات · animation · تقييم
+goal: تفتكر الـ stack والاختيار والـ animation والتقييم من غير ما ترجع للفصول.
+part: القرار
+color: dark
+---
+
+## الـ Stack
+
+<Cheat items={[
+  ["npm ولا registry؟", "npm للـ versioning المركزي · shadcn registry لنفسك أو لتيم صغير"],
+  ["Behavior و a11y", "Base UI (default) · React Aria (RTL و تواريخ)"],
+  ["Styling", "Tailwind v4 + CSS variables · cva · tailwind-merge + clsx"],
+  ["Build", "tsdown (ESM + CJS + d.ts + unbundle) · أو Vite library mode + vite-plugin-dts"],
+  ["react", "peerDependencies، مش bundle"],
+  ["Docs", "Storybook + addon-a11y + interaction tests"],
+  ["Tests", "Vitest + Testing Library · Chromatic أو Playwright screenshots"],
+  ["نشر", "pnpm workspaces + Turborepo · Changesets · GitHub Actions"],
+]} />
+
+## المكتبات
+
+<Cheat items={[
+  ["Base UI", "headless بجد · render prop · shadcn بيستخدمها · لسه جديدة"],
+  ["React Aria", "أقوى a11y و RTL و date picker · verbose و bundle أكبر"],
+  ["Radix", "ناضجة · تطوير أبطأ · RTL أضعف"],
+  ["rc-*", "مش headless · rc-motion · استخدمها لـ TreeSelect أو Cascader بس"],
+  ["جداول و lists طويلة", "TanStack Table + TanStack Virtual"],
+  ["Hybrid", "Base UI أساس + DatePicker من React Aria · API واحد موحّد"],
+]} />
+
+## الـ Animation
+
+<Cheat items={[
+  ["Base UI", "data-starting-style · data-ending-style · keepMounted · --transform-origin"],
+  ["Radix", "data-state=open/closed · forceMount"],
+  ["React Aria", "data-entering · data-exiting · isEntering / isExiting"],
+  ["Drawer في RTL", "[dir=rtl] اعكس translateX"],
+  ["tokens", "--motion-duration و --motion-ease كـ CSS variables"],
+  ["reduced motion", "@media (prefers-reduced-motion: reduce) → duration 0"],
+  ["Motion", "مش جوه الـ lib · المستخدم يجيبها بـ render prop"],
+  ["Toast", "Base UI Toast headless · Sonner هتحكمك بحركتها"],
+]} />
+
+## التقييم من ١٠٠
+
+| المعيار | Base UI | React Aria | Radix | rc-\* |
+| --- | --- | --- | --- | --- |
+| حرية الـ styling والـ design system | 95 | 95 | 90 | 55 |
+| التحكم في الـ animation | 92 | 88 | 88 | 55 |
+| الـ Accessibility | 88 | 98 | 88 | 60 |
+| الـ RTL والـ i18n | 82 | 97 | 78 | 75 |
+| تغطية الـ components | 82 | 90 | 75 | 92 |
+| الـ DX وسهولة الاستخدام | 90 | 72 | 88 | 70 |
+| الـ ecosystem ومستقبل الصيانة | 90 | 88 | 70 | 70 |
+| **الإجمالي** | **88** | **87** | **80** | **60** |

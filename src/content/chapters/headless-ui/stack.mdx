@@ -1,0 +1,131 @@
+---
+title: الـ Stack الكامل لبناء Component Library
+short: الـ Stack
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: npm package · shadcn registry · Base UI · Tailwind · cva · tsdown · Storybook · Vitest · Changesets
+keywords: npm ولا registry · behavior · styling · build · docs · نشر
+goal: تعرف الطبقات اللي محتاجها عشان تبني lib، والأداة المناسبة لكل طبقة.
+part: البداية
+color: c1
+---
+
+## أول سؤال: npm package ولا registry؟
+
+قبل ما تختار أي أداة، حدد <Hl c="y">الـ lib هتوصل للمشاريع إزاي</Hl>:
+
+| الطريقة | المستخدم بياخدها إزاي | امتى تختارها |
+| --- | --- | --- |
+| **npm package** | `pnpm add @saeed/ui` | عايز versioning وتحكم مركزي، وكذا مشروع يتحدث مرة واحدة |
+| **shadcn registry** | `npx shadcn add @saeed/button` والكود يتنسخ عنده | لنفسك أو لتيم صغير، وكل مشروع يعدّل في الكود براحته |
+
+<Box type="tip" title="الـ registry بيوفّر نص الشغل">
+
+لو مش محتاج npm package، الـ registry بيشيل عنك الـ build والـ versioning والـ exports. التفاصيل في مذكرة [shadcn Registry](../../shadcn-registry/).
+
+</Box>
+
+## الطبقات والأداة المناسبة لكل واحدة
+
+<Flow items={[{t:"Behavior",s:"Base UI / React Aria",c:1},"→",{t:"Styling",s:"Tailwind + cva",c:2},"→",{t:"Build",s:"tsdown",c:3},"→",{t:"Docs",s:"Storybook",c:4},"→",{t:"نشر",s:"Changesets",c:5}]} />
+
+### ١. الأساس: Behavior و Accessibility
+
+<Hl c="p">ماتكتبش dialog و dropdown و combobox من الصفر.</Hl> الـ focus trap والـ keyboard navigation والـ ARIA فيهم صعبين جدًا. استخدم headless library:
+
+- **Base UI**: من نفس صناع Radix و Floating UI و Material UI، ووصلت stable v1.0 في 2026. shadcn بقى بيستخدمها كـ default للمشاريع الجديدة.
+- **React Aria**: لو محتاج RTL و i18n قوي جدًا.
+- **Radix**: لسه ممتازة ومنتشرة، بس Base UI هي الاتجاه الحالي.
+
+المقارنة الكاملة في [الفصل الجاي](../options/).
+
+### ٢. الـ Styling
+
+- **Tailwind v4** مع CSS variables للـ design tokens (ألوان، spacing، radius) عشان الـ theming والـ dark mode.
+- **`cva`** أو `tailwind-variants` للـ variants زي `size` و `intent`.
+- **`tailwind-merge` + `clsx`** عشان اللي بيستخدم الـ component يقدر يعمل override للـ classes.
+
+<File name="button.tsx">
+
+```tsx
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "../lib/cn"; // clsx + tailwind-merge
+
+const button = cva("inline-flex items-center rounded-[--radius] font-medium", {
+  variants: {
+    intent: {
+      primary: "bg-[--color-primary] text-white",
+      ghost: "bg-transparent hover:bg-[--color-muted]",
+    },
+    size: { sm: "h-8 px-3 text-sm", md: "h-10 px-4" },
+  },
+  defaultVariants: { intent: "primary", size: "md" },
+});
+
+type Props = React.ComponentProps<"button"> & VariantProps<typeof button>;
+
+export function Button({ className, intent, size, ...rest }: Props) {
+  // className من برا بيكسب على الـ default بفضل tailwind-merge
+  return <button className={cn(button({ intent, size }), className)} {...rest} />;
+}
+```
+
+</File>
+
+### ٣. الـ Build (لو npm package)
+
+- **`tsdown`** هو الاختيار الحديث: بيطلع ESM و CJS و `d.ts`، وفيه **unbundle mode** بيحافظ على هيكل الفولدرات، وده مهم للـ tree-shaking. TanStack نقلوا الـ build بتاعهم من Vite library mode لـ tsdown.
+- البديل: **Vite library mode** + `vite-plugin-dts`، مريح لو انت شغال Vite أصلًا.
+
+<File name="tsdown.config.ts">
+
+```ts
+import { defineConfig } from "tsdown";
+
+export default defineConfig({
+  entry: ["src/index.ts"],
+  format: ["esm", "cjs"],
+  dts: true,
+  unbundle: true, // كل component في ملف لوحده → tree-shaking أحسن
+  // react مايتعملوش bundle — راجع الـ docs لاسم الـ option في نسختك
+});
+```
+
+</File>
+
+<Box type="warn" title="react في peerDependencies">
+
+حط `react` و `react-dom` في `peerDependencies` ومتعملهمش bundle، وإلا المشروع هيبقى فيه نسختين React والـ hooks هتضرب.
+
+</Box>
+
+### ٤. الـ Docs والتطوير
+
+**Storybook**: story لكل component، و `@storybook/addon-a11y` للـ accessibility، و interaction tests.
+
+### ٥. الاختبارات
+
+**Vitest + Testing Library** للـ unit، ولو عايز visual regression ضيف Chromatic أو Playwright screenshots.
+
+### ٦. التنظيم والنشر
+
+- **monorepo** بـ pnpm workspaces + Turborepo لو هتعمل أكتر من package (`tokens` و `icons` و `react`). شوف مذكرة [الـ Monorepo](../../monorepo/).
+- **Changesets** للـ versioning والـ changelog.
+- **GitHub Actions** للـ CI والـ publish.
+
+## الخلاصة في سطر
+
+<Box type="idea" title="الوصفة">
+
+**Base UI + Tailwind + cva → Storybook → tsdown → Changesets.** ولو مش محتاج npm package، اعمل shadcn registry خاص بيك.
+
+</Box>
+
+<Checklist id="headless-ui-w1" title="خلّصت الفصل لما" items={["تقرر الـ lib هتبقى npm package ولا registry", "تعرف ليه مانكتبش dialog و combobox من الصفر", "تعمل component بـ `cva` و `cn` يقبل className من برا", "تعرف ليه `tsdown` بـ unbundle أحسن للـ tree-shaking", "تحط react في **peerDependencies**"]} />
+
+<Quiz>
+<Q n={1} q="امتى أختار shadcn registry بدل npm package؟">لما الـ lib لنفسك أو لتيم صغير، وكل مشروع محتاج يعدّل في كود الـ components براحته، ومش محتاج versioning مركزي.</Q>
+<Q n={2} q="ليه `tailwind-merge` مهم في الـ lib؟">عشان لما المستخدم يبعت `className` فيه class بيتعارض مع الـ default (زي `px-6` و `px-4`)، الـ class بتاعه هو اللي يكسب.</Q>
+<Q n={3} q="إيه اللي يحصل لو عملت bundle لـ react جوه الـ lib؟">المشروع هيبقى فيه نسختين React، والـ hooks والـ context هيبوظوا. عشان كده react يبقى peerDependency.</Q>
+</Quiz>

@@ -1,0 +1,113 @@
+---
+title: Base UI ولا React Aria ولا rc-* ولا Radix؟
+short: المكتبات الأربعة
+order: 2
+label: فصل ٢
+badge: الاختيار · فصل ٢
+en: Base UI · React Aria · react-aria-components · Radix · rc-select · rc-motion · Ark UI · Ariakit · Headless UI
+keywords: headless بجد · a11y · RTL · تغطية · hybrid
+goal: تفهم كل مكتبة معمولة لإيه، وامتى تختارها، وامتى تخلط.
+part: الاختيار
+color: c2
+---
+
+## الأربعة سليمين، بس كل واحد لغرض
+
+<Grid2>
+<Card title="rc-* (تحت Ant Design)" c={1}>
+
+components تقيلة جاهزة، بس **مش headless بجد**.
+
+</Card>
+<Card title="Base UI" c={2}>
+
+headless بجد، API لطيف، و shadcn بيستخدمها.
+
+</Card>
+<Card title="React Aria (Adobe)" c={3}>
+
+أقوى a11y و RTL و i18n موجودين.
+
+</Card>
+<Card title="Radix" c={4}>
+
+ناضجة ومجرّبة، بس التطوير بقى أبطأ.
+
+</Card>
+</Grid2>
+
+## rc-select وعيلة rc-\*
+
+**المميزات:** فيها components تقيلة مش موجودة في الـ headless libraries: virtual list جوه الـ select، و `TreeSelect`، و `Cascader`، و table معقد.
+
+**العيوب:**
+
+- مش headless بالمعنى الحقيقي. معمولة على مقاس antd، فبتيجي بـ classNames وبنية DOM ثابتة. <Hl c="o">انت بتعمل override للـ CSS بدل ما تبني الشكل من الأول.</Hl>
+- الـ animation ماشية بـ `rc-motion` اللي بيعتمد على classes بأسماء معينة (`motionName`). تقدر تغيّرها، بس هتفضل جوه نظامها.
+- الـ accessibility أضعف من Base UI و React Aria.
+- الـ API والـ docs متوجهين لفريق antd.
+
+<Box type="warn" title="ماتبنيش الـ lib عليها">
+
+استخدمها بس لـ component واحد أو اتنين تقال (TreeSelect، Cascader). وللجداول والـ lists الطويلة، **TanStack Table** و **TanStack Virtual** أنضف من rc-table.
+
+</Box>
+
+## Base UI
+
+- **المميزات:** headless بجد، `render` prop للـ composition، سهلة مع Tailwind، ووراها community وأمثلة كتير لأن shadcn بيستخدمها.
+- **العيوب:** جديدة نسبيًا، وبعض الـ components المعقدة (زي date picker) لسه مش كاملة زي React Aria.
+- **مناسبة لـ:** design system عام بـ Tailwind وعايز توازن بين السرعة والجودة.
+
+## React Aria
+
+- **المميزات:**
+  - أقوى accessibility حاليًا، متختبرة على screen readers وأجهزة كتير.
+  - <Hl c="g">دعم RTL و i18n ممتاز</Hl>: الكيبورد والـ positioning بيتعكسوا صح. مهم جدًا لـ UI عربي.
+  - أقوى date picker و calendar، وبيدعموا تقاويم مختلفة زي الهجري.
+  - مستويين: hooks زي `useButton` و `useComboBox`، أو `react-aria-components` جاهزة headless.
+- **العيوب:** الكود verbose، الـ learning curve أعلى، والـ bundle أكبر.
+- **مناسبة لـ:** products جدية لازم تكون accessible وبأكتر من لغة، وفيها forms وتواريخ كتير.
+
+## Radix
+
+ناضجة ومستخدمة في production كتير. بس نفس الصناع ركزوا على Base UI، والـ RTL فيها أضعف. <Hl c="b">لو هتبدأ من الصفر النهارده، مفيش سبب قوي تختارها بدل Base UI.</Hl>
+
+## خيارات تانية تعرفها
+
+<Chips items={["Ark UI — state machines (Zag.js) و React + Vue + Solid", "Ariakit — a11y قوية وخفيفة، community أصغر", "Headless UI — بتاعة Tailwind Labs، components قليلة"]} />
+
+## الـ Hybrid: تخلط عادي
+
+<Box type="story" icon="🍲" title="زي طبق كشري">
+
+الرز من محل، والصلصة من بيتك، والتقلية من عند الجيران… بس كله في **طبق واحد** والزبون بياكله على إنه طبق واحد. المهم الطعم يبقى متناسق.
+
+</Box>
+
+مثلًا: Base UI أساس الـ lib، و DatePicker و Calendar من React Aria، و rc-\* بس لو احتجت component تقيل مش موجود في غيرها.
+
+<Box type="interview" title="القاعدة الذهبية">
+
+المستخدم يشوف **API واحد موحّد بتاعك انت**، مش API كل مكتبة تحت. اعمل wrap لكل component بحيث الـ props والأسماء والـ data attributes متسقة.
+
+</Box>
+
+```tsx
+// المستخدم مش عارف ولا يهمه إن ده React Aria تحت
+export function DatePicker({ value, onChange, label }: DatePickerProps) {
+  return (
+    <AriaDatePicker value={value} onChange={onChange} className="ui-datepicker">
+      {/* ... الشكل بتاعك ... */}
+    </AriaDatePicker>
+  );
+}
+```
+
+<Checklist id="headless-ui-w2" title="خلّصت الفصل لما" items={["تعرف ليه rc-* مش headless بجد", "تعرف امتى React Aria تكسب Base UI", "تعرف ليه Radix مش أول اختيار لمشروع جديد", "تعرف تعمل hybrid بـ API واحد موحّد"]} />
+
+<Quiz>
+<Q n={1} q="ليه rc-* مش أساس كويس لـ design system خاص؟">لأنها بتيجي ببنية DOM و classNames ثابتة على مقاس antd، فبتعمل override بدل ما تبني، والـ animation مربوطة بـ `rc-motion`.</Q>
+<Q n={2} q="مشروع عربي فيه forms وتواريخ كتير، تختار إيه؟">React Aria، عشان الـ RTL والـ i18n والـ date picker والتقاويم المختلفة.</Q>
+<Q n={3} q="لو خلطت كذا مكتبة، إيه أهم حاجة؟">إن المستخدم يشوف API واحد متسق بتاعك، والمكتبات اللي تحت تبقى تفصيلة داخلية.</Q>
+</Quiz>
