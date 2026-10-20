@@ -1,0 +1,210 @@
+---
+title: الـ Easing و BackEaseOut — ونرسمه على canvas
+short: Easing و BackEaseOut
+order: 2
+label: فصل ٢
+badge: الأساس · فصل ٢
+en: easing · BackEaseOut · overshoot · cubic-bezier · canvas · requestAnimationFrame
+keywords: منحنى · overshoot · c1 = 1.55 · canvas
+goal: تفهم الـ easing كدالة من الوقت للقيمة، وتكتب BackEaseOut بإيدك وترسمه على canvas.
+part: الأساس
+color: c2
+---
+
+## الـ easing دالة، مش سحر
+
+أي حركة ليها وقت `t` من `0` لـ `1` (البداية والنهاية). الـ easing دالة بتاخد `t` وترجّع **قد إيه العنصر وصل**، برضه من `0` لـ `1`.
+
+- <En>Linear</En>: `t` زي ما هي. الحركة بسرعة ثابتة، فتحسها آلية.
+- <En>CubicEaseOut</En>: بتبدأ سريعة وتهدى في الآخر. زي عربية بتركن.
+- <En>EaseInCubic</En>: بتبدأ بطيئة وتسرّع. Filee بيستخدمها في **القفل** بس.
+- <En>BackEaseOut</En>: سريعة، <Hl c="p">تعدّي الهدف شعرة، وترجع</Hl>. ده سر الطراوة.
+
+<EaseCanvas
+  title="المنحنيات الأربعة جنب بعض، والكورة تحت كل منحنى بتتحرك بنفس القيمة"
+  curves={["linear", "in-cubic", "out-cubic", "back-out"]}
+/>
+
+<Box type="idea" title="بص على الكورة البنفسجي">
+
+الكورة البنفسجي (BackEaseOut) بتعدّي الخط اللي في الحارة وترجع. الخط ده هو القيمة `1`، يعني الهدف. ده اللي اسمه **overshoot**.
+
+</Box>
+
+## في Filee فيه اتنين BackEaseOut مش واحد
+
+ده اللي هتلاقيه لو قريت الكود كويس:
+
+- **الزراير والـ chips والـ sidebar** في الـ XAML بتستخدم `<BackEaseOut />` الجاهز بتاع Avalonia.
+- **الدونت** مش بيستخدمه. Filee كاتب `EaseOutBack` بإيده جوه `DonutMenu.cs` برقم نطة هو اختاره.
+
+الفرق كبير: الجاهز بتاع Avalonia بيعدّي الهدف بحوالي **٣٨٪**. اللي في الدونت بيعدّيه بحوالي **٨.٥٪** بس.
+
+<EaseCanvas
+  title="الاتنين جنب بعض: البينك بتاع Avalonia، والبنفسجي بتاع الدونت"
+  curves={["out-cubic", "av-back", "back-out"]}
+  height={240}
+/>
+
+طب ليه الزراير مش باينة بتترقص مع ٣٨٪؟ عشان <Hl c="b">المسافة صغيرة جدًا</Hl>. الزرار بيروح من `1` لـ `0.95`، يعني ٥٪ بس. ٣٨٪ من ٥٪ = أقل من ٢٪ من حجم الزرار. نطة صغيرة خالص، بتحسها ومتشوفهاش. الشريحة في الدونت بقى بتكبر من `0.55` لـ `1`، فلو نطت ٣٨٪ كانت هتطير. عشان كده محتاجة رقم أهدى.
+
+<Box type="idea" title="القاعدة اللي تطلع بيها">
+
+قوة النطة تتظبط **على قد المسافة**. حاجة بتتحرك مسافة صغيرة تستحمل نطة كبيرة. حاجة بتتحرك مسافة كبيرة لازم نطتها تبقى صغيرة.
+
+</Box>
+
+## المعادلة اللي جوه الدونت
+
+<File name="Avalonia: Easings/BackEaseOut.cs">
+
+```csharp
+public override double Ease(double progress)
+{
+    double p = 1d - progress;
+    return 1 - p * (p * p - Math.Sin(p * Math.PI));
+}
+```
+
+</File>
+
+وده اللي Filee كاتبه للدونت:
+
+<File name="Controls/DonutMenu.cs (Filee)">
+
+```csharp
+private static double EaseOutBack(double t)
+{
+    const double c1 = 1.55;  // قوة النطة
+    const double c3 = c1 + 1;
+    return 1 + c3 * Math.Pow(t - 1, 3) + c1 * Math.Pow(t - 1, 2);
+}
+
+private static double EaseInCubic(double t) => t * t * t;
+```
+
+</File>
+
+الرقم المشهور في المعادلة دي هو `1.70158`، ودي نطة ١٠٪ بالظبط. Filee اختار `1.55`، فالنطة حوالي ٨.٥٪. <Hl c="g">نطة أصغر = طراوة من غير ما الحاجة تبان بتترقص</Hl>.
+
+جرّب بنفسك: حرّك الـ slider وشوف الـ `c1` بيعمل إيه.
+
+<EaseCanvas
+  title="غيّر c1: صفر = من غير نطة، 1.55 = Filee، 3 = مبالغة"
+  curves={["out-cubic", "back-out"]}
+  overshoot
+  height={230}
+/>
+
+## نرسم BackEaseOut على canvas بإيدنا
+
+ده الكود كامل. صفحة HTML واحدة، افتحها في المتصفح وهتشوف المنحنى بيترسم وكورة بتتحرك عليه.
+
+<File name="back-ease-out.html">
+
+```html
+<canvas id="c" width="600" height="320" style="width:600px;height:320px"></canvas>
+<button id="play">▶ شغّل</button>
+
+<script>
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const W = 600, H = 320;
+  const pad = 40;
+
+  // نفس دالة Filee
+  const c1 = 1.55;
+  const backOut = (t) => 1 + (c1 + 1) * (t - 1) ** 3 + c1 * (t - 1) ** 2;
+
+  // من (t, value) لبكسلات. القيمة من -0.1 لـ 1.3 عشان الـ overshoot يبان
+  // (لو هترسم بتاعة Avalonia، كبّر الـ 1.3 لـ 1.45 لأنها بتطلع لحد 1.38)
+  const X = (t) => pad + t * (W - pad * 2);
+  const Y = (v) => pad + ((1.3 - v) / 1.4) * (H - pad * 2);
+
+  function draw(progress) {
+    ctx.clearRect(0, 0, W, H);
+
+    // خط الهدف (value = 1) متقطّع
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = "#bbb";
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(1));
+    ctx.lineTo(X(1), Y(1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // المنحنى لحد الـ progress الحالي
+    ctx.strokeStyle = "#6c4bff";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i <= 100; i++) {
+      const t = (i / 100) * progress;
+      const x = X(t), y = Y(backOut(t));
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // كورة في راس المنحنى
+    ctx.fillStyle = "#6c4bff";
+    ctx.beginPath();
+    ctx.arc(X(progress), Y(backOut(progress)), 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function play() {
+    const duration = 1200; // ms. بطيء بقصد عشان تتفرج
+    let start = null;
+    function frame(now) {
+      start ??= now;
+      const p = Math.min(1, (now - start) / duration);
+      draw(p);
+      if (p < 1) requestAnimationFrame(frame); // الفريم اللي بعده
+    }
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById("play").onclick = play;
+  play();
+</script>
+```
+
+</File>
+
+<Box type="warn" title="الـ canvas على شاشة retina">
+
+الكود فوق بسيط بقصد. على شاشة بكثافة ٢x هتلاقي الخطوط مغبشة. الحل: خلّي `canvas.width` = العرض × `devicePixelRatio`، وبعدين `ctx.scale(dpr, dpr)`. الرسمات اللي في المذكرة دي عاملة كده.
+
+</Box>
+
+## نفس المنحنى في CSS
+
+CSS معندوش `back-out` جاهز، بس <En>cubic-bezier</En> بيقرّبه كويس:
+
+<File name="soft.css">
+
+```css
+:root {
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* ≈ BackEaseOut */
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);     /* ≈ CubicEaseOut */
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);      /* ≈ EaseInCubic */
+}
+```
+
+</File>
+
+الرقم `1.56` في النص هو اللي بيخلي المنحنى يطلع فوق الـ `1`، والنطة بتاعته حوالي ١٠٪. ده قريب من الدونت. لو عايز نطة أكبر للحاجات الصغيرة زي Avalonia، كبّر الرقم ده (مثلًا `cubic-bezier(0.34, 2.2, 0.64, 1)`). ولو عايز المعادلة بالظبط، استخدم `linear()` الجديدة في CSS بنقط كتير، أو اعمل الحركة بـ JavaScript.
+
+<Box type="tip" title="زي ما Filee بيعمل: easing واحد للكل">
+
+Filee حاطط الـ easing في resource واحد اسمه `SoftEase`، وكل الزراير والـ chips والـ sidebar بتشاور عليه. على الويب، اعمل نفس الحاجة بـ CSS variable. لو غيّرته في حتة واحدة، الأبلكيشن كله يتغير مع بعض.
+
+</Box>
+
+<Checklist id="filee-motion-easing" title="خلّصت الفصل لما" items={["تشرح الـ easing كدالة من t لقيمة", "تكتب EaseOutBack بإيدك وتعرف c1 بيعمل إيه", "ترسم منحنى على canvas بـ requestAnimationFrame", "تستخدم cubic-bezier كتقريب في CSS"]} />
+
+<Quiz>
+<Q n={1} q="يعني إيه overshoot؟">إن القيمة تعدّي الهدف (أكبر من 1) شوية وترجع له. ده اللي بيدّي إحساس الطراوة.</Q>
+<Q n={2} q="لو c1 = 0 في EaseOutBack، إيه اللي يحصل؟">المعادلة تبقى 1 + (t-1)³، ودي CubicEaseOut بالظبط. مفيش نطة خالص.</Q>
+<Q n={3} q="ليه الزراير بتستحمل BackEaseOut بتاع Avalonia (٣٨٪) والدونت لأ؟">لأن الزرار بيتحرك من 1 لـ 0.95 بس، فالنطة بتطلع أقل من ٢٪ من حجمه. الشريحة بتتحرك مسافة أكبر بكتير، فمحتاجة نطة أصغر (٨.٥٪).</Q>
+<Q n={4} q="ليه Filee بيستخدم EaseInCubic في القفل؟">بتبدأ بطيئة وتخلص بسرعة، فالشريحة "بتتسحب" لجوه من غير ما تنط. مفيش overshoot في القفل.</Q>
+</Quiz>

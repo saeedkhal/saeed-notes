@@ -290,8 +290,8 @@ img { max-width: 100%; }
 .n4 { --nc: var(--c4); } .n5 { --nc: var(--c5); }
 
 /* ---------------- grid2 / cards ---------------- */
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 1.4em 0; }
-@media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin: 1.4em 0; }
+@media (max-width: 720px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
 .card {
   border: 2px solid var(--cc, var(--c1)); border-radius: var(--radius);
   padding: 14px 18px; background: color-mix(in srgb, var(--cc, var(--c1)) 5%, var(--bg-elev));

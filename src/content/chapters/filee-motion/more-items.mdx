@@ -1,0 +1,257 @@
+---
+title: من خيالي — dropdown و select و tabs و modal و switch و tooltip و accordion
+short: من خيالي
+order: 4
+label: فصل ٤
+badge: من خيالي · فصل ٤
+en: dropdown · select · tabs · modal · switch · tooltip · accordion · TransitioningContentControl · Expander
+keywords: stagger · transform-origin · فتح بنطة · قفل سريع · delay
+goal: تطبّق نفس روح Filee على عناصر مش موجودة فيه، بنفس القواعد.
+part: من خيالي
+color: c4
+---
+
+<Box type="warn" title="الفصل ده اقتراحات مني">
+
+العناصر دي **مش موجودة في Filee بالشكل ده**. أنا طبّقت عليها نفس القواعد اللي طلعنا بيها من كوده. الـ CSS والـ JavaScript هنا شغالين (الديموهات هي الدليل). أكواد Avalonia أفكار تبدأ منها، وأسماء الأجزاء اللي جوه الـ templates (زي `PART_...`) بتتغير بين النسخ، فراجع الـ docs.
+
+</Box>
+
+## القواعد اللي هنمشي عليها
+
+<Cheat items={[
+  ["حاجة صغيرة بتظهر أو تتداس", "BackEaseOut: نطة صغيرة"],
+  ["حاجة كبيرة (صفحة، لوحة)", "CubicEaseOut: من غير نطة"],
+  ["القفل", "أسرع من الفتح، EaseInCubic، من غير نطة"],
+  ["قايمة عناصر بتظهر", "stagger: كل عنصر بعد اللي قبله بحوالي 28ms"],
+  ["لون", "0.15s من غير نطة"],
+  ["الحركة", "transform و opacity بس"],
+]} />
+
+## Dropdown: يفتح من مكانه ويقفل بسرعة
+
+القائمة بتطلع **من الزرار نفسه**: `transform-origin: top`، من `scale(0.95)` وشفافة لحجمها الطبيعي. والعناصر بتنزل ورا بعض بـ stagger، زي شرايح الدونت.
+
+القفل عكس كده: ١٢٠ms بس، من غير نطة، ومن غير stagger.
+
+<MotionDemo kind="dropdown" title="قائمة الخيارات (شبه كليك يمين على ملف في السجل)" />
+
+<File name="dropdown.css">
+
+```css
+.menu {
+  transform-origin: top;
+  /* مقفولة: سريعة ومن غير نطة */
+  opacity: 0;
+  transform: translateY(-6px) scale(0.95);
+  visibility: hidden;
+  transition:
+    opacity 0.12s var(--ease-in),
+    transform 0.12s var(--ease-in),
+    visibility 0s 0.12s; /* تستخبى بعد ما الحركة تخلص */
+}
+.dd.open .menu {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity 0.18s var(--ease-out),
+    transform 0.26s var(--ease-back),
+    visibility 0s;
+}
+
+/* stagger: كل عنصر متأخر 28ms عن اللي قبله (OpenStagger في Filee) */
+.menu li {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.dd.open .menu li {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.2s, transform 0.3s var(--ease-back);
+  transition-delay: calc(var(--i) * 28ms);
+}
+```
+
+</File>
+
+<Box type="tip" title="ليه visibility مع opacity؟">
+
+`opacity: 0` لوحدها بتخفي القائمة بس لسه بتاخد الكليكات و Tab. `visibility: hidden` بتشيلها بجد. والـ delay بتاعها `0.12s` عشان تستنى حركة القفل تخلص الأول.
+
+</Box>
+
+في Avalonia الفكرة إنك تحط animation على الـ `Border` اللي جوه الـ popup، يشتغل لما الـ `ComboBox` يبقى `:dropdownopen`:
+
+```xml
+<Style Selector="ComboBox:dropdownopen /template/ Border#PopupBorder">
+  <Style.Animations>
+    <Animation Duration="0:0:0.22" Easing="CubicEaseOut" FillMode="Forward">
+      <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0" /></KeyFrame>
+      <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+    </Animation>
+  </Style.Animations>
+</Style>
+```
+
+## Select: السهم يلف، والقيمة تتبدّل بحركة
+
+نفس الـ dropdown، وفوقه تلات حاجات صغيرة:
+
+1. **السهم** بيلف `180deg` بنطة لما تفتح (زي سهم الرئيسية في Filee اللي بيلف 90).
+2. **علامة ✓** بتظهر من `scale(0.4)` بنطة على الاختيار الجديد.
+3. **القيمة** في الزرار بتطلع من تحت لما تتغير، فتعرف إن حاجة اتغيرت.
+
+<MotionDemo kind="select" title="اختار الصيغة" />
+
+```css
+.chev { transition: transform 0.3s var(--ease-back); }
+.open .chev { transform: rotate(180deg); }
+
+.check { opacity: 0; transform: scale(0.4); transition: opacity 0.15s, transform 0.3s var(--ease-back); }
+[aria-selected="true"] > .check { opacity: 1; transform: none; }
+
+.value.swap { animation: swap 0.3s var(--ease-back); }
+@keyframes swap { from { opacity: 0; transform: translateY(8px); } }
+```
+
+<Box type="idea" title="استنى ١٢٠ms قبل ما تقفل">
+
+لو قفلت القائمة في نفس لحظة الكليك، العلامة ✓ مش هتلحق تنط. استنى ١٢٠ms، فالعين تشوف الاختيار وبعدين القائمة تمشي.
+
+</Box>
+
+## Tabs: مؤشر بيتزحلق، ومحتوى جاي من الناحية الصح
+
+بدل ما الخط اللي تحت التاب يختفي ويظهر في مكان تاني، فيه **مؤشر واحد بيتزحلق** لمكان التاب الجديد بـ <En>BackEaseOut</En>. والمحتوى الجديد بيدخل من ناحية التاب اللي رحتله: لو رحت للي بعده، ييجي من ناحيته.
+
+<MotionDemo kind="tabs" title="أنواع الملفات" />
+
+<File name="tabs.ts">
+
+```ts
+// المؤشر بيتحرك لمكان وعرض التاب الجديد. الحركة نفسها في CSS
+function place(tab: HTMLElement) {
+  ink.style.setProperty("--x", `${tab.offsetLeft}px`);
+  ink.style.setProperty("--w", `${tab.offsetWidth}px`);
+}
+
+// الصفحة RTL: التاب اللي بعده على الشمال، فالمحتوى ييجي من الشمال
+const from = next > current ? "from-left" : "from-right";
+```
+
+</File>
+
+```css
+.ink {
+  position: absolute;
+  left: var(--x);
+  width: var(--w);
+  transition: left 0.35s var(--ease-back), width 0.35s var(--ease-back);
+}
+```
+
+في Avalonia ممكن تعمل نفس المؤشر بـ `Border` واحد فوق التابات، و `DoubleTransition` على `Canvas.Left` و `Width`، وتحسب مكان التاب في الـ code-behind.
+
+## Modal: الخلفية تغمق، والـ dialog ينط
+
+حاجتين بيتحركوا مع بعض، بمدد مختلفة:
+
+- **الخلفية** بتغمق بـ `opacity` في ٢٠٠ms، من غير نطة.
+- **الـ dialog** بيكبر من `scale(0.9)` في ٣٢٠ms بنطة.
+- **القفل** للاتنين في ١٦٠ms بـ <En>EaseInCubic</En>، زي قفل الدونت بالظبط.
+
+<MotionDemo kind="modal" title="dialog الإعدادات" />
+
+<File name="modal.ts">
+
+```ts
+function open() {
+  backdrop.hidden = false;
+  // فريمين: الأول يرسم الحالة المقفولة، التاني يبدأ الحركة منها
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add("open")));
+}
+
+function close() {
+  backdrop.classList.remove("open");
+  // استنى الحركة تخلص قبل ما تخفي (زي FinishClose في Filee)
+  setTimeout(() => (backdrop.hidden = true), 170);
+}
+```
+
+</File>
+
+<Box type="warn" title="hidden بيقتل الـ transition">
+
+لو شلت `hidden` وضفت كلاس `open` في نفس السطر، المتصفح بيرسم الحالة الأخيرة علطول ومفيش حركة. عشان كده فيه فريمين `requestAnimationFrame` في النص.
+
+</Box>
+
+## Switch: الزرار يتمط وانت دايس
+
+الزرار الأبيض بيتزحلق بنطة، والخلفية بتتلوّن في ١٥٠ms. والتفصيلة الحلوة: **وانت دايس، الزرار بيعرض شوية** (`width: 24px` بدل `20px`)، كأنه بيستعد يتنقل.
+
+<MotionDemo kind="switch" title="إعدادات" />
+
+```css
+.switch { transition: background-color 0.15s; }
+.switch i { transition: transform 0.3s var(--ease-back), width 0.15s; }
+.switch:active i { width: 24px; }
+.switch[aria-checked="true"] i { transform: translateX(20px); }
+.switch[aria-checked="true"]:active i { transform: translateX(16px); } /* يتمط ناحية الشمال */
+```
+
+<Box type="tip" title="ToggleSwitch في Avalonia">
+
+الـ `ToggleSwitch` الجاهز في Avalonia بيحرّك الزرار لوحده. لو عايز نطة Filee، دوّر في الـ template بتاعه على الـ transition اللي على مكان الزرار وحط `Easing="BackEaseOut"`.
+
+</Box>
+
+## Tooltip: يستنى قبل ما يظهر، ويمشي علطول
+
+الـ tooltip اللي بيظهر مع كل حركة ماوس مزعج. فـ:
+
+- **الظهور** بعد `300ms` استنى، وبعدين يطلع بنطة صغيرة.
+- **الاختفاء** فوري تقريبًا (١٠٠ms)، من غير استنى.
+
+<MotionDemo kind="tooltip" title="أزرار بأيقونات" />
+
+```css
+.tip {
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.1s, transform 0.1s; /* الاختفاء */
+}
+.wrap:hover .tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition: opacity 0.18s 0.3s, transform 0.25s var(--ease-back) 0.3s; /* الظهور بعد 300ms */
+}
+```
+
+الحيلة: **الـ transition اللي في الحالة الجديدة هو اللي بيتطبق**. فتحط delay في الـ `:hover` بس، والاختفاء ياخد الـ transition العادي من غير delay. في Avalonia في `ToolTip.ShowDelay` جاهزة للتأخير.
+
+## Accordion: grid من صفر لواحد + سهم بيلف ٩٠
+
+سهم الرئيسية في Filee بيلف من `0` لـ `90deg` لما تفتح. ضيف عليه فتح القسم بـ `grid-template-rows` من `0fr` لـ `1fr` (اتشرحت بالتفصيل في مذكرة الـ Smooth Collapse).
+
+<MotionDemo kind="accordion" title="أنواع المحرّكات" />
+
+```css
+.body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s var(--ease-out); }
+.open .body { grid-template-rows: 1fr; }
+.body > div { overflow: hidden; } /* القص على الابن */
+.chev { transition: transform 0.3s var(--ease-back); }
+.open .chev { transform: rotate(90deg); }
+```
+
+في Avalonia الـ `Expander` عنده خاصية `ContentTransition` تحط فيها `CrossFade` مثلًا. ولصفحات كاملة فيه `TransitioningContentControl` مع `PageSlide` أو `CrossFade`.
+
+<Checklist id="filee-motion-more" title="خلّصت الفصل لما" items={["تعمل dropdown بيفتح بنطة و stagger ويقفل بسرعة", "تفهم ليه visibility لازم مع opacity", "تعمل مؤشر tabs واحد بيتزحلق", "تفتح modal من غير ما hidden يبوّظ الـ transition", "تأخر ظهور الـ tooltip من غير ما تأخر اختفاءه"]} />
+
+<Quiz>
+<Q n={1} q="ليه القائمة بتطلع بـ transform-origin: top؟">عشان تكبر من ناحية الزرار اللي فتحها. لو من النص، هتحس إنها جاية من الهوا.</Q>
+<Q n={2} q="إزاي تخلي الظهور متأخر والاختفاء لأ؟">تحط الـ delay في الـ transition بتاع الحالة الظاهرة (:hover) بس. الـ transition بتاع الحالة اللي رايح لها هو اللي بيتطبق.</Q>
+<Q n={3} q="الـ modal: ليه requestAnimationFrame مرتين؟">عشان المتصفح يرسم الحالة المقفولة الأول بعد ما hidden يتشال، وبعدين الكلاس open يبدأ الحركة منها.</Q>
+<Q n={4} q="القائمة بتقفل في كام؟ وليه من غير stagger؟">في حوالي 120ms. اللي بيقفل عايزها تمشي. لو العناصر مشيت واحد ورا واحد، القفل هيطوّل من غير لازمة.</Q>
+</Quiz>

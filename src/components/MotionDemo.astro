@@ -1,0 +1,1314 @@
+---
+/**
+ * ديمو حي لحركة واجهة: زراير، chips، ألوان، sidebar، toast، صفحات، dropdown، select، tabs،
+ * modal، switch، tooltip، accordion، ودونت Filee والـ spring على canvas.
+ * kind بيحدد الديمو. الـ CSS global بـ prefix ‎.mo-‎ عشان العناصر اللي الـ JS بيضيفها (زي الـ toast) تاخد نفس الشكل.
+ *
+ * الـ easing الأساسي --mo-back هو تقريب BackEaseOut بـ cubic-bezier، نفس "الطراوة" اللي Filee بيستخدمها.
+ */
+type Kind =
+  | "press"
+  | "chips"
+  | "colors"
+  | "dropzone"
+  | "lift"
+  | "nav"
+  | "toast"
+  | "page"
+  | "dropdown"
+  | "select"
+  | "tabs"
+  | "modal"
+  | "switch"
+  | "tooltip"
+  | "accordion"
+  | "donut"
+  | "spring";
+interface Props {
+  kind: Kind;
+  title?: string;
+}
+const { kind, title } = Astro.props;
+const hints: Record<Kind, string> = {
+  press: "دوس على كل زرار واستمر دايس، وبعدين سيبه",
+  chips: "عدّي بالماوس على الـ chips، ودوس عشان تختار",
+  colors: "غيّر اللون وشوف الكارت بيتلوّن إزاي",
+  dropzone: "عدّي بالماوس، أو اسحب أي ملف من جهازك فوق المربع",
+  lift: "دوس على كارت عشان ترفعه، ودوس تاني عشان تنزّله",
+  nav: "عدّي على العناصر واختار واحد",
+  toast: "دوس كذا مرة ورا بعض",
+  page: "اتنقّل بين الصفحات",
+  dropdown: "افتح القائمة واقفلها (Esc أو برا القائمة)",
+  select: "اختار صيغة",
+  tabs: "اتنقّل بين التابات، يمين وشمال",
+  modal: "افتح الـ dialog واقفله",
+  switch: "شغّل واقفل",
+  tooltip: "استنى على أيكونة شوية",
+  accordion: "افتح واقفل الأقسام",
+  donut: "عدّي على الشرايح، ودوس على شريحة أو على النص",
+  spring: "دوس في أي حتة على الحارة، أو غيّر الأرقام",
+};
+const formats = ["PNG", "JPG", "WEBP", "PDF", "AVIF", "GIF"];
+---
+<figure class="mo" data-mo={kind}>
+  {title && <figcaption>{title}<span>{hints[kind]}</span></figcaption>}
+  <div class="mo-stage">
+    {kind === "press" && (
+      <div class="mo-row">
+        <button type="button" class="mo-btn mo-flat">من غير حركة</button>
+        <button type="button" class="mo-btn mo-soft">scale(0.95) + BackEaseOut</button>
+      </div>
+    )}
+
+    {kind === "chips" && (
+      <div class="mo-row mo-wrap">
+        {formats.map((f, i) => (
+          <button type="button" class:list={["mo-chip", { "is-on": i === 0 }]} aria-pressed={i === 0 ? "true" : "false"}>{f}</button>
+        ))}
+      </div>
+    )}
+
+    {kind === "colors" && (
+      <div class="mo-colors">
+        <div class="mo-row">
+          {[1, 2, 3, 4, 5].map((c) => (
+            <button type="button" class="mo-swatch" style={`--sw: var(--c${c})`} data-swatch={c} aria-label={`لون ${c}`} />
+          ))}
+        </div>
+        <div class="mo-paint" data-paint style="--paint: var(--c1)">
+          <b>Filee</b>
+          <span>BrushTransition · 0.15s</span>
+        </div>
+      </div>
+    )}
+
+    {kind === "dropzone" && (
+      <div class="mo-drop" data-drop>
+        <span class="mo-drop-icon">⬇</span>
+        <b>سيب الملف هنا</b>
+        <span data-drop-msg>scale(1.015) + لون</span>
+      </div>
+    )}
+
+    {kind === "lift" && (
+      <div class="mo-lift">
+        {["FFmpeg", "LibreOffice", "Pandoc"].map((e) => (
+          <button type="button" class="mo-engine"><b>{e}</b><span>محرّك</span></button>
+        ))}
+      </div>
+    )}
+
+    {kind === "nav" && (
+      <ul class="mo-nav" role="list">
+        {["🏠 الرئيسية", "🍩 الدونت", "🎛 الإعدادات", "⚙ المحرّكات", "🎨 الثيم"].map((t, i) => (
+          <li><button type="button" class:list={{ "is-on": i === 0 }}>{t}</button></li>
+        ))}
+      </ul>
+    )}
+
+    {kind === "toast" && (
+      <div class="mo-toast-stage">
+        <button type="button" class="mo-btn mo-soft" data-toast-add>حوّل ملف 🔁</button>
+        <div class="mo-toasts" data-toasts aria-live="polite"></div>
+      </div>
+    )}
+
+    {kind === "page" && (
+      <div class="mo-pages">
+        <div class="mo-row" role="tablist">
+          {["الرئيسية", "المحرّكات", "الثيم"].map((t, i) => (
+            <button type="button" class:list={["mo-chip", { "is-on": i === 0 }]} data-page={i}>{t}</button>
+          ))}
+        </div>
+        <div class="mo-page" data-page-box>
+          <h4 data-page-title>الرئيسية</h4>
+          <div class="mo-line" style="width:80%" />
+          <div class="mo-line" style="width:62%" />
+          <div class="mo-line" style="width:70%" />
+        </div>
+      </div>
+    )}
+
+    {kind === "dropdown" && (
+      <div class="mo-dd" data-dd>
+        <button type="button" class="mo-btn mo-soft" aria-haspopup="menu" aria-expanded="false" data-dd-btn>⋯ خيارات</button>
+        <ul class="mo-menu" role="menu" data-dd-menu>
+          {["📂 افتح الفولدر", "📋 انسخ المسار", "🔁 حوّل تاني", "🗑 امسح من السجل"].map((t, i) => (
+            <li role="none" style={`--i:${i}`}><button type="button" role="menuitem">{t}</button></li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {kind === "select" && (
+      <div class="mo-dd mo-select" data-dd>
+        <button type="button" class="mo-field" aria-haspopup="listbox" aria-expanded="false" data-dd-btn>
+          <span class="mo-value" data-value>PNG</span>
+          <i class="mo-chev">▾</i>
+        </button>
+        <ul class="mo-menu" role="listbox" data-dd-menu>
+          {formats.map((f, i) => (
+            <li role="option" aria-selected={i === 0 ? "true" : "false"} style={`--i:${i}`} data-option={f}>
+              <span>{f}</span><i class="mo-check">✓</i>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {kind === "tabs" && (
+      <div class="mo-tabs" data-tabs>
+        <div class="mo-tablist" role="tablist">
+          {["صور", "مستندات", "فيديو"].map((t, i) => (
+            <button type="button" role="tab" aria-selected={i === 0 ? "true" : "false"} data-tab={i}>{t}</button>
+          ))}
+          <span class="mo-ink" data-ink />
+        </div>
+        <div class="mo-panel" data-panel>
+          <p data-panel-text>PNG · JPG · WEBP · AVIF</p>
+        </div>
+      </div>
+    )}
+
+    {kind === "modal" && (
+      <div class="mo-modal-stage" data-modal-stage>
+        <button type="button" class="mo-btn mo-soft" data-modal-open>⚙ افتح الإعدادات</button>
+        <div class="mo-backdrop" data-modal hidden>
+          <div class="mo-dialog" role="dialog" aria-modal="true" aria-label="إعدادات">
+            <b>إعدادات التحويل</b>
+            <div class="mo-line" style="width:90%" />
+            <div class="mo-line" style="width:70%" />
+            <button type="button" class="mo-btn mo-soft" data-modal-close>تمام</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {kind === "switch" && (
+      <div class="mo-switches">
+        {["تشغيل مع الويندوز", "قلّل الحركة", "أصوات"].map((t, i) => (
+          <label class="mo-sw-row">
+            <span>{t}</span>
+            <button type="button" role="switch" class="mo-switch" aria-checked={i === 0 ? "true" : "false"} aria-label={t}><i /></button>
+          </label>
+        ))}
+      </div>
+    )}
+
+    {kind === "tooltip" && (
+      <div class="mo-row">
+        {[["🔁", "حوّل تاني"], ["📂", "افتح الفولدر"], ["🗑", "امسح"]].map(([i, t]) => (
+          <span class="mo-tip-wrap">
+            <button type="button" class="mo-icon" aria-label={t}>{i}</button>
+            <span class="mo-tip" role="tooltip">{t}</span>
+          </span>
+        ))}
+      </div>
+    )}
+
+    {kind === "accordion" && (
+      <div class="mo-acc">
+        {[["صور", "PNG ← JPG ← WEBP. كلها جوه Magick.NET."], ["مستندات", "DOCX و PDF و HWPX. الأصعب بيروح LibreOffice."], ["فيديو", "كله على FFmpeg، وبيتنزّل أول ما تحتاجه."]].map(([h, b], i) => (
+          <div class:list={["mo-acc-item", { "is-open": i === 0 }]}>
+            <button type="button" aria-expanded={i === 0 ? "true" : "false"}><i class="mo-chev">›</i>{h}</button>
+            <div class="mo-acc-body"><div><p>{b}</p></div></div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {kind === "donut" && (
+      <div class="mo-canvas-wrap" dir="ltr">
+        <canvas class="mo-donut" data-donut={JSON.stringify(formats)} role="img" aria-label="دونت Filee: شرايح الصيغ"></canvas>
+        <div class="mo-row mo-ctrl">
+          <button type="button" class="mo-btn" data-donut-toggle>اقفل / افتح</button>
+          <button type="button" class="mo-btn" aria-pressed="false" data-donut-slow>🐢 سلو موشن ×٤</button>
+        </div>
+      </div>
+    )}
+
+    {kind === "spring" && (
+      <div class="mo-canvas-wrap" dir="ltr">
+        <canvas class="mo-spring" data-spring role="img" aria-label="spring: كورة بتجري ورا هدف"></canvas>
+        <div class="mo-spring-ctrl">
+          <label>stiffness <input type="range" min="40" max="800" step="10" value="320" data-k /><output data-k-out>320</output></label>
+          <label>damping <input type="range" min="2" max="60" step="0.5" value="20" data-c /><output data-c-out>20</output></label>
+          <p class="mo-zeta" data-zeta dir="rtl"></p>
+          <div class="mo-row mo-wrap" dir="rtl">
+            <button type="button" class="mo-btn" data-preset="320,20">hover في Filee</button>
+            <button type="button" class="mo-btn" data-preset="320,35.8">critical (من غير نطة)</button>
+            <button type="button" class="mo-btn" data-preset="420,36">layout في Filee</button>
+            <button type="button" class="mo-btn" data-preset="320,6">مطاطي</button>
+          </div>
+          <div class="mo-row mo-wrap" dir="rtl">
+            <label class="mo-check-row"><input type="checkbox" data-lag /> frame متأخر 50ms (جهاز تقيل)</label>
+            <label class="mo-check-row"><input type="checkbox" data-sub checked /> substeps (أقصى خطوة 1/120)</label>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+</figure>
+
+<style is:global>
+  .mo {
+    --mo-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* ≈ BackEaseOut */
+    --mo-out: cubic-bezier(0.33, 1, 0.68, 1); /* ≈ CubicEaseOut */
+    --mo-in: cubic-bezier(0.32, 0, 0.67, 0); /* ≈ EaseInCubic */
+    margin: 1.6em 0;
+    background: var(--bg-soft);
+    border-radius: 16px;
+    padding: 14px 14px 16px;
+  }
+  .mo figcaption {
+    font-weight: 800;
+    color: var(--heading);
+    margin: 0 4px 10px;
+    font-size: 0.98rem;
+  }
+  .mo figcaption span {
+    display: block;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.82em;
+  }
+  .mo-stage {
+    background: var(--bg-elev);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 14px;
+    min-height: 90px;
+    position: relative;
+  }
+  .mo-row { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .mo-wrap { flex-wrap: wrap; }
+  .mo-line {
+    height: 9px;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--muted) 22%, transparent);
+    margin: 8px 0;
+  }
+
+  /* ───── زراير ───── */
+  .mo-btn {
+    font: 700 0.9rem var(--font);
+    color: var(--heading);
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .mo-btn[aria-pressed="true"] { border-color: var(--c1); color: var(--c1); }
+  .mo-soft {
+    transition: transform 0.22s var(--mo-back), background-color 0.15s, border-color 0.15s;
+  }
+  .mo-soft:hover {
+    background: color-mix(in srgb, var(--c1) 12%, var(--bg-soft));
+    border-color: color-mix(in srgb, var(--c1) 45%, var(--line));
+  }
+  .mo-soft:active { transform: scale(0.95); }
+
+  /* ───── chips ───── */
+  .mo-chip {
+    font: 700 0.85rem var(--mono);
+    color: var(--heading);
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 14px;
+    cursor: pointer;
+    transition: transform 0.25s var(--mo-back), background-color 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .mo-chip:hover {
+    transform: scale(1.05);
+    background: color-mix(in srgb, var(--c1) 9%, var(--bg-soft));
+  }
+  .mo-chip:active { transform: scale(0.95); }
+  .mo-chip.is-on {
+    background: color-mix(in srgb, var(--c1) 20%, var(--bg-soft));
+    border-color: var(--c1);
+    color: var(--c1);
+  }
+
+  /* ───── ألوان ───── */
+  .mo-colors { display: grid; gap: 14px; }
+  .mo-swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 3px solid var(--bg-elev);
+    outline: 2px solid transparent;
+    background: var(--sw);
+    cursor: pointer;
+    transition: transform 0.25s var(--mo-back), outline-color 0.15s;
+  }
+  .mo-swatch:hover { transform: scale(1.12); }
+  .mo-swatch.is-on { outline-color: var(--sw); }
+  .mo-paint {
+    display: grid;
+    gap: 2px;
+    justify-items: center;
+    padding: 18px;
+    border-radius: 14px;
+    border: 2px solid var(--paint);
+    background: color-mix(in srgb, var(--paint) 16%, var(--bg-elev));
+    transition: background-color 0.15s, border-color 0.15s;
+  }
+  .mo-paint b { color: var(--paint); font-size: 1.3rem; transition: color 0.15s; }
+  .mo-paint span { font: 600 0.78rem var(--mono); color: var(--muted); }
+
+  /* ───── drop zone ───── */
+  .mo-drop {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    padding: 26px 14px;
+    border: 2px dashed var(--line);
+    border-radius: 16px;
+    color: var(--muted);
+    transition: background-color 0.2s, border-color 0.2s, transform 0.3s var(--mo-back);
+  }
+  .mo-drop b { color: var(--heading); }
+  .mo-drop-icon { font-size: 1.6rem; transition: transform 0.3s var(--mo-back); }
+  .mo-drop:hover,
+  .mo-drop.is-over {
+    background: color-mix(in srgb, var(--c1) 12%, transparent);
+    border-color: var(--c1);
+    transform: scale(1.015);
+  }
+  .mo-drop.is-over .mo-drop-icon { transform: translateY(4px) scale(1.15); }
+
+  /* ───── رفع كارت (shadow) ───── */
+  .mo-lift { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .mo-engine {
+    display: grid;
+    gap: 2px;
+    text-align: start;
+    font: inherit;
+    color: var(--muted);
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s, transform 0.25s var(--mo-back);
+  }
+  .mo-engine b { color: var(--heading); }
+  .mo-engine.is-on {
+    border-color: var(--c1);
+    box-shadow: 0 8px 24px -6px color-mix(in srgb, var(--c1) 45%, transparent);
+    transform: translateY(-3px);
+  }
+
+  /* ───── sidebar ───── */
+  .mo-nav { list-style: none; margin: 0 auto; padding: 0; max-width: 240px; display: grid; gap: 2px; }
+  .mo-nav button {
+    width: 100%;
+    text-align: start;
+    font: 700 0.92rem var(--font);
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: transform 0.25s var(--mo-back), background-color 0.15s, color 0.15s;
+  }
+  /* في Filee بتتحرك 3px يمين (LTR). هنا الصفحة RTL فبتتحرك ناحية المحتوى: شمال */
+  .mo-nav button:hover { transform: translateX(-3px); background: color-mix(in srgb, var(--c1) 7%, transparent); }
+  .mo-nav button.is-on { background: color-mix(in srgb, var(--c1) 18%, transparent); color: var(--c1); }
+
+  /* ───── toast ───── */
+  .mo-toast-stage { display: grid; justify-items: center; gap: 12px; min-height: 170px; align-content: start; }
+  .mo-toasts { display: grid; gap: 8px; width: min(100%, 280px); }
+  .mo-toast {
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 12px;
+    font: 700 0.85rem var(--font);
+    color: var(--heading);
+    animation: mo-toast-in 0.35s var(--mo-back) both;
+  }
+  .mo-toast.is-out { animation: mo-toast-out 0.2s var(--mo-in) both; }
+  .mo-toast-bar { height: 6px; border-radius: 99px; background: var(--line); margin-top: 6px; overflow: hidden; }
+  .mo-toast-bar i { display: block; height: 100%; width: 0; background: var(--c3); border-radius: inherit; transition: width 0.3s var(--mo-out); }
+  /* زي Filee: من 40px على الجنب لمكانه، مع الشفافية */
+  @keyframes mo-toast-in { from { opacity: 0; transform: translateX(40px); } }
+  @keyframes mo-toast-out { to { opacity: 0; transform: translateX(40px) scale(0.96); } }
+
+  /* ───── فتح صفحة ───── */
+  .mo-pages { display: grid; gap: 14px; }
+  .mo-page { padding: 4px 6px; }
+  .mo-page h4 { margin: 0 0 6px; color: var(--heading); }
+  .mo-page.is-enter { animation: mo-page-in 0.28s var(--mo-out) both; }
+  @keyframes mo-page-in { from { opacity: 0; transform: translateY(10px); } }
+
+  /* ───── dropdown / select ───── */
+  .mo-dd { position: relative; width: fit-content; margin: 0 auto; }
+  /* مساحة للقائمة وهي مفتوحة عشان متغطيش الكلام اللي تحت الديمو */
+  .mo-stage:has(> .mo-dd) { min-height: 270px; }
+  .mo-menu {
+    position: absolute;
+    inset-inline-start: 0;
+    top: calc(100% + 6px);
+    z-index: 5;
+    min-width: 190px;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--bg-elev);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    transform-origin: top;
+    /* القفل: سريع ومن غير نطة */
+    opacity: 0;
+    transform: translateY(-6px) scale(0.95);
+    visibility: hidden;
+    transition: opacity 0.12s var(--mo-in), transform 0.12s var(--mo-in), visibility 0s 0.12s;
+  }
+  .mo-dd.is-open .mo-menu {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+    transition: opacity 0.18s var(--mo-out), transform 0.26s var(--mo-back), visibility 0s;
+  }
+  .mo-menu li > *, .mo-menu [role="option"] { border-radius: 8px; }
+  .mo-menu button, .mo-menu [role="option"] {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    text-align: start;
+    font: 600 0.9rem var(--font);
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: background-color 0.12s;
+  }
+  .mo-menu button:hover, .mo-menu [role="option"]:hover { background: color-mix(in srgb, var(--c1) 10%, transparent); }
+  /* العناصر بتنزل ورا بعض (stagger) زي شرايح الدونت */
+  .mo-menu li { opacity: 0; transform: translateY(-4px); transition: opacity 0.1s, transform 0.1s; }
+  .mo-dd.is-open .mo-menu li {
+    opacity: 1;
+    transform: none;
+    transition: opacity 0.2s var(--mo-out), transform 0.3s var(--mo-back);
+    transition-delay: calc(var(--i) * 28ms);
+  }
+  .mo-field {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font: 700 0.9rem var(--mono);
+    color: var(--heading);
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 7px 12px;
+    min-width: 160px;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .mo-dd.is-open .mo-field { border-color: var(--c1); }
+  .mo-chev { font-style: normal; display: inline-block; transition: transform 0.3s var(--mo-back); }
+  .mo-dd.is-open .mo-chev { transform: rotate(180deg); }
+  .mo-value { display: inline-block; }
+  .mo-value.is-swap { animation: mo-swap 0.3s var(--mo-back); }
+  @keyframes mo-swap { from { opacity: 0; transform: translateY(8px); } }
+  .mo-select .mo-menu [role="option"] { font-family: var(--mono); }
+  .mo-check { font-style: normal; color: var(--c1); opacity: 0; transform: scale(0.4); transition: opacity 0.15s, transform 0.3s var(--mo-back); }
+  [aria-selected="true"] > .mo-check { opacity: 1; transform: none; }
+
+  /* ───── tabs ───── */
+  .mo-tabs { display: grid; gap: 12px; }
+  .mo-tablist { position: relative; display: flex; gap: 4px; padding: 4px; background: var(--bg-soft); border-radius: 12px; width: fit-content; margin: 0 auto; }
+  .mo-tablist button {
+    position: relative;
+    z-index: 1;
+    font: 700 0.9rem var(--font);
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    padding: 6px 16px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .mo-tablist button[aria-selected="true"] { color: var(--c1); }
+  /* المؤشر بيتزحلق لمكان التاب الجديد: left و width بـ BackEaseOut */
+  .mo-ink {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: var(--x, 4px);
+    width: var(--w, 60px);
+    border-radius: 9px;
+    background: var(--bg-elev);
+    box-shadow: 0 2px 10px -4px color-mix(in srgb, var(--c1) 50%, transparent);
+    transition: left 0.35s var(--mo-back), width 0.35s var(--mo-back);
+  }
+  .mo-panel { overflow: hidden; text-align: center; }
+  .mo-panel p { margin: 0; font: 700 0.95rem var(--mono); color: var(--heading); }
+  .mo-panel p.from-left { animation: mo-from-left 0.3s var(--mo-out); }
+  .mo-panel p.from-right { animation: mo-from-right 0.3s var(--mo-out); }
+  @keyframes mo-from-left { from { opacity: 0; transform: translateX(-24px); } }
+  @keyframes mo-from-right { from { opacity: 0; transform: translateX(24px); } }
+
+  /* ───── modal ───── */
+  .mo-modal-stage { display: grid; place-items: center; min-height: 190px; overflow: hidden; border-radius: 12px; }
+  .mo-backdrop {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--dark) 40%, transparent);
+    border-radius: 12px;
+    opacity: 0;
+    transition: opacity 0.16s var(--mo-in);
+  }
+  .mo-backdrop[hidden] { display: none; }
+  .mo-backdrop.is-open { opacity: 1; transition: opacity 0.2s var(--mo-out); }
+  .mo-dialog {
+    display: grid;
+    gap: 4px;
+    width: min(85%, 260px);
+    padding: 16px;
+    background: var(--bg-elev);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    transform: scale(0.9);
+    opacity: 0;
+    transition: transform 0.16s var(--mo-in), opacity 0.16s var(--mo-in);
+  }
+  .mo-dialog b { color: var(--heading); }
+  .mo-dialog .mo-btn { justify-self: end; margin-top: 6px; }
+  .mo-backdrop.is-open .mo-dialog { transform: none; opacity: 1; transition: transform 0.32s var(--mo-back), opacity 0.2s var(--mo-out); }
+
+  /* ───── switch ───── */
+  .mo-switches { display: grid; gap: 10px; max-width: 280px; margin: 0 auto; }
+  .mo-sw-row { display: flex; justify-content: space-between; align-items: center; font-weight: 700; color: var(--text); }
+  .mo-switch {
+    --on: 0;
+    direction: ltr;
+    width: 46px;
+    height: 26px;
+    padding: 3px;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--muted) 35%, var(--bg-soft));
+    transition: background-color 0.15s;
+  }
+  .mo-switch i {
+    display: block;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition: transform 0.3s var(--mo-back), width 0.15s;
+  }
+  .mo-switch:active i { width: 24px; } /* الزرار بيتمط وانت دايس */
+  .mo-switch[aria-checked="true"] { background: var(--c3); }
+  .mo-switch[aria-checked="true"] i { transform: translateX(20px); }
+  .mo-switch[aria-checked="true"]:active i { transform: translateX(16px); }
+
+  /* ───── tooltip ───── */
+  .mo-tip-wrap { position: relative; display: inline-flex; }
+  .mo-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.22s var(--mo-back);
+  }
+  .mo-icon:active { transform: scale(0.92); }
+  .mo-tip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    white-space: nowrap;
+    font: 700 0.78rem var(--font);
+    color: #fff;
+    background: var(--dark);
+    padding: 3px 9px;
+    border-radius: 7px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 4px) scale(0.96);
+    /* الاختفاء فوري. الظهور بعد 300ms عشان مايطلعش مع كل حركة ماوس */
+    transition: opacity 0.1s, transform 0.1s;
+  }
+  .mo-tip-wrap:hover .mo-tip,
+  .mo-tip-wrap:focus-within .mo-tip {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition: opacity 0.18s var(--mo-out) 0.3s, transform 0.25s var(--mo-back) 0.3s;
+  }
+
+  /* ───── accordion ───── */
+  .mo-acc { display: grid; gap: 6px; }
+  .mo-acc-item { border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; transition: border-color 0.15s; }
+  .mo-acc-item.is-open { border-color: color-mix(in srgb, var(--c1) 50%, var(--line)); }
+  .mo-acc-item > button {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    font: 700 0.92rem var(--font);
+    color: var(--heading);
+    background: transparent;
+    border: 0;
+    padding: 9px 12px;
+    cursor: pointer;
+  }
+  /* السهم بيلف 90 درجة زي chevron الرئيسية في Filee. في RTL بيبص لشمال فبنلفه بالسالب */
+  .mo-acc-item .mo-chev { transform: rotate(180deg); }
+  .mo-acc-item.is-open .mo-chev { transform: rotate(90deg); }
+  .mo-acc-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s var(--mo-out); }
+  .mo-acc-item.is-open .mo-acc-body { grid-template-rows: 1fr; }
+  .mo-acc-body > div { overflow: hidden; }
+  .mo-acc-body p { margin: 0; padding: 0 14px 12px; color: var(--muted); font-size: 0.9rem; }
+
+  /* ───── canvas (الدونت والـ spring) ───── */
+  .mo-canvas-wrap { display: grid; gap: 12px; }
+  .mo-donut { width: 100%; height: 300px; display: block; touch-action: none; cursor: pointer; }
+  .mo-spring { width: 100%; height: 200px; display: block; cursor: crosshair; touch-action: none; }
+  .mo-ctrl { flex-wrap: wrap; }
+  .mo-spring-ctrl { display: grid; gap: 8px; }
+  .mo-spring-ctrl > label { display: grid; grid-template-columns: 84px 1fr 4ch; gap: 8px; align-items: center; font: 700 0.82rem var(--mono); color: var(--muted); }
+  .mo-spring-ctrl input[type="range"] { accent-color: var(--c2); min-width: 0; }
+  .mo-spring-ctrl output { font: 700 0.85rem var(--mono); color: var(--c2); }
+  .mo-zeta { margin: 0; font: 600 0.82rem var(--mono); color: var(--heading); text-align: center; }
+  .mo-check-row { display: inline-flex; gap: 6px; align-items: center; font: 600 0.82rem var(--font); color: var(--text); }
+  .mo-spring-ctrl .mo-btn { font-size: 0.8rem; padding: 4px 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mo *, .mo *::before, .mo *::after {
+      transition-duration: 0.01ms !important;
+      transition-delay: 0s !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+</style>
+
+<script>
+  const reduce = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // ───────── Spring بنفس منطق Filee (DonutMenu.cs) ─────────
+  class Spring {
+    value = 0;
+    velocity = 0;
+    static maxStep = 1 / 120;
+    step(target: number, dt: number, stiffness = 320, damping = 20, substeps = true) {
+      const steps = substeps ? Math.max(1, Math.ceil(dt / Spring.maxStep)) : 1;
+      const h = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        const force = stiffness * (target - this.value) - damping * this.velocity;
+        this.velocity += force * h;
+        this.value += this.velocity * h;
+      }
+      const settled = Math.abs(target - this.value) < 0.001 && Math.abs(this.velocity) < 0.01;
+      if (settled) {
+        this.value = target;
+        this.velocity = 0;
+      }
+      return !settled;
+    }
+  }
+  const easeOutBack = (t: number) => 1 + 2.55 * (t - 1) ** 3 + 1.55 * (t - 1) ** 2;
+  const easeInCubic = (t: number) => t * t * t;
+
+  function sizeCanvas(canvas: HTMLCanvasElement) {
+    const dpr = devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+  const onTheme = (fn: () => void) => {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", fn);
+  };
+
+  // ───────── الدونت ─────────
+  function donut(fig: HTMLElement) {
+    const canvas = fig.querySelector<HTMLCanvasElement>(".mo-donut")!;
+    const labels = JSON.parse(canvas.dataset.donut!) as string[];
+    const n = labels.length;
+    const toggle = fig.querySelector<HTMLButtonElement>("[data-donut-toggle]")!;
+    const slowBtn = fig.querySelector<HTMLButtonElement>("[data-donut-slow]")!;
+    const CRITICAL = 2 * Math.sqrt(320);
+    const OPEN_DURATION = 0.42;
+    const OPEN_STAGGER = 0.028;
+    const POP_OUT = 9;
+
+    let open = new Array(n).fill(0) as number[];
+    let openClock = Number.MAX_VALUE;
+    let closing = false;
+    let shown = false;
+    const hover = labels.map(() => new Spring());
+    const pulse = new Spring();
+    let active = -1;
+    let picked = "";
+    let slow = false;
+    let last: number | null = null;
+    let raf = 0;
+
+    const geo = () => {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const r2 = Math.min(w, h) / 2 - 16;
+      return { cx: w / 2, cy: h / 2, r1: r2 * 0.42, r2 };
+    };
+    const mid = (i: number) => -Math.PI / 2 + (i * Math.PI * 2) / n;
+    const span = (Math.PI * 2) / n - 0.06;
+
+    function openMenu() {
+      closing = false;
+      shown = true;
+      open.fill(0);
+      openClock = 0;
+      kick();
+    }
+    function closeMenu() {
+      closing = true;
+      openClock = 0;
+      kick();
+    }
+
+    function stepAll(dt: number) {
+      let busy = false;
+      for (let i = 0; i < n; i++) {
+        // الشريحة اللي تحت الماوس بتنط (320/20). اللي سبتها بترجع من غير نطة (critical)
+        busy = (i === active ? hover[i]!.step(1, dt) : hover[i]!.step(0, dt, 320, CRITICAL)) || busy;
+      }
+      busy = pulse.step(0, dt, 260, 12) || busy;
+      if (openClock < Number.MAX_VALUE) {
+        openClock += dt;
+        let done = true;
+        for (let i = 0; i < n; i++) {
+          const t = Math.min(1, Math.max(0, (openClock - i * (closing ? 0.01 : OPEN_STAGGER)) / (closing ? 0.16 : OPEN_DURATION)));
+          open[i] = closing ? 1 - easeInCubic(t) : easeOutBack(t);
+          done &&= t >= 1;
+        }
+        if (done) {
+          openClock = Number.MAX_VALUE;
+          if (closing) shown = false;
+        } else busy = true;
+      }
+      return busy;
+    }
+
+    function draw() {
+      const { ctx, w, h } = sizeCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      const { cx, cy, r1, r2 } = geo();
+      const accent = css("--c1");
+      const surface = css("--bg-soft");
+      const line = css("--line");
+      const text = css("--heading");
+      const mono = css("--mono");
+
+      for (let i = 0; i < n; i++) {
+        const o = open[i]!;
+        if (o <= 0.001) continue;
+        const hv = hover[i]!.value;
+        const m = mid(i);
+        // نفس تحويلة Filee: تكبير من النص مع لفة صغيرة، وطلعة لبرا على قد الـ hover
+        const scale = (0.55 + 0.45 * o) * (1 + hv * 0.025);
+        const rotate = (1 - Math.min(o, 1)) * -0.35;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, Math.max(0, o));
+        ctx.translate(cx + Math.cos(m) * hv * POP_OUT, cy + Math.sin(m) * hv * POP_OUT);
+        ctx.rotate(rotate);
+        ctx.scale(scale, scale);
+        ctx.beginPath();
+        ctx.arc(0, 0, r2, m - span / 2, m + span / 2);
+        ctx.arc(0, 0, r1, m + span / 2 - 0.02, m - span / 2 + 0.02, true);
+        ctx.closePath();
+        ctx.fillStyle = surface;
+        ctx.fill();
+        if (hv > 0.01) {
+          ctx.globalAlpha *= Math.min(1, hv);
+          ctx.fillStyle = accent;
+          ctx.fill();
+          ctx.globalAlpha = Math.min(1, Math.max(0, o));
+        }
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = hv > 0.5 ? accent : line;
+        ctx.stroke();
+        const lr = (r1 + r2) / 2;
+        ctx.fillStyle = hv > 0.5 ? "#fff" : text;
+        ctx.font = `800 ${Math.max(11, r2 * 0.12)}px ${mono}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(labels[i]!, Math.cos(m) * lr, Math.sin(m) * lr);
+        ctx.restore();
+      }
+
+      // النص: بينبض لما تختار
+      const avg = open.reduce((a, b) => a + b, 0) / n;
+      const cr = r1 * 0.78 * (shown ? 0.6 + 0.4 * Math.min(1, avg) : 0.6) * (1 + pulse.value * 0.08);
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      ctx.fillStyle = surface;
+      ctx.fill();
+      ctx.strokeStyle = line;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = text;
+      ctx.font = `800 ${Math.max(11, cr * 0.32)}px ${mono}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(picked ? `→ ${picked}` : shown ? "photo.jpg" : "Ctrl", cx, cy);
+    }
+
+    function frame(now: number) {
+      // فرق الوقت الحقيقي بين الفريمين، مش رقم ثابت. لو التاب كان مستخبي منقفزش ثانية كاملة
+      const dt = last === null ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const busy = stepAll(slow ? dt / 4 : dt);
+      draw();
+      if (busy) raf = requestAnimationFrame(frame);
+      else {
+        raf = 0;
+        last = null;
+      }
+    }
+    function kick() {
+      if (reduce()) {
+        // من غير حركة: القيم تروح للآخر علطول
+        hover.forEach((s, i) => { s.value = i === active ? 1 : 0; s.velocity = 0; });
+        open.fill(closing ? 0 : 1);
+        if (closing) shown = false;
+        openClock = Number.MAX_VALUE;
+        pulse.value = 0;
+        draw();
+        return;
+      }
+      if (!raf) raf = requestAnimationFrame(frame);
+    }
+
+    function hit(e: PointerEvent) {
+      const rect = canvas.getBoundingClientRect();
+      const { cx, cy, r1, r2 } = geo();
+      const x = e.clientX - rect.left - cx;
+      const y = e.clientY - rect.top - cy;
+      const d = Math.hypot(x, y);
+      if (d < r1 * 0.8) return "center" as const;
+      if (d < r1 || d > r2 + POP_OUT || !shown || closing) return -1;
+      let a = Math.atan2(y, x) + Math.PI / 2 + Math.PI / n;
+      a = ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      return Math.floor(a / ((Math.PI * 2) / n));
+    }
+    canvas.addEventListener("pointermove", (e) => {
+      const h = hit(e);
+      const next = typeof h === "number" ? h : -1;
+      if (next !== active) {
+        active = next;
+        kick();
+      }
+    });
+    canvas.addEventListener("pointerleave", () => {
+      active = -1;
+      kick();
+    });
+    canvas.addEventListener("click", (e) => {
+      const h = hit(e as PointerEvent);
+      if (h === "center") {
+        picked = "";
+        shown && !closing ? closeMenu() : openMenu();
+        return;
+      }
+      if (h >= 0) {
+        picked = labels[h]!;
+        pulse.velocity = 9; // ضربة صغيرة والـ spring يرجّعه
+        kick();
+      }
+    });
+    toggle.addEventListener("click", () => {
+      picked = "";
+      shown && !closing ? closeMenu() : openMenu();
+    });
+    slowBtn.addEventListener("click", () => {
+      slow = !slow;
+      slowBtn.setAttribute("aria-pressed", String(slow));
+    });
+    new ResizeObserver(draw).observe(canvas);
+    onTheme(draw);
+    const io = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      io.disconnect();
+      openMenu();
+    }, { threshold: 0.5 });
+    io.observe(canvas);
+    draw();
+  }
+
+  // ───────── ملعب الـ spring ─────────
+  function springLab(fig: HTMLElement) {
+    const canvas = fig.querySelector<HTMLCanvasElement>(".mo-spring")!;
+    const k = fig.querySelector<HTMLInputElement>("[data-k]")!;
+    const c = fig.querySelector<HTMLInputElement>("[data-c]")!;
+    const kOut = fig.querySelector<HTMLOutputElement>("[data-k-out]")!;
+    const cOut = fig.querySelector<HTMLOutputElement>("[data-c-out]")!;
+    const zeta = fig.querySelector<HTMLElement>("[data-zeta]")!;
+    const lag = fig.querySelector<HTMLInputElement>("[data-lag]")!;
+    const sub = fig.querySelector<HTMLInputElement>("[data-sub]")!;
+    const s = new Spring();
+    let target = 1;
+    let trail: number[] = [];
+    let raf = 0;
+    let last: number | null = null;
+    let lagWait = 0;
+    let exploded = false;
+
+    const W = () => canvas.clientWidth;
+    const toX = (v: number) => 30 + Math.min(1.6, Math.max(-0.6, v)) * (W() - 60) * 0.62 + (W() - 60) * 0.19;
+
+    function info() {
+      const kv = Number(k.value);
+      const cv = Number(c.value);
+      kOut.textContent = String(kv);
+      cOut.textContent = String(cv);
+      const z = cv / (2 * Math.sqrt(kv));
+      const kind = z < 0.98 ? "هتنط (underdamped)" : z <= 1.02 ? "critical: أسرع وصول من غير نطة" : "تقيلة (overdamped)";
+      zeta.textContent = `ζ = ${z.toFixed(2)} → ${kind}`;
+    }
+
+    function draw() {
+      const { ctx, w, h } = sizeCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      const line = css("--line");
+      const muted = css("--muted");
+      const c2 = css("--c2");
+      const mono = css("--mono");
+      const laneY = 46;
+      // الحارة والهدف
+      ctx.strokeStyle = line;
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(toX(-0.2), laneY);
+      ctx.lineTo(toX(1.2), laneY);
+      ctx.stroke();
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = muted;
+      ctx.beginPath();
+      ctx.moveTo(toX(target), laneY - 22);
+      ctx.lineTo(toX(target), h - 10);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = muted;
+      ctx.font = `600 11px ${mono}`;
+      ctx.textAlign = "center";
+      ctx.fillText("target", toX(target), 14);
+      // الكورة
+      ctx.fillStyle = c2;
+      ctx.beginPath();
+      ctx.arc(toX(s.value), laneY, 11, 0, Math.PI * 2);
+      ctx.fill();
+      // الأثر: القيمة على مر الوقت (الأحدث فوق)
+      ctx.strokeStyle = c2;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const top = laneY + 22;
+      trail.forEach((v, i) => {
+        const y = top + i * ((h - top - 8) / 120);
+        if (i === 0) ctx.moveTo(toX(v), y);
+        else ctx.lineTo(toX(v), y);
+      });
+      ctx.stroke();
+      if (exploded) {
+        ctx.fillStyle = css("--c2");
+        ctx.font = `800 13px ${mono}`;
+        ctx.fillText("💥 الـ spring فرقعت. شغّل substeps", w / 2, h / 2 + 30);
+      }
+    }
+
+    function frame(now: number) {
+      let dt = last === null ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
+      last = now;
+      if (lag.checked) {
+        // بنحاكي جهاز تقيل: فريم واحد كل 50ms
+        lagWait += dt;
+        if (lagWait < 0.05) {
+          raf = requestAnimationFrame(frame);
+          return;
+        }
+        dt = lagWait;
+        lagWait = 0;
+      }
+      const busy = s.step(target, dt, Number(k.value), Number(c.value), sub.checked);
+      if (!Number.isFinite(s.value) || Math.abs(s.value) > 50) {
+        exploded = true;
+        s.value = target;
+        s.velocity = 0;
+      }
+      trail.unshift(s.value);
+      trail = trail.slice(0, 121);
+      draw();
+      if (busy || trail.some((v) => Math.abs(v - target) > 0.001)) raf = requestAnimationFrame(frame);
+      else {
+        raf = 0;
+        last = null;
+      }
+    }
+    function go(t: number) {
+      target = t;
+      exploded = false;
+      if (reduce()) {
+        s.value = t;
+        s.velocity = 0;
+        trail = [t];
+        draw();
+        return;
+      }
+      if (!raf) raf = requestAnimationFrame(frame);
+    }
+    canvas.addEventListener("pointerdown", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const v = (x - 30 - (W() - 60) * 0.19) / ((W() - 60) * 0.62);
+      go(Math.min(1.2, Math.max(-0.2, v)));
+    });
+    for (const input of [k, c]) input.addEventListener("input", () => { info(); go(target === 1 ? 0 : 1); });
+    fig.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const [kv, cv] = b.dataset.preset!.split(",");
+        k.value = kv!;
+        c.value = cv!;
+        info();
+        go(target === 1 ? 0 : 1);
+      }),
+    );
+    for (const input of [lag, sub]) input.addEventListener("change", () => go(target === 1 ? 0 : 1));
+    new ResizeObserver(draw).observe(canvas);
+    onTheme(draw);
+    info();
+    s.value = 0;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      io.disconnect();
+      go(1);
+    }, { threshold: 0.5 });
+    io.observe(canvas);
+    draw();
+  }
+
+  // ───────── الديموهات اللي بالـ DOM ─────────
+  function chips(fig: HTMLElement) {
+    fig.querySelectorAll<HTMLButtonElement>(".mo-chip").forEach((b) =>
+      b.addEventListener("click", () => {
+        const on = b.classList.toggle("is-on");
+        b.setAttribute("aria-pressed", String(on));
+      }),
+    );
+  }
+  function colors(fig: HTMLElement) {
+    const paint = fig.querySelector<HTMLElement>("[data-paint]")!;
+    const sw = [...fig.querySelectorAll<HTMLButtonElement>("[data-swatch]")];
+    sw[0]?.classList.add("is-on");
+    sw.forEach((b) =>
+      b.addEventListener("click", () => {
+        sw.forEach((x) => x.classList.toggle("is-on", x === b));
+        paint.style.setProperty("--paint", `var(--c${b.dataset.swatch})`);
+      }),
+    );
+  }
+  function dropzone(fig: HTMLElement) {
+    const zone = fig.querySelector<HTMLElement>("[data-drop]")!;
+    const msg = fig.querySelector<HTMLElement>("[data-drop-msg]")!;
+    let depth = 0; // dragenter بيتنده على كل عنصر جوه، فبنعد
+    zone.addEventListener("dragenter", (e) => { e.preventDefault(); depth++; zone.classList.add("is-over"); });
+    zone.addEventListener("dragover", (e) => e.preventDefault());
+    zone.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; zone.classList.remove("is-over"); } });
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      depth = 0;
+      zone.classList.remove("is-over");
+      const f = e.dataTransfer?.files[0];
+      msg.textContent = f ? `✓ ${f.name} (مش بنرفع حاجة، ده ديمو)` : "✓ وصل";
+    });
+  }
+  function lift(fig: HTMLElement) {
+    fig.querySelectorAll<HTMLButtonElement>(".mo-engine").forEach((b) => b.addEventListener("click", () => b.classList.toggle("is-on")));
+  }
+  function nav(fig: HTMLElement) {
+    const items = [...fig.querySelectorAll<HTMLButtonElement>(".mo-nav button")];
+    items.forEach((b) => b.addEventListener("click", () => items.forEach((x) => x.classList.toggle("is-on", x === b))));
+  }
+  function toast(fig: HTMLElement) {
+    const list = fig.querySelector<HTMLElement>("[data-toasts]")!;
+    const names = ["photo.heic", "report.docx", "clip.mov", "scan.pdf", "logo.svg"];
+    let n = 0;
+    fig.querySelector("[data-toast-add]")!.addEventListener("click", () => {
+      if (list.children.length >= 3) return;
+      const name = names[n++ % names.length]!;
+      const el = document.createElement("div");
+      el.className = "mo-toast";
+      el.innerHTML = `<span></span><div class="mo-toast-bar"><i></i></div>`;
+      el.querySelector("span")!.textContent = `🔁 ${name}`;
+      list.append(el);
+      const bar = el.querySelector<HTMLElement>("i")!;
+      let p = 0;
+      const tick = setInterval(() => {
+        p = Math.min(100, p + 18 + Math.random() * 18);
+        bar.style.width = `${p}%`;
+        if (p < 100) return;
+        clearInterval(tick);
+        el.querySelector("span")!.textContent = `✓ ${name}`;
+        setTimeout(() => {
+          el.classList.add("is-out");
+          el.addEventListener("animationend", () => el.remove(), { once: true });
+          if (reduce()) el.remove();
+        }, 900);
+      }, 260);
+    });
+  }
+  function page(fig: HTMLElement) {
+    const box = fig.querySelector<HTMLElement>("[data-page-box]")!;
+    const title = fig.querySelector<HTMLElement>("[data-page-title]")!;
+    const tabs = [...fig.querySelectorAll<HTMLButtonElement>("[data-page]")];
+    tabs.forEach((b) =>
+      b.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.toggle("is-on", x === b));
+        title.textContent = b.textContent;
+        // نشيل الكلاس ونرجعه عشان الـ animation يشتغل من الأول
+        box.classList.remove("is-enter");
+        void box.offsetWidth;
+        box.classList.add("is-enter");
+      }),
+    );
+  }
+  function dropdownLike(fig: HTMLElement) {
+    const dd = fig.querySelector<HTMLElement>("[data-dd]")!;
+    const btn = dd.querySelector<HTMLButtonElement>("[data-dd-btn]")!;
+    const set = (open: boolean) => {
+      dd.classList.toggle("is-open", open);
+      btn.setAttribute("aria-expanded", String(open));
+    };
+    btn.addEventListener("click", () => set(!dd.classList.contains("is-open")));
+    document.addEventListener("pointerdown", (e) => { if (!dd.contains(e.target as Node)) set(false); });
+    dd.addEventListener("keydown", (e) => { if (e.key === "Escape") { set(false); btn.focus(); } });
+    dd.querySelectorAll<HTMLButtonElement>("[role=menuitem]").forEach((b) => b.addEventListener("click", () => set(false)));
+    const value = dd.querySelector<HTMLElement>("[data-value]");
+    const options = [...dd.querySelectorAll<HTMLElement>("[data-option]")];
+    options.forEach((o) => {
+      o.tabIndex = 0;
+      const pick = () => {
+        options.forEach((x) => x.setAttribute("aria-selected", String(x === o)));
+        if (value && value.textContent !== o.dataset.option) {
+          value.textContent = o.dataset.option!;
+          value.classList.remove("is-swap");
+          void value.offsetWidth;
+          value.classList.add("is-swap");
+        }
+        setTimeout(() => set(false), 120); // يلحق يشوف علامة ✓ وهي بتنط
+      };
+      o.addEventListener("click", pick);
+      o.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    });
+  }
+  function tabs(fig: HTMLElement) {
+    const tabs = [...fig.querySelectorAll<HTMLButtonElement>("[data-tab]")];
+    const ink = fig.querySelector<HTMLElement>("[data-ink]")!;
+    const text = fig.querySelector<HTMLElement>("[data-panel-text]")!;
+    const content = ["PNG · JPG · WEBP · AVIF", "DOCX · PDF · HWPX · EPUB", "MP4 · WEBM · MOV · GIF"];
+    let current = 0;
+    const place = () => {
+      const t = tabs[current]!;
+      ink.style.setProperty("--x", `${t.offsetLeft}px`);
+      ink.style.setProperty("--w", `${t.offsetWidth}px`);
+    };
+    tabs.forEach((t, i) =>
+      t.addEventListener("click", () => {
+        if (i === current) return;
+        // الصفحة RTL: التاب اللي بعده على الشمال، فالمحتوى الجديد ييجي من الشمال
+        const cls = i > current ? "from-left" : "from-right";
+        current = i;
+        tabs.forEach((x, j) => x.setAttribute("aria-selected", String(j === i)));
+        place();
+        text.textContent = content[i]!;
+        text.className = "";
+        void text.offsetWidth;
+        text.className = cls;
+      }),
+    );
+    new ResizeObserver(place).observe(fig);
+    place();
+  }
+  function modal(fig: HTMLElement) {
+    const back = fig.querySelector<HTMLElement>("[data-modal]")!;
+    const openBtn = fig.querySelector<HTMLButtonElement>("[data-modal-open]")!;
+    const open = () => {
+      back.hidden = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => back.classList.add("is-open")));
+      back.querySelector<HTMLButtonElement>("[data-modal-close]")!.focus({ preventScroll: true });
+    };
+    const close = () => {
+      back.classList.remove("is-open");
+      // بنستنى الـ transition يخلص قبل ما نخفيه (زي FinishClose في Filee)
+      setTimeout(() => { back.hidden = true; openBtn.focus({ preventScroll: true }); }, reduce() ? 0 : 170);
+    };
+    openBtn.addEventListener("click", open);
+    back.addEventListener("click", (e) => { if (e.target === back) close(); });
+    back.querySelector("[data-modal-close]")!.addEventListener("click", close);
+    back.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  }
+  function switches(fig: HTMLElement) {
+    fig.querySelectorAll<HTMLButtonElement>(".mo-switch").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        b.setAttribute("aria-checked", String(b.getAttribute("aria-checked") !== "true"));
+      }),
+    );
+  }
+  function accordion(fig: HTMLElement) {
+    fig.querySelectorAll<HTMLElement>(".mo-acc-item").forEach((item) => {
+      const b = item.querySelector("button")!;
+      b.addEventListener("click", () => b.setAttribute("aria-expanded", String(item.classList.toggle("is-open"))));
+    });
+  }
+
+  const handlers: Record<string, (fig: HTMLElement) => void> = {
+    chips,
+    colors,
+    dropzone,
+    lift,
+    nav,
+    toast,
+    page,
+    dropdown: dropdownLike,
+    select: dropdownLike,
+    tabs,
+    modal,
+    switch: switches,
+    accordion,
+    donut,
+    spring: springLab,
+  };
+  const boot = () => {
+    for (const fig of document.querySelectorAll<HTMLElement>("figure.mo[data-mo]")) {
+      if (fig.dataset.bound) continue;
+      fig.dataset.bound = "1";
+      handlers[fig.dataset.mo!]?.(fig);
+    }
+  };
+  boot();
+  document.addEventListener("astro:page-load", boot);
+</script>

@@ -1,0 +1,278 @@
+---
+title: اللي في Filee — زراير، chips، ألوان، sidebar، toast، صفحات
+short: اللي في Filee
+order: 3
+label: فصل ٣
+badge: اللي في Filee · فصل ٣
+en: TransformOperationsTransition · BrushTransition · BoxShadowsTransition · Style.Animations · KeyFrame
+keywords: scale(0.95) · scale(1.05) · translateX(3px) · 0.15s · keyframes
+goal: تعيد كل حركة عادية في Filee على الويب، وتعرف المقابل بتاعها في الـ XAML.
+part: اللي في Filee
+color: c3
+---
+
+كل ديمو تحت معمول بـ CSS بس، نفس الأرقام اللي في كود Filee. الـ easing في الديموهات هو `cubic-bezier(0.34, 1.56, 0.64, 1)`، أقرب حاجة في CSS للـ <En>BackEaseOut</En> (شوف الفصل اللي فات).
+
+<Box type="idea" title="الأرقام كلها من Filee">
+
+`0.95` للضغط، `1.05` للـ chip، `3px` للـ sidebar، `0.15s` للألوان، `0.22s` للزراير، `0.25s` للـ chips والـ sidebar، `0.35s` للـ toast، `0.28s` للصفحة. مش أرقام من دماغي.
+
+</Box>
+
+## الزراير: تتكبس ٥٪ وترجع
+
+لما تدوس، الزرار بيصغر لـ `scale(0.95)`. لما تسيب، بيرجع لحجمه بـ <En>BackEaseOut</En>، فيعدّي حجمه شعرة ويرجع. ده إحساس "المهلبية".
+
+<MotionDemo kind="press" title="زرار عادي قصاد زرار Filee" />
+
+<Grid2>
+<Card title="Filee (XAML)" c={1}>
+
+```xml
+<Style Selector="Button, ToggleButton, RepeatButton">
+  <Setter Property="Transitions">
+    <Transitions>
+      <TransformOperationsTransition
+        Property="RenderTransform"
+        Duration="0:0:0.22"
+        Easing="{StaticResource SoftEase}" />
+    </Transitions>
+  </Setter>
+</Style>
+<Style Selector="Button:pressed">
+  <Setter Property="RenderTransform"
+          Value="scale(0.95)" />
+</Style>
+```
+
+</Card>
+<Card title="الويب (CSS)" c={3}>
+
+```css
+.btn {
+  transition: transform 0.22s var(--ease-back);
+}
+.btn:active {
+  transform: scale(0.95);
+}
+```
+
+</Card>
+</Grid2>
+
+<Box type="tip" title="ليه transform مش width؟">
+
+الـ `transform` مش بيغيّر الـ layout. العناصر اللي جنب الزرار مش بتتحرك، والمتصفح (أو Skia) بيرسمه على الـ GPU. تغيير `width` أو `padding` بيخلي الصفحة كلها تتحسب تاني، فتحس بتقطيع.
+
+</Box>
+
+## الـ chips: تكبر ٥٪ وتتلوّن
+
+في Filee، الـ chips هي الصيغ اللي بتسحبها وترتبها في محرر الدونت (عشان كده الـ cursor بتاعها `SizeAll`). لما تعدّي عليها، بتكبر لـ `scale(1.05)` والخلفية بتاخد لون فاتح من الـ accent.
+
+<MotionDemo kind="chips" title="chips الصيغ" />
+
+<File name="Styles/Soft.axaml (Filee)">
+
+```xml
+<Style Selector="Border.chip">
+  <Setter Property="Transitions">
+    <Transitions>
+      <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.25" Easing="{StaticResource SoftEase}" />
+      <BrushTransition Property="Background" Duration="0:0:0.15" />
+    </Transitions>
+  </Setter>
+</Style>
+<Style Selector="Border.chip:pointerover">
+  <Setter Property="Background" Value="{DynamicResource AccentFaintBrush}" />
+  <Setter Property="RenderTransform" Value="scale(1.05)" />
+</Style>
+```
+
+</File>
+
+لاحظ حاجة: <Hl c="o">الحجم بياخد 0.25 ثانية بنطة، واللون بياخد 0.15 من غير نطة</Hl>. اللون مينفعش "ينط" (هيعدّي اللون التاني ويرجع، وده شكله وحش)، فبياخد مدة أقصر ومنحنى عادي.
+
+## الألوان: BrushTransition
+
+أي لون بيتغير في Filee (خلفية، ثيم، accent) بيتغير في ١٥٠ms. مش بيقفز. ده اللي بيخلي تغيير الثيم أو اختيار عنصر يحس ناعم.
+
+<MotionDemo kind="colors" title="غيّر الـ accent" />
+
+```css
+.card {
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+```
+
+<Box type="warn" title="متعملش transition: all">
+
+`transition: all` بيحرّك كل خاصية بتتغير، حتى اللي مش عايزها (زي `width` لما الشاشة تصغر). Filee بيكتب كل خاصية لوحدها: `RenderTransform` و `Background`. اعمل زيه.
+
+</Box>
+
+## الـ Drop zone: بتكبر وتتلوّن لما الملف ييجي فوقها
+
+في الصفحة الرئيسية في Filee مربع تسيب فيه الملفات. لما ملف يبقى فوقه، بياخد كلاس `over`: الخلفية بتتلوّن، والإطار بياخد الـ accent، وبيكبر لـ `scale(1.015)` بس. ١.٥٪. صغيرة جدًا بس بتحسها.
+
+<MotionDemo kind="dropzone" title="مربع الـ drop (جرّب تسحب ملف حقيقي)" />
+
+<File name="Views/Pages/HomePage.axaml (Filee)">
+
+```xml
+<Style Selector="Border#DropZone">
+  <Setter Property="Transitions">
+    <Transitions>
+      <BrushTransition Property="Background" Duration="0:0:0.2" />
+      <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.3" Easing="BackEaseOut" />
+    </Transitions>
+  </Setter>
+</Style>
+<Style Selector="Border#DropZone.over">
+  <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  <Setter Property="RenderTransform" Value="scale(1.015)" />
+</Style>
+```
+
+</File>
+
+على الويب، الـ `dragenter` بيتنده على كل عنصر جوه المربع، فلو شلت الكلاس في أول `dragleave` هيرمش. الحل إنك تعد: زوّد مع كل `dragenter` وقلّل مع كل `dragleave`، وشيل الكلاس لما العدد يوصل صفر.
+
+## كروت المحرّكات: ظل بيترفع
+
+في صفحة المحرّكات بتسحب الكارت عشان تغيّر الأولوية. الكارت اللي بتسحبه بياخد ظل أكبر وإطار ملوّن، والظل بيتحرك بـ `BoxShadowsTransition` في ١٥٠ms. فيحس إنك رفعته من على الترابيزة.
+
+<MotionDemo kind="lift" title="ارفع كارت" />
+
+```css
+.engine {
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.engine.dragging {
+  box-shadow: 0 8px 24px 0 rgb(0 0 0 / 0.2);
+}
+```
+
+## عناصر الـ sidebar: تتزق ٣ بكسل
+
+لما تعدّي على عنصر في القائمة الجانبية، بيتحرك `translateX(3px)` ناحية المحتوى. ٣ بكسل بس، بس بتحس إن القائمة بتسمعك.
+
+<MotionDemo kind="nav" title="القائمة الجانبية" />
+
+<File name="Styles/Soft.axaml (Filee)">
+
+```xml
+<Style Selector="ListBox.nav ListBoxItem">
+  <Setter Property="RenderTransform" Value="none" />
+  <Setter Property="Transitions">
+    <Transitions>
+      <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.25" Easing="{StaticResource SoftEase}" />
+    </Transitions>
+  </Setter>
+</Style>
+<Style Selector="ListBox.nav ListBoxItem:pointerover">
+  <Setter Property="RenderTransform" Value="translateX(3px)" />
+</Style>
+```
+
+</File>
+
+<Box type="interview" title="خلّي بالك من RTL">
+
+Filee بيتحرك `3px` يمين لأن القائمة على الشمال. في موقع عربي القائمة على اليمين، فالحركة لازم تبقى `-3px` (ناحية المحتوى برضه). في CSS ممكن تستخدم متغيّر: `--dir: 1` وفي `:dir(rtl)` تخليه `-1`، وتكتب `translateX(calc(3px * var(--dir)))`.
+
+</Box>
+
+## الـ toast: keyframes بيدخل من الجنب
+
+ده أول مكان نشوف فيه <En>keyframes</En> بدل transition. الـ toast مش "بيتغير" من حالة لحالة. هو **بيظهر**. فمحتاج حركة تشتغل لوحدها أول ما يتحط.
+
+<MotionDemo kind="toast" title="toast التحويل" />
+
+<Grid2>
+<Card title="Filee (XAML)" c={1}>
+
+```xml
+<Style Selector="ItemsControl#Jobs ContentPresenter">
+  <Style.Animations>
+    <Animation Duration="0:0:0.35"
+               Easing="BackEaseOut"
+               FillMode="Forward">
+      <KeyFrame Cue="0%">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Margin" Value="40,0,-40,0" />
+      </KeyFrame>
+      <KeyFrame Cue="100%">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="Margin" Value="0" />
+      </KeyFrame>
+    </Animation>
+  </Style.Animations>
+</Style>
+```
+
+</Card>
+<Card title="الويب (CSS)" c={3}>
+
+```css
+.toast {
+  animation: toast-in 0.35s var(--ease-back) both;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+```
+
+</Card>
+</Grid2>
+
+لاحظ إن Filee بيحرّك `Margin` مش `RenderTransform`. ده مش ذوق: كاتب في الكود إن الـ keyframes في نسخته من Avalonia مش بتعرف تحرّك `RenderTransform`، فاستخدم الـ margin بدلها. على الويب استخدم `transform` لأنه أخف.
+
+## فتح صفحة: تطلع ١٠ بكسل وتظهر
+
+لما تتنقل بين صفحات الإعدادات، المحتوى الجديد بيظهر من الشفافية وهو طالع ١٠ بكسل لفوق، في ٢٨٠ms بـ <En>CubicEaseOut</En>. **من غير نطة**، لأن صفحة كاملة بتنط شكلها وحش.
+
+<MotionDemo kind="page" title="التنقل بين الصفحات" />
+
+<File name="Styles/Soft.axaml (Filee)">
+
+```xml
+<!-- keyframes can't animate RenderTransform, so Margin slides -->
+<Style Selector="ContentControl.page > :is(Control)">
+  <Style.Animations>
+    <Animation Duration="0:0:0.28" Easing="CubicEaseOut" FillMode="Forward">
+      <KeyFrame Cue="0%">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Margin" Value="0,10,0,-10" />
+      </KeyFrame>
+      <KeyFrame Cue="100%">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="Margin" Value="0" />
+      </KeyFrame>
+    </Animation>
+  </Style.Animations>
+</Style>
+```
+
+</File>
+
+على الويب، عشان الـ animation يشتغل تاني مع كل صفحة، شيل الكلاس، اقرا `offsetWidth` (ده بيجبر المتصفح يحسب)، ورجّع الكلاس:
+
+```ts
+box.classList.remove("enter");
+void box.offsetWidth; // reflow: من غيرها المتصفح مش هيحس إن الكلاس اتشال
+box.classList.add("enter");
+```
+
+<Checklist id="filee-motion-transitions" title="خلّصت الفصل لما" items={["تعمل زرار بيتكبس scale(0.95) ويرجع بنطة", "تفصل مدة اللون عن مدة الحجم", "تعمل drop zone مبترمشش مع dragenter و dragleave", "تعرف إمتى transition وإمتى keyframes", "تعكس اتجاه الحركة في RTL"]} />
+
+<Quiz>
+<Q n={1} q="ليه اللون مبياخدش BackEaseOut زي الحجم؟">لأن اللون لو عدّى هدفه هيروح للون تاني ويرجع، وده بيبان غلط. فبياخد 0.15s من غير نطة.</Q>
+<Q n={2} q="الـ toast ليه keyframes مش transition؟">لأنه بيظهر، مش بيتغير من حالة لحالة. الـ keyframes بيشتغل لوحده أول ما العنصر يتحط.</Q>
+<Q n={3} q="فتح الصفحة ليه CubicEaseOut مش BackEaseOut؟">صفحة كاملة لو نطت شكلها بيتهز. الحاجات الكبيرة تتحرك من غير overshoot.</Q>
+<Q n={4} q="ليه Filee بيحرّك Margin في الـ keyframes؟">لأن الـ keyframes في Avalonia عنده مش بتحرّك RenderTransform، وده مكتوب كتعليق في الكود.</Q>
+</Quiz>

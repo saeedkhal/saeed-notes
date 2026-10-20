@@ -1,0 +1,135 @@
+---
+title: التلميع — حركة أقل، ومقاسات، وإزاي تبني نظام حركة
+short: التلميع
+order: 6
+label: فصل ٦
+badge: بعدها · فصل ٦
+en: prefers-reduced-motion · reduced-motion class · motion tokens · durations
+keywords: reduced motion · tokens · ٣ مدد · ٣ منحنيات
+goal: تحترم اللي طالب حركة أقل زي Filee، وتطلع بنظام حركة صغير تستخدمه في أي مشروع.
+part: بعدها
+color: c1
+---
+
+## حركة أقل: Filee بيسمع الكلام
+
+ناس كتير بتدوخ من الحركة. ويندوز وماك ولينكس فيهم إعداد "قلّل الحركة". Filee بيقرا الإعداد ده من النظام، وكمان حاطط زرار في صفحة الثيم لو عايز تغيّره بإيدك.
+
+اللي بيعمله بسيط: **كلاس واحد على الشباك** اسمه `reduced-motion`، وكل الـ transitions بتتشال لما يكون موجود:
+
+<File name="Styles/Soft.axaml (Filee)">
+
+```xml
+<Style Selector="Window.reduced-motion :is(Button),
+                 Window.reduced-motion :is(ToggleButton),
+                 Window.reduced-motion Border.chip,
+                 Window.reduced-motion ListBoxItem">
+  <Setter Property="Transitions" Value="{x:Null}" />
+</Style>
+```
+
+</File>
+
+والدونت؟ في الـ loop بتاعه بيسأل `Motion.Enabled`. لو الحركة مقفولة، بيحط كل القيم على هدفها علطول ومفيش spring:
+
+```csharp
+if (!Motion.Enabled)
+{
+    for (var i = 0; i < _hover.Length; i++)
+    {
+        _hover[i].Value = i == ActiveIndex ? 1 : 0;
+        _hover[i].Velocity = 0;
+    }
+    Array.Fill(_open, _closing ? 0 : 1);
+}
+```
+
+### على الويب
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}
+```
+
+```ts
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (reduce) {
+  spring.value = target; // روح للهدف علطول
+  spring.velocity = 0;
+}
+```
+
+<Box type="warn" title="ليه 0.01ms مش none؟">
+
+لو شلت الـ animation خالص، الكود اللي مستني `transitionend` أو `animationend` (زي مسح الـ toast بعد ما يختفي) مش هيشتغل أبدًا. `0.01ms` بتخلي الحدث يتنده، والعين متشوفش حاجة.
+
+</Box>
+
+<Box type="tip" title="حركة أقل مش يعني من غير feedback">
+
+اللون لسه بيتغير، والعنصر المختار لسه مختار. اللي بيتشال هو **الحركة في المكان** (تكبير، زحلقة، نطة). ده اللي بيدوّخ.
+
+</Box>
+
+## نظام حركة صغير تاخده معاك
+
+لو جمعت كل اللي في Filee، هتلاقي إنه بيستخدم **٣ منحنيات** و **حوالي ٥ مدد** بس. حطهم في مكان واحد:
+
+<File name="motion.css">
+
+```css
+:root {
+  /* المنحنيات */
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* حاجة صغيرة بتتداس أو تظهر */
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);     /* حاجة كبيرة: صفحة، لوحة */
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);      /* القفل */
+
+  /* المدد (من أرقام Filee) */
+  --dur-color: 0.15s;  /* ألوان وظلال */
+  --dur-press: 0.22s;  /* زراير */
+  --dur-hover: 0.25s;  /* chips و sidebar */
+  --dur-page: 0.28s;   /* صفحة */
+  --dur-pop: 0.35s;    /* toast و dialog */
+  --dur-close: 0.16s;  /* أي قفل */
+  --stagger: 28ms;
+}
+```
+
+</File>
+
+| الحاجة | المنحنى | المدة | الحركة |
+| --- | --- | --- | --- |
+| زرار اتداس | `--ease-back` | `--dur-press` | `scale(0.95)` |
+| hover على chip | `--ease-back` | `--dur-hover` | `scale(1.05)` |
+| hover في sidebar | `--ease-back` | `--dur-hover` | `translateX(3px)` |
+| لون أو ظل | (عادي) | `--dur-color` | لون |
+| toast أو dialog بيظهر | `--ease-back` | `--dur-pop` | `opacity` + زحلقة أو `scale` |
+| صفحة | `--ease-out` | `--dur-page` | `opacity` + `10px` |
+| أي حاجة بتقفل | `--ease-in` | `--dur-close` | عكس الفتح |
+| حاجة بتتبع الماوس | spring | (ملهاش مدة) | `320 / 20` |
+
+## غلطات بتبوّظ الطراوة
+
+<Cheat items={[
+  ["الحركة تحسها تقيلة", "المدة أطول من 400ms. قصّرها"],
+  ["الصفحة بتترقص", "BackEaseOut على حاجة كبيرة. استخدم CubicEaseOut"],
+  ["الأبلكيشن بيقطّع", "بتحرّك width أو top. حرّك transform"],
+  ["اللون بيرمش", "BackEaseOut على لون. الألوان من غير نطة"],
+  ["القفل مستفز", "القفل زي الفتح. خلّيه أسرع ومن غير نطة"],
+  ["الحركة بتقطع لما الماوس يتحرك بسرعة", "easing بمدة ثابتة. استخدم spring"],
+  ["الـ spring بتطير على جهاز بطيء", "قسّم dt لخطوات أقصاها 1/120"],
+  ["CPU شغال والأبلكيشن واقف", "الـ loop مش بيقف. وقّفه لما كله يهدى"],
+]} />
+
+<Checklist id="filee-motion-polish" title="خلّصت الفصل لما" items={["تحترم prefers-reduced-motion في CSS و JS", "تعرف ليه 0.01ms مش none", "تعمل ملف motion tokens فيه 3 منحنيات وشوية مدد", "تعرف الغلطات اللي بتبوّظ الطراوة"]} />
+
+<Quiz>
+<Q n={1} q="Filee بيقفل الحركة إزاي؟">كلاس reduced-motion على الشباك بيشيل الـ Transitions، والدونت بيسأل Motion.Enabled ويحط القيم على هدفها علطول.</Q>
+<Q n={2} q="إيه اللي يفضل شغال لما الحركة تتقفل؟">تغيير الألوان والحالة. اللي بيتشال هو التكبير والزحلقة والنطة.</Q>
+<Q n={3} q="ليه نحط المدد والمنحنيات في متغيرات؟">عشان الأبلكيشن كله يتحرك بنفس الإحساس، ولو حبيت تغيّر حاجة تغيّرها في مكان واحد، زي SoftEase في Filee.</Q>
+</Quiz>

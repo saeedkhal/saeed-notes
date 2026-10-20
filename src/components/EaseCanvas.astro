@@ -1,0 +1,331 @@
+---
+/**
+ * رسمة canvas لمنحنيات الـ easing: كل منحنى بيترسم وهو ماشي، وتحته حارة فيها كورة
+ * بتتحرك بنفس القيمة عشان تحس الفرق بعينك مش بس على الرسم.
+ *
+ * الوقت على المحور الأفقي (٠ → ٧٠٠ms). المنحنيات العادية بتخلص في ٤٢٠ms (مدة فتح الدونت في Filee)،
+ * والـ spring بتتحسب خطوة خطوة بنفس معادلة Filee (stiffness 320, damping 20).
+ */
+type Curve = "linear" | "in-cubic" | "out-cubic" | "back-out" | "av-back" | "spring";
+interface Props {
+  title?: string;
+  curves?: Curve[];
+  /** يظهر slider للـ c1 بتاع BackEaseOut */
+  overshoot?: boolean;
+  height?: number;
+}
+const { title, curves = ["linear", "out-cubic", "back-out"], overshoot = false, height = 260 } = Astro.props;
+const names: Record<Curve, string> = {
+  linear: "Linear",
+  "in-cubic": "EaseInCubic",
+  "out-cubic": "CubicEaseOut",
+  "back-out": "EaseOutBack 1.55",
+  "av-back": "Avalonia BackEaseOut",
+  spring: "Spring 320/20",
+};
+const colors: Record<Curve, number> = { linear: 5, "in-cubic": 4, "out-cubic": 3, "back-out": 1, "av-back": 2, spring: 4 };
+const data = JSON.stringify({ curves, colors });
+---
+<figure class="ec" data-ec={data}>
+  {title && <figcaption>{title}</figcaption>}
+  <div class="ec-body" dir="ltr">
+    <canvas class="ec-chart" style={`height:${height}px`} role="img" aria-label={`رسمة منحنيات: ${curves.map((c) => names[c]).join("، ")}`}></canvas>
+    <div class="ec-lanes">
+      {curves.map((c) => (
+        <div class="ec-lane" style={`--ec-c: var(--c${colors[c]})`}>
+          <span class="ec-name">{names[c]}</span>
+          <div class="ec-track"><i class="ec-ball" data-ball={c} /></div>
+        </div>
+      ))}
+    </div>
+  </div>
+  <div class="ec-ctrl">
+    <button type="button" data-play>▶ شغّل تاني</button>
+    <button type="button" data-speed aria-pressed="true">🐢 أبطأ ×٣</button>
+    {overshoot && curves.includes("back-out") && (
+      <label class="ec-range">
+        <span>الـ overshoot (<code>c1</code>)</span>
+        <input type="range" min="0" max="3" step="0.05" value="1.55" data-c1 />
+        <output data-c1-out>1.55</output>
+      </label>
+    )}
+  </div>
+</figure>
+
+<style is:global>
+  .ec {
+    margin: 1.6em 0;
+    background: var(--bg-soft);
+    border-radius: 16px;
+    padding: 14px 12px 12px;
+  }
+  .ec figcaption {
+    font-weight: 800;
+    color: var(--heading);
+    margin: 0 4px 8px;
+    font-size: 0.98rem;
+  }
+  .ec-chart {
+    display: block;
+    width: 100%;
+    background: var(--bg-elev);
+    border-radius: 12px;
+  }
+  .ec-lanes {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .ec-lane {
+    display: grid;
+    grid-template-columns: 112px 1fr;
+    align-items: center;
+    gap: 8px;
+  }
+  .ec-name {
+    font: 700 0.78rem var(--mono);
+    color: var(--ec-c);
+  }
+  .ec-track {
+    position: relative;
+    height: 22px;
+    border-radius: 999px;
+    background: var(--bg-elev);
+    /* ٦٨٪ من العرض = القيمة ١ (الهدف)، والباقي مساحة للـ overshoot */
+    background-image: linear-gradient(to right, transparent calc(68% - 1px), var(--line) calc(68% - 1px), var(--line) calc(68% + 1px), transparent calc(68% + 1px));
+  }
+  .ec-ball {
+    position: absolute;
+    top: 3px;
+    left: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--ec-c);
+    box-shadow: 0 2px 8px -2px var(--ec-c);
+  }
+  .ec-ctrl {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 10px;
+  }
+  .ec-ctrl button {
+    font: 700 0.85rem var(--font);
+    color: var(--heading);
+    background: var(--bg-elev);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .ec-ctrl button[aria-pressed="true"] {
+    border-color: var(--c1);
+    color: var(--c1);
+  }
+  .ec-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    flex: 1 1 220px;
+  }
+  .ec-range input { flex: 1; accent-color: var(--c1); min-width: 80px; }
+  .ec-range output { font: 700 0.85rem var(--mono); color: var(--c1); min-width: 3ch; }
+  @media (max-width: 560px) {
+    .ec-lane { grid-template-columns: 1fr; gap: 2px; }
+  }
+</style>
+
+<script>
+  type Curve = "linear" | "in-cubic" | "out-cubic" | "back-out" | "av-back" | "spring";
+
+  const TOTAL = 0.7; // ثانية على المحور الأفقي
+  const DURATION = 0.42; // OpenDuration في DonutMenu.cs
+  const Y_MIN = -0.1;
+  const Y_MAX = 1.45;
+  const reduce = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // نفس EaseOutBack بتاع Filee، بس c1 متغيّر عشان الـ slider
+  const backOut = (t: number, c1: number) => 1 + (c1 + 1) * (t - 1) ** 3 + c1 * (t - 1) ** 2;
+
+  // الـ spring بنفس طريقة Filee: خطوات صغيرة أقصاها 1/120 ثانية
+  function springTable() {
+    const out: number[] = [];
+    let x = 0;
+    let v = 0;
+    const h = 1 / 240;
+    for (let t = 0; t <= TOTAL + h; t += h) {
+      out.push(x);
+      const force = 320 * (1 - x) - 20 * v;
+      v += force * h;
+      x += v * h;
+    }
+    return (t: number) => out[Math.min(out.length - 1, Math.round(t / h))]!;
+  }
+  const spring = springTable();
+
+  function value(curve: Curve, time: number, c1: number) {
+    if (curve === "spring") return spring(time);
+    const t = Math.min(1, time / DURATION);
+    if (curve === "linear") return t;
+    if (curve === "in-cubic") return t * t * t;
+    if (curve === "out-cubic") return 1 - (1 - t) ** 3;
+    // الـ BackEaseOut الجاهز في Avalonia (اللي الزراير بتستخدمه في الـ XAML)
+    if (curve === "av-back") {
+      const p = 1 - t;
+      return 1 - p * (p * p - Math.sin(p * Math.PI));
+    }
+    return backOut(t, c1);
+  }
+
+  function colorsOf() {
+    const s = getComputedStyle(document.documentElement);
+    const v = (n: string) => s.getPropertyValue(n).trim();
+    return { line: v("--line"), muted: v("--muted"), heading: v("--heading"), c: [v("--c1"), v("--c2"), v("--c3"), v("--c4"), v("--c5")], font: v("--mono") };
+  }
+
+  function bind(fig: HTMLElement) {
+    const { curves, colors } = JSON.parse(fig.dataset.ec!) as { curves: Curve[]; colors: Record<Curve, number> };
+    const canvas = fig.querySelector<HTMLCanvasElement>(".ec-chart")!;
+    const ctx = canvas.getContext("2d")!;
+    const balls = new Map<Curve, HTMLElement>();
+    fig.querySelectorAll<HTMLElement>("[data-ball]").forEach((b) => balls.set(b.dataset.ball as Curve, b));
+    const playBtn = fig.querySelector<HTMLButtonElement>("[data-play]")!;
+    const speedBtn = fig.querySelector<HTMLButtonElement>("[data-speed]")!;
+    const c1Input = fig.querySelector<HTMLInputElement>("[data-c1]");
+    const c1Out = fig.querySelector<HTMLOutputElement>("[data-c1-out]");
+
+    let c1 = 1.55;
+    let slow = true;
+    let time = TOTAL; // آخر لحظة مرسومة
+    let start = 0;
+    let raf = 0;
+
+    function draw() {
+      const dpr = devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (canvas.width !== Math.round(w * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const col = colorsOf();
+      const pad = { l: 34, r: 12, t: 14, b: 26 };
+      const X = (t: number) => pad.l + (t / TOTAL) * (w - pad.l - pad.r);
+      const Y = (v: number) => pad.t + ((Y_MAX - v) / (Y_MAX - Y_MIN)) * (h - pad.t - pad.b);
+
+      // المحاور وخطوط الإرشاد
+      ctx.font = `600 11px ${col.font}`;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = col.line;
+      ctx.fillStyle = col.muted;
+      for (const v of [0, 1]) {
+        ctx.setLineDash(v === 1 ? [5, 4] : []);
+        ctx.beginPath();
+        ctx.moveTo(pad.l, Y(v));
+        ctx.lineTo(w - pad.r, Y(v));
+        ctx.stroke();
+        ctx.fillText(String(v), 14, Y(v) + 4);
+      }
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(X(DURATION), pad.t);
+      ctx.lineTo(X(DURATION), h - pad.b);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillText("0ms", pad.l, h - 8);
+      ctx.fillText("420ms", X(DURATION) - 18, h - 8);
+      ctx.fillText("700ms", w - pad.r - 38, h - 8);
+      ctx.fillText("target", w - pad.r - 44, Y(1) - 6);
+
+      // المنحنيات لحد اللحظة الحالية
+      for (const curve of curves) {
+        const color = col.c[colors[curve] - 1]!;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        const steps = 140;
+        for (let i = 0; i <= steps; i++) {
+          const t = (i / steps) * time;
+          const px = X(t);
+          const py = Y(value(curve, t, c1));
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        // النقطة اللي في الراس
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(X(time), Y(value(curve, time, c1)), 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        const ball = balls.get(curve);
+        if (ball) {
+          const track = ball.parentElement!.clientWidth - 16;
+          ball.style.transform = `translateX(${value(curve, time, c1) * track * 0.68}px)`;
+        }
+      }
+    }
+
+    function frame(now: number) {
+      if (!start) start = now;
+      time = Math.min(TOTAL, ((now - start) / 1000) / (slow ? 3 : 1));
+      draw();
+      if (time < TOTAL) raf = requestAnimationFrame(frame);
+    }
+
+    function play() {
+      cancelAnimationFrame(raf);
+      if (reduce()) {
+        time = TOTAL;
+        draw();
+        return;
+      }
+      start = 0;
+      time = 0;
+      raf = requestAnimationFrame(frame);
+    }
+
+    playBtn.addEventListener("click", play);
+    speedBtn.addEventListener("click", () => {
+      slow = !slow;
+      speedBtn.setAttribute("aria-pressed", String(slow));
+      play();
+    });
+    c1Input?.addEventListener("input", () => {
+      c1 = Number(c1Input.value);
+      if (c1Out) c1Out.textContent = c1.toFixed(2);
+      cancelAnimationFrame(raf);
+      time = TOTAL;
+      draw();
+    });
+
+    new ResizeObserver(() => draw()).observe(canvas);
+    new MutationObserver(() => draw()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+    // يشتغل أول مرة لما يظهر في الشاشة
+    const io = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      io.disconnect();
+      play();
+    }, { threshold: 0.4 });
+    io.observe(fig);
+    draw();
+  }
+
+  const boot = () => {
+    for (const fig of document.querySelectorAll<HTMLElement>("figure.ec[data-ec]")) {
+      if (fig.dataset.bound) continue;
+      fig.dataset.bound = "1";
+      bind(fig);
+    }
+  };
+  boot();
+  document.addEventListener("astro:page-load", boot);
+</script>

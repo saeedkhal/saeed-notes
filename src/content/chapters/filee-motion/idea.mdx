@@ -1,0 +1,118 @@
+---
+title: الحركة في Filee جاية منين؟
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: Avalonia · Skia · Transitions · Keyframes · DrawingContext · RequestAnimationFrame
+keywords: طريقتين · ٣ مكونات · خريطة الويب
+goal: تفرّق بين الطريقتين اللي Filee بيحرّك بيهم، وتعرف التلات حاجات اللي بتخلي الحركة طرية.
+part: البداية
+color: c1
+---
+
+Filee معمول بـ <En>C#</En> و <En>Avalonia</En>. Avalonia بترسم كل حاجة بنفسها بـ <En>Skia</En> (نفس محرك الرسم بتاع Chrome و Flutter)، فالحركة شغالة بنفس النعومة على ويندوز وماك ولينكس.
+
+لما تفتح الكود، <Hl c="y">هتلاقي طريقتين بس للحركة</Hl>، ومفيش أي مكتبة أنيميشن خارجية.
+
+## الطريقة الأولى: transitions في الـ styles
+
+دي لكل حاجة عادية: زراير، chips، ألوان، عناصر الـ sidebar. بتقول للعنصر "لو الخاصية دي اتغيرت، اتحرك ليها في وقت كذا بمنحنى كذا". ده بالظبط <En>transition</En> بتاع CSS.
+
+<File name="Styles/Soft.axaml (Filee)">
+
+```xml
+<Style Selector="Button, ToggleButton, RepeatButton">
+  <Setter Property="Transitions">
+    <Transitions>
+      <TransformOperationsTransition Property="RenderTransform"
+                                     Duration="0:0:0.22"
+                                     Easing="{StaticResource SoftEase}" />
+    </Transitions>
+  </Setter>
+</Style>
+<Style Selector="Button:pressed, ToggleButton:pressed">
+  <Setter Property="RenderTransform" Value="scale(0.95)" />
+</Style>
+```
+
+</File>
+
+ومعاها <En>keyframes</En> للحاجات اللي بتظهر مرة واحدة، زي الـ toast وفتح الصفحة. ده <En>@keyframes</En> بتاع CSS.
+
+## الطريقة التانية: ترسم بإيدك وتحسب كل فريم
+
+الدونت مش زراير. هو control اسمه `DonutMenu` بيعمل override لـ `Render(DrawingContext)` وبيرسم كل شريحة بالخطوط والأقواس. وكل فريم بيطلب الفريم اللي بعده بـ `RequestAnimationFrame`، وبيحسب القيم بـ **spring** هو كاتبها بنفسه.
+
+على الويب ده يساوي: <En>canvas</En> + <En>requestAnimationFrame</En> + حاجة زي <En>react-spring</En>.
+
+<Flow items={[
+  { t: "تغيير حالة", s: "hover · pressed · selected", c: 1 },
+  "→",
+  { t: "Transition", s: "من القيمة القديمة للجديدة", c: 3 },
+  "→",
+  { t: "Skia يرسم", s: "كل فريم", c: 5 },
+]} />
+
+<Flow items={[
+  { t: "الماوس اتحرك", s: "أو الدونت اتفتح", c: 2 },
+  "→",
+  { t: "Spring.Step()", s: "قيمة + سرعة", c: 4 },
+  "→",
+  { t: "Render()", s: "رسم الشرايح بإيدك", c: 1 },
+  "→",
+  { t: "RequestAnimationFrame", s: "تاني لحد ما يهدى", c: 5 },
+]} />
+
+## التلات حاجات اللي بتعمل "الطراوة"
+
+<Grid2>
+<Card title="١. BackEaseOut في كل حتة" c={1}>
+
+منحنى بيعدّي الهدف شعرة ويرجع. Filee حاطه في resource واحد اسمه `SoftEase` وكل الزراير بتستخدمه. الفصل الجاي كله عنه.
+
+</Card>
+<Card title="٢. springs بدل مدة ثابتة" c={2}>
+
+في الدونت، الحركة ملهاش "مدة". ليها قوة وتقل. لو غيّرت الهدف في النص، الحركة بتكمل من سرعتها الحالية من غير ما تقطع.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="٣. مدد قصيرة" c={3}>
+
+من ٠.١٥ لـ ٠.٤٢ ثانية بس. الألوان ١٥٠ms، الزراير ٢٢٠ms، الدونت ٤٢٠ms. أطول من كده تحس الأبلكيشن تقيل.
+
+</Card>
+<Card title="+ الفتح غير القفل" c={4}>
+
+الفتح بينط وبياخد وقته. القفل سريع ومن غير نطة (١٦٠ms). اللي بيقفل حاجة عايزها تمشي، مش عايز يتفرج عليها.
+
+</Card>
+</Grid2>
+
+## الخريطة: Filee قصاد الويب
+
+| اللي بتشوفه | في Filee | على الويب |
+| --- | --- | --- |
+| زرار بيتكبس | `TransformOperationsTransition` + `BackEaseOut` | `transition: transform` + `cubic-bezier` |
+| لون بيتغير بنعومة | `BrushTransition` 0.15s | `transition: background-color .15s` |
+| ظل كارت | `BoxShadowsTransition` | `transition: box-shadow` |
+| toast بيدخل | `Style.Animations` + `KeyFrame` | `@keyframes` |
+| الدونت | `Render(DrawingContext)` + `Spring` | `canvas` + `requestAnimationFrame` + spring |
+| حركة أقل | كلاس `reduced-motion` على الشباك | `prefers-reduced-motion` |
+
+<Box type="tip" title="إزاي تتفرج على الكود بنفسك">
+
+اعمل clone للريبو وافتح `src/Filee.App/Styles/Soft.axaml` للـ transitions، و `src/Filee.App/Controls/DonutMenu.cs` للدونت. دور على كلمة `Transitions` وكلمة `Spring`.
+
+</Box>
+
+<Checklist id="filee-motion-idea" title="خلّصت الفصل لما" items={["تفرّق بين transitions في الـ styles والرسم بإيدك", "تقول التلات حاجات اللي بتعمل الطراوة", "تعرف المقابل على الويب لكل طريقة"]} />
+
+<Quiz>
+<Q n={1} q="ليه الدونت مش معمول بزراير عادية؟">لأنه شكل دايري بشرايح، وحركته معتمدة على الماوس في كل لحظة. أسهل وأسرع ترسمه بإيدك وتحسب كل فريم بـ spring.</Q>
+<Q n={2} q="إيه الفرق بين transition و keyframes؟">الـ transition بيتحرك لما خاصية تتغير (hover مثلًا). الـ keyframes بيشتغل لوحده من أول ما الـ style ينطبق، زي العنصر وهو بيظهر.</Q>
+<Q n={3} q="ليه القفل أسرع من الفتح؟">لأن اللي بيقفل خلص من الحاجة. نطة وهي بتقفل بتحسسك إنها لسه مستنياك.</Q>
+</Quiz>

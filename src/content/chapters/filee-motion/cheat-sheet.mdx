@@ -1,0 +1,59 @@
+---
+title: "Cheat Sheet: عايز الحركة دي؟ اعمل كده"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: One-page recall for Filee-style motion
+keywords: cheatsheet · easing · spring · stagger
+goal: تفتكر الأرقام والمنحنى المناسب لكل عنصر من غير ما ترجع للفصول.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["زرار يتكبس", "scale(0.95) · 0.22s · BackEaseOut"],
+  ["chip في hover", "scale(1.05) + لون فاتح · 0.25s للحجم و 0.15s للون"],
+  ["عنصر sidebar في hover", "translateX(3px) ناحية المحتوى · 0.25s · BackEaseOut"],
+  ["لون أو ظل", "0.15s من غير نطة"],
+  ["drop zone فوقها ملف", "scale(1.015) + لون · 0.3s · عدّاد لـ dragenter/dragleave"],
+  ["toast بيظهر", "keyframes: من opacity 0 و 40px على الجنب · 0.35s · BackEaseOut"],
+  ["صفحة بتفتح", "keyframes: من opacity 0 و 10px تحت · 0.28s · CubicEaseOut"],
+  ["dropdown", "من scale(0.95) و transform-origin top · stagger 28ms · قفل 120ms"],
+  ["select", "السهم 180deg + ✓ من scale(0.4) + القيمة تطلع من تحت"],
+  ["tabs", "مؤشر واحد بيتزحلق (left و width) + المحتوى من ناحية التاب"],
+  ["modal", "خلفية opacity 0.2s + dialog من scale(0.9) 0.32s · قفل 0.16s"],
+  ["switch", "الزرار يتزحلق بنطة ويتمط وانت دايس"],
+  ["tooltip", "delay 300ms في الظهور بس"],
+  ["accordion", "grid-template-rows 0fr → 1fr + سهم 90deg"],
+  ["حاجة بتتبع الماوس", "spring 320 / 20، والرجوع critical (2√k ≈ 36)"],
+  ["spring بتطير", "خطوات أقصاها 1/120 ثانية"],
+  ["قايمة عناصر بتظهر", "stagger 28ms + EaseOutBack 420ms"],
+  ["أي قفل", "أسرع من الفتح · EaseInCubic · من غير نطة"],
+  ["حركة أقل", "prefers-reduced-motion · 0.01ms مش none"],
+]} />
+
+## المعادلات في مكان واحد
+
+```ts
+// الدونت في Filee (نطة 8.5%)
+const easeOutBack = (t: number, c1 = 1.55) => 1 + (c1 + 1) * (t - 1) ** 3 + c1 * (t - 1) ** 2;
+
+// BackEaseOut الجاهز في Avalonia (نطة 38%، للمسافات الصغيرة)
+const avaloniaBackOut = (t: number) => { const p = 1 - t; return 1 - p * (p * p - Math.sin(p * Math.PI)); };
+
+const easeInCubic = (t: number) => t * t * t;
+const cubicEaseOut = (t: number) => 1 - (1 - t) ** 3;
+
+// spring: خطوة واحدة صغيرة
+velocity += (stiffness * (target - value) - damping * velocity) * h;
+value += velocity * h;
+```
+
+<Checklist id="filee-motion-cheat" title="خلّصت المذكرة لما" items={["تعمل زرار وchip وsidebar بنفس طراوة Filee", "ترسم BackEaseOut على canvas", "تكتب spring بإيدك وتشغّلها في loop", "تعمل dropdown و modal بفتح بنطة وقفل سريع", "تحترم reduced motion"]} />
+
+<Quiz>
+<Q n={1} q="منحنى الحاجات الصغيرة؟ والكبيرة؟ والقفل؟">الصغيرة BackEaseOut، الكبيرة CubicEaseOut، والقفل EaseInCubic.</Q>
+<Q n={2} q="إمتى spring بدل easing؟">لما الهدف ممكن يتغير والحركة لسه شغالة، زي أي حاجة بتتبع الماوس.</Q>
+<Q n={3} q="الرقم 28ms ده إيه؟">الـ stagger بين كل شريحة واللي بعدها في فتح الدونت.</Q>
+</Quiz>

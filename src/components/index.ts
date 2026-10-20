@@ -14,5 +14,7 @@ import Checklist from "./Checklist.astro";
 import Cheat from "./Cheat.astro";
 import Diagram from "./Diagram.astro";
 import ScrollDemo from "./ScrollDemo.astro";
+import MotionDemo from "./MotionDemo.astro";
+import EaseCanvas from "./EaseCanvas.astro";
 
-export const mdxComponents = { Box, Hl, En, Flow, Grid2, Card, Chips, File, Tree, Quiz, Q, Checklist, Cheat, Diagram, ScrollDemo };
+export const mdxComponents = { Box, Hl, En, Flow, Grid2, Card, Chips, File, Tree, Quiz, Q, Checklist, Cheat, Diagram, ScrollDemo, MotionDemo, EaseCanvas };

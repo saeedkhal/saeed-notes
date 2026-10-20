@@ -1,0 +1,267 @@
+---
+title: الدونت — رسم بإيدك + spring + stagger
+short: الدونت
+order: 5
+label: فصل ٥
+badge: الدونت · فصل ٥
+en: Render(DrawingContext) · RequestAnimationFrame · Spring · stiffness · damping · substeps · stagger
+keywords: spring · critical damping · MaxStep 1/120 · OpenStagger 28ms
+goal: تكتب spring بإيدك، وتشغّلها في loop بـ requestAnimationFrame، وتعرف ليه Filee بيقسّم الفريم لخطوات صغيرة.
+part: الدونت
+color: c5
+---
+
+ده أحلى جزء في Filee. لما تدوس <kbd>Ctrl</kbd> وتسحب ملف، بتطلع دايرة شرايح عند الماوس. الشرايح بتطلع ورا بعض بنطة، واللي تحت الماوس بتطلع لبرا وتنوّر.
+
+ده مش زراير. ده **canvas**. جرّبه هنا، ده نفس الكود بالأرقام بتاعته بس متحوّل لـ JavaScript:
+
+<MotionDemo kind="donut" title="دونت Filee على canvas" />
+
+<Box type="tip" title="جرّب السلو موشن">
+
+دوس 🐢 وبعدين اقفل وافتح. هتشوف كل شريحة بتبدأ بعد اللي قبلها، وبتكبر من النص مع لفة صغيرة، وبتعدّي حجمها شعرة وترجع.
+
+</Box>
+
+## ١. بيرسم بإيده
+
+`DonutMenu` هو control بيعمل override لـ `Render`. مفيش أي عنصر جواه. كل شريحة هي شكل (wedge) بيترسم بـ `DrawGeometry`، وقبله `PushTransform` للتكبير واللف، و `PushOpacity` للشفافية.
+
+<File name="Controls/DonutMenu.cs (Filee، مختصر)">
+
+```csharp
+public override void Render(DrawingContext context)
+{
+    for (var i = 0; i < n; i++)
+    {
+        var open = _open[i];            // من 0 لـ 1 (وأكتر شوية وقت النطة)
+        var hover = _hover[i].Value;    // spring: 0 أو 1
+        // الشريحة بتكبر من النص مع لفة صغيرة
+        var scale = 0.55 + 0.45 * open;
+        var rotate = (1 - Math.Min(open, 1)) * -0.35;
+        // واللي تحت الماوس بتطلع لبرا
+        var offset = DonutGeometry.PointAt(new Point(0, 0), hover * PopOut, mid);
+
+        using (context.PushTransform(/* scale + rotate + offset */))
+        using (context.PushOpacity(Math.Clamp(open, 0, 1)))
+        {
+            context.DrawGeometry(/* لون الشريحة */, /* الإطار */, CreateWedge(...));
+        }
+    }
+}
+```
+
+</File>
+
+على الويب نفس الكلام بالظبط بـ `ctx.save()` و `ctx.translate()` و `ctx.rotate()` و `ctx.scale()` و `ctx.globalAlpha`، وبعدين ترسم الشريحة بقوسين `ctx.arc()`.
+
+## ٢. الـ loop: فريم بيطلب اللي بعده
+
+مفيش timer. كل فريم بيحسب الوقت اللي فات من الفريم اللي قبله (`dt`)، يحدّث القيم، يرسم، ولو لسه في حاجة بتتحرك يطلب فريم كمان. <Hl c="y">لما كله يهدى، الـ loop بيقف لوحده</Hl>، فالأبلكيشن مش بياكل CPU وهو واقف.
+
+<File name="donut-loop.ts">
+
+```ts
+let last: number | null = null;
+let raf = 0;
+
+function frame(now: number) {
+  // الوقت الحقيقي بين الفريمين. Math.min عشان لو التاب كان مستخبي منقفزش ثانية كاملة
+  const dt = last === null ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
+  last = now;
+
+  const busy = stepAll(dt); // حدّث كل الـ springs والـ open
+  draw();                   // ارسم
+
+  if (busy) raf = requestAnimationFrame(frame);
+  else { raf = 0; last = null; } // كله هدي: وقّف
+}
+
+// أي حاجة بتتغير (ماوس، فتح، قفل) بتصحّي الـ loop لو كان نايم
+function kick() {
+  if (!raf) raf = requestAnimationFrame(frame);
+}
+```
+
+</File>
+
+## ٣. الـ spring: قوة + تقل
+
+ده الكود كله. ١٠ سطور:
+
+<Grid2>
+<Card title="Filee (C#)" c={1}>
+
+```csharp
+private struct Spring
+{
+    public double Value;
+    public double Velocity;
+    private const double MaxStep = 1 / 120.0;
+
+    public bool Step(double target, double dt,
+        double stiffness = 320, double damping = 20)
+    {
+        var steps = Math.Max(1,
+            (int)Math.Ceiling(dt / MaxStep));
+        var h = dt / steps;
+        for (var i = 0; i < steps; i++)
+        {
+            var force = stiffness * (target - Value)
+                      - damping * Velocity;
+            Velocity += force * h;
+            Value += Velocity * h;
+        }
+        var settled = Math.Abs(target - Value) < 0.001
+                   && Math.Abs(Velocity) < 0.01;
+        if (settled) { Value = target; Velocity = 0; }
+        return !settled;
+    }
+}
+```
+
+</Card>
+<Card title="الويب (TypeScript)" c={5}>
+
+```ts
+class Spring {
+  value = 0;
+  velocity = 0;
+  static maxStep = 1 / 120;
+
+  step(target: number, dt: number,
+       stiffness = 320, damping = 20) {
+    const steps = Math.max(1,
+      Math.ceil(dt / Spring.maxStep));
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const force = stiffness * (target - this.value)
+                  - damping * this.velocity;
+      this.velocity += force * h;
+      this.value += this.velocity * h;
+    }
+    const settled = Math.abs(target - this.value) < 0.001
+                 && Math.abs(this.velocity) < 0.01;
+    if (settled) { this.value = target; this.velocity = 0; }
+    return !settled; // true = لسه بيتحرك
+  }
+}
+```
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🧲" title="الـ spring = أستك مربوط في الهدف">
+
+- **stiffness** = قد إيه الأستك مشدود. كل ما تبعد عن الهدف، الأستك يشدّك أقوى.
+- **damping** = الكورة ماشية في عسل. كل ما تجري أسرع، العسل يفرملها أكتر.
+
+أستك قوي وعسل خفيف = تنط كتير. عسل تقيل = توصل بالراحة من غير نطة.
+
+</Box>
+
+جرّب الأرقام بنفسك. دوس في أي حتة على الحارة عشان تغيّر الهدف، **حتى والكورة لسه بتتحرك**. هتلاقيها بتلف وتكمل من سرعتها، مش بتبدأ من الصفر. ده الفرق الكبير بين الـ spring والـ easing.
+
+<MotionDemo kind="spring" title="ملعب الـ spring" />
+
+### critical damping: نطة وانت داخل، لأ وانت خارج
+
+الرقم السحري: `damping = 2 × √stiffness`. ده اسمه **critical damping**: أسرع وصول للهدف **من غير** نطة. مع `stiffness = 320` يبقى حوالي `35.8`، و Filee كاتبه مقرّب: `const double CriticalDamping = 36`.
+
+Filee بيستخدم ده بذكاء في الـ hover:
+
+```csharp
+// الشريحة اللي دخلت تحت الماوس: تنط (320 / 20)
+// الشريحة اللي سبتها: ترجع من غير نطة (critical)
+active |= i == ActiveIndex
+    ? _hover[i].Step(1, dt)
+    : _hover[i].Step(0, dt, 320, CriticalDamping);
+```
+
+وكاتب السبب في تعليق: لو الشريحة نطت تحت الصفر وهي راجعة، اللون هينوّر تاني لحظة. يعني هتحس إنها رمشت.
+
+### ليه الخطوات الصغيرة (substeps)؟
+
+ده التعليق اللي في كود Filee حرفيًا:
+
+> With these stiffnesses a single step of a late frame (50 ms) overshoots more each frame instead of settling: slices stayed lit and flew apart on a busy machine.
+
+يعني: على جهاز تقيل، لو فريم اتأخر ٥٠ms وحسبته في خطوة واحدة، الـ spring بتعدّي الهدف أكتر كل مرة **وبتفرقع**. الشرايح كانت بتطير.
+
+الحل: قسّم الـ `dt` لخطوات أقصاها `1/120` ثانية. فريم ٥٠ms يبقى ٦ خطوات صغيرة، والحساب يفضل مستقر.
+
+<Box type="interview" title="جرّبها في الملعب فوق">
+
+دوس "layout في Filee" (420 / 36)، وعلّم على "frame متأخر 50ms"، وشيل علامة "substeps". حرّك الهدف. هتلاقي الـ spring بتفرقع 💥. رجّع الـ substeps وجرّب تاني: ثابتة.
+
+</Box>
+
+## ٤. الـ stagger: شريحة ورا شريحة
+
+الفتح مش spring. هو **easing بوقت**، عشان كل شريحة تبدأ بعد اللي قبلها بـ ٢٨ms:
+
+<File name="Controls/DonutMenu.cs (Filee)">
+
+```csharp
+private const double OpenDuration = 0.42;
+private const double OpenStagger = 0.028;
+
+// كل فريم:
+_openClock += dt;
+for (var i = 0; i < _open.Length; i++)
+{
+    var t = Math.Clamp(
+        (_openClock - i * (_closing ? 0.01 : OpenStagger))
+        / (_closing ? 0.16 : OpenDuration), 0, 1);
+    _open[i] = _closing ? 1 - EaseInCubic(t) : EaseOutBack(t);
+}
+```
+
+</File>
+
+<Grid2>
+<Card title="الفتح" c={3}>
+
+- كل شريحة متأخرة **28ms** عن اللي قبلها
+- كل شريحة بتاخد **420ms**
+- <En>EaseOutBack</En>: بتنط
+
+</Card>
+<Card title="القفل" c={2}>
+
+- التأخير **10ms** بس (تقريبًا مع بعض)
+- كل شريحة بتاخد **160ms**
+- <En>EaseInCubic</En>: من غير نطة
+
+</Card>
+</Grid2>
+
+<Box type="idea" title="ليه الفتح easing والـ hover spring؟">
+
+الفتح ليه بداية ونهاية معروفين، ومحدش هيغيّر الهدف في النص. فـ easing بوقت ثابت أبسط ويخليك تتحكم في الـ stagger.
+
+الـ hover بقى الماوس بيروح وييجي كل لحظة. الهدف بيتغير وهي لسه بتتحرك. هنا الـ spring بتكسب لأنها بتكمل من سرعتها.
+
+</Box>
+
+## ٥. الضربة في النص
+
+لما تختار صيغة، النص بينبض نبضة صغيرة. ده spring بقيمة `0` دايمًا، بس بنديله **سرعة** فجأة، فيطلع ويرجع لوحده:
+
+```ts
+pulse.velocity = 9;                 // ضربة
+// كل فريم:
+pulse.step(0, dt, 260, 12);         // damping قليل = يهتز شوية
+const r = baseRadius * (1 + pulse.value * 0.08);
+```
+
+حيلة حلوة لأي "نبضة": زرار اتعمله save، badge عليها رقم جديد، أيكونة اتضافت للسلة.
+
+<Checklist id="filee-motion-donut" title="خلّصت الفصل لما" items={["تكتب Spring بإيدك في 10 سطور", "تعمل loop بـ requestAnimationFrame يقف لوحده لما يهدى", "تحسب critical damping وتعرف إمتى تستخدمه", "تشرح ليه الخطوات الصغيرة بتمنع الفرقعة", "تعمل stagger لقايمة عناصر"]} />
+
+<Quiz>
+<Q n={1} q="إيه الفرق بين spring و easing؟">الـ easing ليه مدة ثابتة ومنحنى ثابت. الـ spring ليها قوة وسرعة، فلو الهدف اتغير في النص بتكمل من سرعتها الحالية بنعومة.</Q>
+<Q n={2} q="critical damping بكام لو stiffness = 320؟">2 × √320 ≈ 35.8.</Q>
+<Q n={3} q="ليه Filee بيقسّم dt لخطوات أقصاها 1/120؟">لأن فريم متأخر (50ms) في خطوة واحدة بيخلي الـ spring القوية تعدّي أكتر كل مرة وتفرقع. خطوات صغيرة = حساب مستقر.</Q>
+<Q n={4} q="الـ loop بيقف إمتى؟">لما كل الـ springs والـ open يوصلوا لهدفهم (Step بترجع false). وأي تغيير بعدها بيصحّيه تاني.</Q>
+</Quiz>

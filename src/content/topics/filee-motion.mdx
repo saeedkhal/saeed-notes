@@ -1,0 +1,30 @@
+---
+title: أنيميشن Filee — ليه الأبلكيشن طري كده؟
+highlight: أنيميشن Filee
+subtitle: Transitions · BackEaseOut · Keyframes · Spring · Canvas · Stagger · Reduced Motion
+description: فكّينا كود Filee (Avalonia + C#) وشفنا الحركة جاية منين، الزراير والـ chips والألوان والـ sidebar والدونت، وبعدين طبّقنا نفس الروح على dropdown و select و tabs و modal وغيرهم، بديمو حي في كل فصل ورسمة canvas للـ BackEaseOut.
+emoji: 🍩
+order: 32
+tags: [frontend]
+note: المصدر هو كود Filee نفسه (https://github.com/KnifeLemon/Filee) نسخة 1.12.0، الملفات Styles/Soft.axaml و Controls/DonutMenu.cs و Views/ToastWindow.axaml. فصل "من خيالي" اقتراحات مني بنفس الروح، مش موجودة في Filee بالشكل ده. أسماء أجزاء الـ templates في Avalonia بتتغير بين النسخ، فراجع الـ docs.
+---
+
+المذكرة ماشية على <Hl c="y">٦ فصول + شيت</Hl>، وفيها **ديموهات حية**: زراير تدوس عليها، dropdown تفتحه، دونت على canvas بيتحرك بـ spring زي Filee بالظبط، ورسمة بتشوف فيها منحنى الـ <En>BackEaseOut</En> وهو بيترسم.
+
+<Box type="story" icon="🍮" title="تشبيه المذكرة كلها: المهلبية">
+
+الزرار في Filee مش حجر. هو **مهلبية**: تدوس عليها تتكبس شوية، تسيبها ترجع وتهتز هزّة صغيرة وتقف.
+
+- **الـ easing** هو نوع الهزّة: حجر بيقف مرة واحدة، والمهلبية بتعدّي مكانها شعرة وترجع.
+- **الـ spring** هي المهلبية نفسها: ليها تقل وليها مرونة، فلو زقيتها وهي لسه بتتهز، بتكمل من مكانها مش بتبدأ من الأول.
+- **الـ stagger** إنك تحط الأطباق على الترابيزة طبق ورا طبق، مش كلهم في نفس اللحظة.
+
+</Box>
+
+<Box type="idea" title="هتطلع من المذكرة بإيه؟">
+
+- تعرف الطريقتين اللي Filee بيحرّك بيهم: **transitions في الـ styles** للحاجات العادية، و**رسم بإيدك + spring** للدونت.
+- تكتب نفس الحركة على الويب بـ CSS و JavaScript، وتعرف المقابل في Avalonia.
+- ترسم الـ <En>BackEaseOut</En> على <En>canvas</En> وتفهم الرقم `1.55` بيعمل إيه.
+
+</Box>
