@@ -1,0 +1,39 @@
+---
+title: شكل الفولدرات والطبقات
+short: الطبقات
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: app · pages · widgets · features · entities · shared
+keywords: ست طبقات · الأعلى يعتمد على الأدنى
+goal: تشوف طبقات FSD في تطبيق المتجر، وتعرف إن الطبقة الأعلى بس هي اللي تعتمد على الأدنى.
+part: البداية
+color: c1
+---
+
+## الست طبقات
+
+<Tree>
+
+```text
+src/
+├── app/          Application setup — Router · Providers · Global styles · Query Client
+├── pages/        Route pages — home · products · product-details · cart · checkout · orders
+├── widgets/      Large UI blocks — header · product-grid · cart-summary · product-gallery
+├── features/     User actions — add-to-cart · add-to-wishlist · login · apply-coupon · place-order
+├── entities/     Business entities — product · cart · user · order · category
+└── shared/       Reusable infrastructure — api · ui · lib · config · types
+```
+
+</Tree>
+
+الطبقات دي مرتبة من الأعلى للأدنى. الطبقة الأعلى تقدر تعتمد على طبقة أدنى منها. العكس ممنوع.
+
+يعني `features` تقدر تستخدم `entities` و`shared`. لكن `entities` مينفعش تستورد من `features`.
+
+<Checklist id="fsd-layers" title="خلّصت الفصل لما" items={["تعد الطبقات من app لحد shared", "تعرف إن features تعتمد على entities و shared", "تعرف إن entities متستوردش من features"]} />
+
+<Quiz>
+<Q n={1} q="entities تقدر تستورد من features؟">لأ. الاعتماد من الأعلى للأدنى بس.</Q>
+<Q n={2} q="add-to-cart مكانها في أنهي طبقة؟">features. دي أفعال المستخدم.</Q>
+</Quiz>

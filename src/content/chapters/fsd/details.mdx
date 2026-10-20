@@ -1,0 +1,63 @@
+---
+title: صفحة التفاصيل تجمع الشرائح
+short: صفحة التفاصيل
+order: 8
+label: فصل ٨
+badge: التدفق · فصل ٨
+en: ProductDetailsPage · composition · wishlist
+keywords: الصفحة تجمع · مش منطق السلة · الوش ليست لوحدها
+goal: الصفحة تستدعي استعلام المنتج وزرار السلة وزرار المفضلة، من غير ما تنفّذ منطقهم.
+part: التدفق
+color: c3
+---
+
+صفحة تفاصيل المنتج ممكن تجمع أكتر من Slice، وده طبيعي.
+
+<File name="pages/product-details/ui/product-details-page.tsx">
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { productQueries } from '@/entities/product';
+import { AddToCartButton } from '@/features/add-to-cart';
+import { WishlistButton } from '@/features/add-to-wishlist';
+
+interface Props {
+  productId: string;
+}
+
+export function ProductDetailsPage({
+  productId,
+}: Props) {
+  const { data: product, isPending, isError } =
+    useQuery(productQueries.detail(productId));
+
+  if (isPending) return <p>Loading product...</p>;
+  if (isError || !product) {
+    return <p>Could not load product.</p>;
+  }
+
+  return (
+    <main>
+      <img src={product.image} alt={product.title} />
+      <h1>{product.title}</h1>
+      <p>{product.price}</p>
+
+      <AddToCartButton productId={product.id} />
+      <WishlistButton productId={product.id} />
+    </main>
+  );
+}
+```
+
+</File>
+
+الصفحة بتعمل Composition للـ Features والـ Entities. مش مسؤولة عن تنفيذ منطق الإضافة للسلة أو الـ Wishlist.
+
+لو الـ Wishlist محتاجة تعرف هل المنتج موجود فيها، فالأفضل إن `add-to-wishlist` تستخدم الـ Entity المناسبة أو الـ API الخاص بها. مش إنها تعتمد على `add-to-cart`.
+
+<Checklist id="fsd-details" title="خلّصت الفصل لما" items={["الصفحة تقرأ productQueries وتستدعي الزرارين", "منطق السلة يفضل جوه فيتشر الإضافة", "المفضلة متستوردش من فيتشر السلة"]} />
+
+<Quiz>
+<Q n={1} q="صفحة التفاصيل تنفّذ طلب إضافة السلة بنفسها؟">لأ. بتستدعي `AddToCartButton`. المنطق جوه الفيتشر.</Q>
+<Q n={2} q="المفضلة تعرف حالة المنتج منين؟">من الـ Entity أو الـ API بتاعها، مش من `add-to-cart`.</Q>
+</Quiz>

@@ -28,7 +28,7 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
       <ul class="side-list">
         {chapters.map((c) => (
           <li>
-            <button type="button" class="read-toggle" data-read={c.id} aria-pressed="false" aria-label={`علّم «${c.data.short}» إنه اتقرأ`}></button>
+            <button type="button" class="read-toggle" data-read={c.id} data-read-seed={c.data.read ? "1" : undefined} aria-pressed="false" aria-label={`علّم «${c.data.short}» إنه اتقرأ`}></button>
             <a
               class="side-link"
               href={chapterHref(c)}
@@ -81,6 +81,25 @@ const colorVar = (c: string) => (c === "dark" ? "var(--dark)" : `var(--${c})`);
     const readMap: Record<string, true> = (() => {
       try { return JSON.parse(localStorage.getItem(READ_KEY) ?? "{}"); } catch { return {}; }
     })();
+    const SEED_KEY = "masry-notes:read-seed";
+    const seeded: Record<string, true> = (() => {
+      try { return JSON.parse(localStorage.getItem(SEED_KEY) ?? "{}"); } catch { return {}; }
+    })();
+    let seededChanged = false;
+    for (const b of readButtons) {
+      const id = b.dataset.read;
+      if (!id || b.dataset.readSeed !== "1" || seeded[id]) continue;
+      readMap[id] = true;
+      seeded[id] = true;
+      seededChanged = true;
+    }
+    if (seededChanged) {
+      try {
+        localStorage.setItem(READ_KEY, JSON.stringify(readMap));
+        localStorage.setItem(SEED_KEY, JSON.stringify(seeded));
+      } catch {}
+      document.dispatchEvent(new Event("masry-read"));
+    }
     const paintRead = (id: string, on: boolean) => {
       for (const b of readButtons) {
         if (b.dataset.read !== id) continue;

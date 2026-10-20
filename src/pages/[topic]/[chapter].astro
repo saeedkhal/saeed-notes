@@ -29,7 +29,7 @@ const d = chapter.data;
     <h1 class="chap-title">{d.title}</h1>
     <div class="chap-en">{d.en}</div>
     {d.goal && <div class="chap-goal">🎯 الهدف: <Fragment set:html={d.goal.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,.9);color:#b45309;padding:0 .4em;border-radius:5px;font-family:var(--mono);font-size:.85em">$1</code>')} /></div>}
-    <button type="button" class="read-toggle chap-read" data-read={chapter.id} aria-pressed="false">
+    <button type="button" class="read-toggle chap-read" data-read={chapter.id} data-read-seed={d.read ? "1" : undefined} aria-pressed="false">
       <span class="read-label">علّمه اتقرأ</span>
     </button>
   </header>

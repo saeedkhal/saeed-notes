@@ -1,0 +1,36 @@
+---
+title: نفس الأجزاء وتركيبات مختلفة
+short: تركيبات
+order: 3
+label: فصل ٣
+badge: التركيب · فصل ٣
+en: customer card · admin card · EditButton · DeleteButton
+keywords: نفس المكونات · من غير props منطقية
+goal: تعمل كارت عميل وكارت أدمن من نفس الأجزاء، من غير مكون فيه عشرات الـ props.
+part: التركيب
+color: c3
+read: true
+---
+
+نفس المكونات، تركيبات مختلفة.
+
+<Grid2>
+<Card title="كارت العميل" c={1}>
+
+`ProductImage` و `ProductInfo` و `FavoriteButton` و `AddToCartButton`.
+
+</Card>
+<Card title="كارت الأدمن" c={2}>
+
+`ProductImage` و `ProductInfo` و `EditButton` و `DeleteButton`.
+
+</Card>
+</Grid2>
+
+مش محتاج تعمل مكون ضخم فيه عشرات الـ props المنطقية. كل شاشة بتختار الأجزاء اللي محتاجاها.
+
+<Checklist id="composition-mix" title="خلّصت الفصل لما" items={["كارت العميل يركّب المفضلة والإضافة", "كارت الأدمن يركّب التعديل والمسح", "الاتنين يستخدموا نفس الصورة والمعلومات"]} />
+
+<Quiz>
+<Q n={1} q="كارت الأدمن محتاج مكون ProductCard تاني؟">لأ. نفس الحاوية والصورة والمعلومات، وأزرار Edit و Delete بدل أزرار العميل.</Q>
+</Quiz>

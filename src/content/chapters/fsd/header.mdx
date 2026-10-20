@@ -1,0 +1,60 @@
+---
+title: الهيدر يعرف إن السلة اتغيرت
+short: الهيدر
+order: 6
+label: فصل ٦
+badge: التدفق · فصل ٦
+en: CartBadge · cartQueries.current · same query key
+keywords: نفس المفتاح · invalidate · من غير props
+goal: تخلي شارة السلة وصفحة السلة والملخص يقروا نفس الاستعلام، من غير ما فيتشر الإضافة تبعت لهم props.
+part: التدفق
+color: c1
+---
+
+الهيدر فيه Cart Badge، وصفحة Cart، و Cart Summary. كلهم محتاجين نفس بيانات السلة.
+
+بدل ما `add-to-cart` تبعت Props للهيدر والصفحة، كل واحد يقرأ نفس الـ Query Key.
+
+<File name="widgets/header/ui/cart-badge.tsx">
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { cartQueries } from '@/entities/cart';
+
+export function CartBadge() {
+  const { data: cart } = useQuery(
+    cartQueries.current()
+  );
+
+  const count =
+    cart?.items.reduce(
+      (total, item) => total + item.quantity,
+      0
+    ) ?? 0;
+
+  return <span>{count}</span>;
+}
+```
+
+</File>
+
+لما عملية الإضافة تنجح، `invalidateQueries` بتعلّم بيانات السلة إنها محتاجة تحديث. React Query تعيد جلبها لو الـ Query نشطة، وتحدّث كل المكونات المشتركة في نفس الكاش.
+
+- الهيدر يعرض العدد الجديد.
+- صفحة Cart تعرض العناصر الجديدة.
+- Cart Summary يعرض الإجمالي المحدّث.
+
+مفيش اعتماد مباشر بين المكونات دي وبين Feature الإضافة.
+
+<Box type="tip" title="مصدر الحقيقة">
+
+المثال يفترض إن الـ Backend هو مصدر الحقيقة للسلة، وإن المكونات بتستخدم نفس Query Client ونفس Query Key. التحديث الفوري قبل رد السيرفر في الفصل الجاي، بـ `setQueryData`.
+
+</Box>
+
+<Checklist id="fsd-header" title="خلّصت الفصل لما" items={["شارة السلة تقرأ cartQueries.current", "نفس المفتاح بين الشارة والصفحة والملخص", "التحديث ييجي من invalidate مش من props بين الفيتشر والهيدر"]} />
+
+<Quiz>
+<Q n={1} q="الهيدر يستورد useAddToCart؟">لأ. يقرأ `cartQueries` من `@/entities/cart`.</Q>
+<Q n={2} q="ليه الشارة والصفحة يتحدثوا مع بعض؟">لأنهم على نفس الـ Query Key، والـ invalidate يعلّم الكاش ده.</Q>
+</Quiz>

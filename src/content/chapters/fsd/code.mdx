@@ -1,0 +1,209 @@
+---
+title: كود المنتج والسلة والزرار
+short: كتابة الكود
+order: 5
+label: فصل ٥
+badge: التدفق · فصل ٥
+en: Product · cartQueries · useAddToCart · public API
+keywords: types · getProduct · addCartItem · invalidateQueries
+goal: تشوف كود الـ Entity للمنتج والسلة، وكود فيتشر الإضافة، والاستيراد من الواجهة المعلنة.
+part: التدفق
+color: c5
+---
+
+المثال بـ TanStack Query لإدارة الـ Server State.
+
+## المنتج
+
+<File name="entities/product/model/types.ts">
+
+```ts
+export interface Product {
+  id: string;
+  title: string;
+  price: number;
+  image: string;
+  stock: number;
+}
+```
+
+</File>
+
+<File name="entities/product/api/get-product.ts">
+
+```ts
+import { apiClient } from '@/shared/api/client';
+import type { Product } from '../model/types';
+
+export async function getProduct(id: string) {
+  const { data } = await apiClient.get<Product>(
+    `/products/${id}`
+  );
+
+  return data;
+}
+```
+
+</File>
+
+<File name="entities/product/model/queries.ts">
+
+```ts
+import { queryOptions } from '@tanstack/react-query';
+import { getProduct } from '../api/get-product';
+
+export const productQueries = {
+  detail: (id: string) =>
+    queryOptions({
+      queryKey: ['products', 'detail', id],
+      queryFn: () => getProduct(id),
+    }),
+};
+```
+
+</File>
+
+<File name="entities/product/index.ts">
+
+```ts
+export type { Product } from './model/types';
+export { productQueries } from './model/queries';
+export { ProductCard } from './ui/product-card';
+```
+
+</File>
+
+أي Slice خارجية تستخدم الـ Product من خلال الـ Public API، بدل استيراد الملفات الداخلية بشكل مباشر.
+
+## السلة
+
+<File name="entities/cart/api/add-cart-item.ts">
+
+```ts
+import { apiClient } from '@/shared/api/client';
+
+export interface AddCartItemInput {
+  productId: string;
+  quantity: number;
+}
+
+export async function addCartItem(
+  input: AddCartItemInput
+) {
+  const { data } = await apiClient.post(
+    '/cart/items',
+    input
+  );
+
+  return data;
+}
+```
+
+</File>
+
+<File name="entities/cart/model/queries.ts">
+
+```ts
+import { queryOptions } from '@tanstack/react-query';
+import { getCart } from '../api/get-cart';
+
+export const cartQueries = {
+  current: () =>
+    queryOptions({
+      queryKey: ['cart', 'current'],
+      queryFn: getCart,
+    }),
+};
+```
+
+</File>
+
+<File name="entities/cart/index.ts">
+
+```ts
+export { addCartItem } from './api/add-cart-item';
+export type { AddCartItemInput } from './api/add-cart-item';
+export { cartQueries } from './model/queries';
+```
+
+</File>
+
+الـ Entity هنا مسؤول عن تمثيل الـ Cart وتوفير عمليات التعامل معاه، وليس عن شكل زر الإضافة أو طريقة عرضه.
+
+## فيتشر الإضافة
+
+<File name="features/add-to-cart/model/use-add-to-cart.ts">
+
+```ts
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { addCartItem } from '@/entities/cart';
+
+export function useAddToCart() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: addCartItem,
+
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['cart', 'current'],
+      });
+    },
+  });
+}
+```
+
+</File>
+
+<File name="features/add-to-cart/ui/add-to-cart-button.tsx">
+
+```tsx
+import { useAddToCart } from '../model/use-add-to-cart';
+
+interface Props {
+  productId: string;
+  disabled?: boolean;
+}
+
+export function AddToCartButton({
+  productId,
+  disabled,
+}: Props) {
+  const mutation = useAddToCart();
+
+  return (
+    <button
+      disabled={disabled || mutation.isPending}
+      onClick={() =>
+        mutation.mutate({
+          productId,
+          quantity: 1,
+        })
+      }
+    >
+      {mutation.isPending
+        ? 'Adding...'
+        : 'Add to Cart'}
+    </button>
+  );
+}
+```
+
+</File>
+
+<File name="features/add-to-cart/index.ts">
+
+```ts
+export { AddToCartButton } from './ui/add-to-cart-button';
+```
+
+</File>
+
+<Hl c="y">الفيتشر تنفّذ الـ Use Case. الـ Entity تنفّذ عملية الـ API. React Query تدير حالة الطلب وتحديث الكاش.</Hl>
+
+<Checklist id="fsd-code" title="خلّصت الفصل لما" items={["تصدّر Product و productQueries من index الـ Entity", "تخلي addCartItem في entities/cart", "الفيتشر تستورد addCartItem من @/entities/cart وتعمل invalidate لمفتاح السلة"]} />
+
+<Quiz>
+<Q n={1} q="الزرار يستورد addCartItem من ملف الـ API جوه entities؟">لأ. من `@/entities/cart`، وده اللي بيصدّره `index.ts`.</Q>
+<Q n={2} q="بعد نجاح الإضافة، أنهي مفتاح يتعلّم إنه محتاج تحديث؟">`['cart', 'current']`.</Q>
+</Quiz>

@@ -7,6 +7,9 @@ const topics = await getTopics();
 const chapterIds = await Promise.all(
   topics.map(async (t) => (await getChapters(t.id)).map((c) => c.id)),
 );
+const readSeedIds = await Promise.all(
+  topics.map(async (t) => (await getChapters(t.id)).filter((c) => c.data.read).map((c) => c.id)),
+);
 const accents = ["c1", "c2", "c3", "c4", "c5"];
 const pageSize = 6;
 const pageCount = Math.max(1, Math.ceil(topics.length / pageSize));
@@ -38,7 +41,7 @@ const mix = (s: string) =>
       {topics.map((t, i) => {
         const [before, after] = t.data.title.split(t.data.highlight);
         return (
-          <a class="topic-card" href={url(`${t.id}/`)} data-tags={t.data.tags.join(" ")} data-chapters={JSON.stringify(chapterIds[i] ?? [])} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
+          <a class="topic-card" href={url(`${t.id}/`)} data-tags={t.data.tags.join(" ")} data-chapters={JSON.stringify(chapterIds[i] ?? [])} data-read-seed={JSON.stringify(readSeedIds[i] ?? [])} data-astro-prefetch="hover" style={`--cc: var(--${accents[i % accents.length]})`}>
             <div class="topic-top">
               <span class="em">{t.data.emoji}</span>
               <span class="meta">{countLabel(chapterIds[i]?.length ?? 0)}</span>
@@ -81,7 +84,27 @@ const mix = (s: string) =>
 
         const paintCardRead = () => {
           let map = {};
+          let seeded = {};
           try { map = JSON.parse(localStorage.getItem("masry-notes:read") || "{}"); } catch {}
+          try { seeded = JSON.parse(localStorage.getItem("masry-notes:read-seed") || "{}"); } catch {}
+          let changed = false;
+          document.querySelectorAll("[data-topic-grid] .topic-card").forEach((card) => {
+            let seeds = [];
+            try { seeds = JSON.parse(card.dataset.readSeed || "[]"); } catch {}
+            for (const id of seeds) {
+              if (seeded[id]) continue;
+              map[id] = true;
+              seeded[id] = true;
+              changed = true;
+            }
+          });
+          if (changed) {
+            try {
+              localStorage.setItem("masry-notes:read", JSON.stringify(map));
+              localStorage.setItem("masry-notes:read-seed", JSON.stringify(seeded));
+            } catch {}
+            document.dispatchEvent(new Event("masry-read"));
+          }
           document.querySelectorAll("[data-topic-grid] .topic-card").forEach((card) => {
             let ids = [];
             try { ids = JSON.parse(card.dataset.chapters || "[]"); } catch {}

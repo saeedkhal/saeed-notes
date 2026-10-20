@@ -1,0 +1,125 @@
+---
+title: تفاصيل الفولدرات
+short: الفولدرات
+order: 2
+label: فصل ٢
+badge: البداية · فصل ٢
+en: index.ts · public API · api · model · ui
+keywords: index.ts · مش كل الفولدرات من أول يوم
+goal: تشوف شكل أقرب لمشروع شغال، وتعرف إن كل Slice ليها index.ts كواجهة معلنة.
+part: البداية
+color: c2
+---
+
+## شكل أقرب للإنتاج
+
+ده مش مجرد تقسيم فولدرات بأسماء الطبقات.
+
+<Tree>
+
+```text
+src/
+├── app/
+│   ├── providers/
+│   │   ├── query-provider.tsx
+│   │   └── router-provider.tsx
+│   ├── router/
+│   │   └── index.tsx
+│   └── styles/
+│
+├── pages/
+│   ├── home/
+│   │   ├── ui/home-page.tsx
+│   │   └── index.ts
+│   ├── product-details/
+│   │   ├── ui/product-details-page.tsx
+│   │   └── index.ts
+│   ├── products/
+│   │   ├── ui/products-page.tsx
+│   │   └── index.ts
+│   ├── cart/
+│   │   ├── ui/cart-page.tsx
+│   │   └── index.ts
+│   └── checkout/
+│       ├── ui/checkout-page.tsx
+│       └── index.ts
+│
+├── widgets/
+│   ├── header/
+│   │   ├── ui/header.tsx
+│   │   └── index.ts
+│   ├── product-grid/
+│   │   ├── ui/product-grid.tsx
+│   │   └── index.ts
+│   └── cart-summary/
+│       ├── ui/cart-summary.tsx
+│       └── index.ts
+│
+├── features/
+│   ├── add-to-cart/
+│   │   ├── api/
+│   │   ├── model/
+│   │   ├── ui/add-to-cart-button.tsx
+│   │   └── index.ts
+│   ├── change-cart-quantity/
+│   │   ├── ui/quantity-control.tsx
+│   │   └── index.ts
+│   ├── add-to-wishlist/
+│   │   ├── model/
+│   │   ├── ui/wishlist-button.tsx
+│   │   └── index.ts
+│   └── apply-coupon/
+│       ├── model/
+│       ├── ui/coupon-form.tsx
+│       └── index.ts
+│
+├── entities/
+│   ├── product/
+│   │   ├── api/
+│   │   │   ├── get-product.ts
+│   │   │   └── get-products.ts
+│   │   ├── model/
+│   │   │   ├── types.ts
+│   │   │   └── queries.ts
+│   │   ├── ui/product-card.tsx
+│   │   └── index.ts
+│   ├── cart/
+│   │   ├── api/
+│   │   │   ├── get-cart.ts
+│   │   │   └── add-cart-item.ts
+│   │   ├── model/
+│   │   │   ├── types.ts
+│   │   │   └── queries.ts
+│   │   └── index.ts
+│   ├── user/
+│   │   └── index.ts
+│   └── order/
+│       └── index.ts
+│
+└── shared/
+    ├── api/
+    │   ├── client.ts
+    │   └── types.ts
+    ├── ui/
+    │   ├── button.tsx
+    │   ├── input.tsx
+    │   └── spinner.tsx
+    ├── lib/
+    ├── config/
+    └── types/
+```
+
+</Tree>
+
+<Box type="idea" title="مش من أول يوم">
+
+مش مطلوب تعمل كل الفولدرات دي من أول يوم. اعمل الـ Slices اللي محتاجها فعلًا. خلي لكل Slice ملف `index.ts` كـ Public API. باقي التطبيق يتعامل مع الواجهة المعلنة، بدل الوصول العشوائي للملفات الداخلية.
+
+</Box>
+
+<Checklist id="fsd-folders" title="خلّصت الفصل لما" items={["تعرف إن كل Slice ليها index.ts", "متبدأش بكل الفولدرات قبل ما تحتاجها", "تفرّق api و model و ui جوه الـ Slice"]} />
+
+<Quiz>
+<Q n={1} q="باقي التطبيق يستورد من أنهي ملف في الـ Slice؟">من `index.ts`، مش من الملفات الداخلية.</Q>
+<Q n={2} q="لازم أعمل كل الفولدرات في أول يوم؟">لأ. اعمل الـ Slices المطلوبة بس.</Q>
+</Quiz>

@@ -1,0 +1,24 @@
+---
+title: FSD — فولدرات المتجر وتدفق الداتا
+highlight: FSD
+subtitle: layers · slices · public API · cart · query cache
+description: شكل Feature-Sliced Design لتطبيق E-commerce، وإزاي Feature تاخد داتا من Feature تانية من غير اعتماد مباشر، من الـ API لحد الـ UI.
+emoji: 🧩
+order: 32
+tags: [frontend]
+note: تنسيق لمناقشة عن Feature-Sliced Design مع React وTypeScript وTanStack Query. المحتوى زي ما اتقال في المناقشة، متقسم فصول.
+---
+
+تطبيق فرونت إند عايزين نستخدم فيه Feature-Sliced Design. المذكرة دي شكل الـ architecture والفولدرات، وتدفق الداتا لما Feature عايزة داتا من Feature تانية، على مثال E-commerce.
+
+التطبيق فيه:
+
+- Products و Categories.
+- Cart وإضافة المنتجات للسلة.
+- Wishlist.
+- Product Details.
+- Checkout و Orders.
+- Authentication.
+- صفحات Home وProduct Listing وCart.
+
+<Hl c="y">القاعدة: الـ Layer الأعلى يعتمد على Layer أدنى. العكس ممنوع.</Hl>

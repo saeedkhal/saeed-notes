@@ -1,0 +1,67 @@
+---
+title: فعّل الملف وجرّبه
+short: التفعيل
+order: 4
+label: فصل ٤
+badge: التطبيق · فصل ٤
+en: sites-enabled · ln -s · nginx -t · reload
+keywords: رابط · nginx -t · reload مش restart
+goal: تربط الملف في sites-enabled، وتفحص الإعداد، وتعيد تحميل Nginx من غير ما توقع الاتصالات القديمة.
+part: التطبيق
+color: c4
+---
+
+الملف في `sites-available` مسودة. Nginx بيقرا اللي في `sites-enabled`.
+
+## اعمل الرابط
+
+<File name="terminal">
+
+```bash
+sudo ln -s /etc/nginx/sites-available/example.com \
+  /etc/nginx/sites-enabled/example.com
+```
+
+</File>
+
+ده رابط، مش نسخة تانية من الملف. تعدّل الأصل، والتفعيل يقرا التعديل.
+
+لو الرابط موجود، الأمر هيفشل لأن الاسم متاخَد. ساعتها متكررش الأمر. كمّل على الفحص.
+
+<Box type="warn" title="شيل default لو بيعمل تعارض">
+
+لو ملف `default` لسه مفعّل وواخد `default_server` على نفس البورت، الموقع الجديد ممكن ما يتختارش. شوف `ls /etc/nginx/sites-enabled`. لو مش محتاجه، امسح الرابط: `sudo rm /etc/nginx/sites-enabled/default`.
+
+</Box>
+
+## افحص بعدين حمّل
+
+<File name="terminal">
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+</File>
+
+`nginx -t` يقرا `/etc/nginx/nginx.conf` وكل الملفات اللي بيستوردها. لو في قوس ناقص أو مسار شهادة غلط، هيوقف هنا. متكمّلش `reload` غير لما يطبع إن الإعداد سليم.
+
+`reload` يطبّق الملف الجديد. الاتصالات القديمة تخلّص. `restart` يقطعها. على موقع شغّال استخدم `reload`.
+
+<Hl c="b">غلط في الملف + reload من غير فحص = موقع واقف.</Hl>
+
+## 🧪 Lab
+
+1. اكتب الملف في `sites-available`.
+2. اعمل الرابط في `sites-enabled`.
+3. شغّل `nginx -t`. لو فشل، اقرأ السطر. غالبًا مسار شهادة أو قوس.
+4. بعد ما يعدّي، `reload`.
+5. من بره السيرفر افتح `http://example.com`. المفروض المتصفح يتحوّل لـ `https://`.
+
+<Checklist id="nginx-ports-enable" title="خلّصت الفصل لما" items={["تعمل رابط من sites-available لـ sites-enabled", "تشغّل nginx -t قبل reload", "تفرّق reload عن restart"]} />
+
+<Quiz>
+<Q n={1} q="كتبت الملف في sites-available وبس. الموقع هيشتغل؟">لأ. Nginx بيقرا sites-enabled.</Q>
+<Q n={2} q="ليه nginx -t قبل reload؟">عشان غلطة في الملف متطبّقش وتوقع الموقع.</Q>
+</Quiz>

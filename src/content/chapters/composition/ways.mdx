@@ -1,0 +1,79 @@
+---
+title: تلات طرق للتركيب في React
+short: الطرق
+order: 4
+label: فصل ٤
+badge: الطرق · فصل ٤
+en: children · compound components · slots
+keywords: children · Tabs · header و sidebar
+goal: تفرّق بين children، والمركبات المركبة، والفتحات المسماة.
+part: الطرق
+color: c4
+read: true
+---
+
+في React فيه أكتر من طريقة لتحقيق الـ Composition. أشهرها تلاتة.
+
+## Children
+
+بتبعت مكونات جوه مكون باستخدام `children`.
+
+<File name="Card.tsx">
+
+```tsx
+<Card>
+  <h2>Product</h2>
+  <button>Buy</button>
+</Card>
+```
+
+</File>
+
+## Compound Components
+
+مجموعة مكونات بتشتغل مع بعض كأنها واجهة واحدة.
+
+<File name="Tabs.tsx">
+
+```tsx
+<Tabs>
+  <Tabs.List>
+    <Tabs.Trigger value="profile">
+      Profile
+    </Tabs.Trigger>
+  </Tabs.List>
+
+  <Tabs.Content value="profile">
+    Profile Content
+  </Tabs.Content>
+</Tabs>
+```
+
+</File>
+
+كل جزء له مسؤولية، وممكن يشتركوا في state واحدة عن طريق Context.
+
+## فتحات بأسماء
+
+بتحدد أماكن للمكونات اللي هتدخلها.
+
+<File name="PageLayout.tsx">
+
+```tsx
+<PageLayout
+  header={<Header />}
+  sidebar={<Sidebar />}
+  content={<Dashboard />}
+/>
+```
+
+</File>
+
+هنا الـ Layout بيتحكم في أماكن الأجزاء، لكن مش لازم يعرف تفاصيل تنفيذها.
+
+<Checklist id="composition-ways" title="خلّصت الفصل لما" items={["children لمحتوى جوّه الحاوية", "المكونات المركبة زي Tabs كواجهة واحدة", "الفتحات المسماة لأماكن الهيدر والسايدبار والمحتوى"]} />
+
+<Quiz>
+<Q n={1} q="Tabs.List و Tabs.Content إيه طريقتهم؟">Compound Components. مجموعة بتشتغل كواجهة واحدة، وممكن تشترك في state عن طريق Context.</Q>
+<Q n={2} q="الـ Layout عارف تفاصيل الـ Sidebar؟">لأ. بياخد المكان. التنفيذ جوه المكون اللي اتبعت له.</Q>
+</Quiz>

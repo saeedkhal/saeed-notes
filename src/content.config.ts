@@ -35,6 +35,7 @@ const chapters = defineCollection({
     keywords: z.string().optional(), // للخريطة: "workspace:* · symlinks · store"
     color: color.default("c1"),
     part: z.string().optional(), // مجموعة في الـ timeline (البداية/التطبيق…)
+    read: z.boolean().optional(), // علّم الفصل إنه اتقرأ عند أول زيارة
   }),
 });
 

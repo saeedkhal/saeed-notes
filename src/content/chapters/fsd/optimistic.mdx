@@ -1,0 +1,268 @@
+---
+title: تحديث السلة قبل رد السيرفر
+short: تحديث فوري
+order: 7
+label: فصل ٧
+badge: التدفق · فصل ٧
+en: onMutate · setQueryData · rollback · invalidateQueries
+keywords: كاش مؤقت · رجوع عند الفشل · نفس المفتاح
+goal: تحدّث كاش السلة أول ما المستخدم يضغط، وترجّعه لو الطلب فشل، وبعدين تجيب الداتا الحقيقية.
+part: التدفق
+color: c2
+---
+
+في TanStack Query تقدر تعمل Optimistic Updates باستخدام `QueryClient`. أول ما المستخدم يضغط Add to Cart، عدد المنتجات في الهيدر ومحتوى السلة يتحدثوا فورًا، من غير ما تستنى الـ Backend يرد.
+
+الفكرة إننا نحدّث الكاش مؤقتًا، وبعدها:
+
+- لو الـ API نجح، نعمل تحديث للداتا الحقيقية.
+- لو الـ API فشل، نرجّع الكاش لحالته القديمة.
+- لو فيه طلبات متزامنة، لازم ناخد بالنا إننا ما نمسحش تحديثات أحدث بالغلط.
+
+## التدفق
+
+<Flow items={[{"t": "الضغط", "s": "Add to Cart", "c": 1}, "→", {"t": "onMutate", "s": "الكاش يتحدث فورًا", "c": 2}, "→", {"t": "الهيدر والصفحة", "s": "يعرضوا الجديد", "c": 3}, "→", {"t": "الطلب", "s": "الباك يحفظ", "c": 4}, "→", {"t": "نجاح أو فشل", "s": "تأكيد أو رجوع", "c": 5}]} />
+
+## مفتاح الاستعلام والنوع
+
+في FSD، خلّي مفاتيح السلة واستعلاماتها جوه `entities/cart`. كل الـ Features والـ Widgets تستخدم نفس التعريف.
+
+<File name="entities/cart/model/queries.ts">
+
+```ts
+import { queryOptions } from '@tanstack/react-query';
+import { getCart } from '../api/get-cart';
+
+export const cartKeys = {
+  all: ['cart'] as const,
+  current: () => [...cartKeys.all, 'current'] as const,
+};
+
+export const cartQueries = {
+  current: () =>
+    queryOptions({
+      queryKey: cartKeys.current(),
+      queryFn: getCart,
+    }),
+};
+```
+
+</File>
+
+شكل السلة للتوضيح. استخدم شكل الـ Response الحقيقي اللي بيرجعه الـ Backend عندك.
+
+<File name="entities/cart/model/types.ts">
+
+```ts
+export interface CartItem {
+  productId: string;
+  quantity: number;
+  price: number;
+}
+
+export interface Cart {
+  items: CartItem[];
+}
+```
+
+</File>
+
+<Box type="idea" title="صدّر المفتاح من الواجهة">
+
+الكود اللي تحت بيستورد `cartKeys` و`Cart` من جوه `model`. قاعدة الـ Public API إن الواجهة تطلع من `entities/cart/index.ts`، والاستيراد من `@/entities/cart`.
+
+</Box>
+
+## التحديث المؤقت
+
+<File name="features/add-to-cart/model/use-add-to-cart.ts">
+
+```ts
+import {
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
+
+import { addCartItem } from '@/entities/cart';
+import { cartKeys } from '@/entities/cart/model/queries';
+import type { Cart } from '@/entities/cart/model/types';
+
+type AddCartItemInput = {
+  productId: string;
+  quantity: number;
+};
+
+export function useAddToCart() {
+  const queryClient = useQueryClient();
+  const queryKey = cartKeys.current();
+
+  return useMutation({
+    mutationFn: (input: AddCartItemInput) =>
+      addCartItem(input),
+
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({
+        queryKey,
+      });
+
+      const previousCart =
+        queryClient.getQueryData<Cart>(queryKey);
+
+      if (previousCart) {
+        queryClient.setQueryData<Cart>(
+          queryKey,
+          (oldCart) => {
+            if (!oldCart) return oldCart;
+
+            const existingItem = oldCart.items.find(
+              (item) =>
+                item.productId === input.productId,
+            );
+
+            if (existingItem) {
+              return {
+                ...oldCart,
+                items: oldCart.items.map((item) =>
+                  item.productId === input.productId
+                    ? {
+                        ...item,
+                        quantity:
+                          item.quantity + input.quantity,
+                      }
+                    : item,
+                ),
+              };
+            }
+
+            return {
+              ...oldCart,
+              items: [
+                ...oldCart.items,
+                {
+                  productId: input.productId,
+                  quantity: input.quantity,
+                  price: 0,
+                },
+              ],
+            };
+          },
+        );
+      }
+
+      return { previousCart };
+    },
+
+    onError: (_error, _input, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(
+          queryKey,
+          context.previousCart,
+        );
+      }
+    },
+
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey,
+      }),
+  });
+}
+```
+
+</File>
+
+`onMutate` يشتغل قبل الطلب. `cancelQueries` يمنع إعادة جلب شغالة من إنها تمسح التحديث المؤقت. `previousCart` للنسخ لو الطلب فشل. التحديث يحصل بس لو السلة موجودة في الكاش أصلًا. `onError` يرجّع النسخة القديمة. `onSettled` يعلّم البيانات إنها تتحدث من السيرفر، سواء نجح الطلب أو فشل.
+
+<Box type="warn" title="price: 0 مش سعر">
+
+القيمة دي مجرد Placeholder لعنصر جديد. لو واجهة السلة محتاجة الاسم والصورة والسعر، مرّر بيانات المنتج اللازمة للتحديث المؤقت، أو استخدم شكل مؤقت واضح، وبعدين استبدله بنتيجة السيرفر. السعر اللي يبعته الفرونت مش موثوق. الـ Backend يتحقق من السعر والمخزون.
+
+</Box>
+
+## الزرار
+
+<File name="features/add-to-cart/ui/add-to-cart-button.tsx">
+
+```tsx
+import { useAddToCart } from '../model/use-add-to-cart';
+
+export function AddToCartButton({
+  productId,
+}: {
+  productId: string;
+}) {
+  const mutation = useAddToCart();
+
+  return (
+    <button
+      disabled={mutation.isPending}
+      onClick={() =>
+        mutation.mutate({
+          productId,
+          quantity: 1,
+        })
+      }
+    >
+      {mutation.isPending
+        ? 'Adding...'
+        : 'Add to Cart'}
+    </button>
+  );
+}
+```
+
+</File>
+
+`isPending` يفضل `true` طول ما طلب الـ API شغال، حتى لو السلة اتحدثت في الواجهة. ده يمنع الضغط المتكرر. مش معناه إننا بنستنى السيرفر عشان نعرض التحديث.
+
+## الهيدر
+
+<File name="widgets/header/ui/cart-badge.tsx">
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { cartQueries } from '@/entities/cart';
+
+export function CartBadge() {
+  const { data: cart } = useQuery(
+    cartQueries.current(),
+  );
+
+  const count =
+    cart?.items.reduce(
+      (total, item) => total + item.quantity,
+      0,
+    ) ?? 0;
+
+  return <span>{count}</span>;
+}
+```
+
+</File>
+
+طالما الهيدر وصفحة السلة بيستخدموا نفس `QueryClient` ونفس `cartKeys.current()`، تحديث الكاش بـ `setQueryData` يظهر للمكونات اللي بتراقب نفس الاستعلام.
+
+## أنهي دالة
+
+| الدالة | وظيفتها |
+| --- | --- |
+| `setQueryData` | تحديث الكاش فورًا بشكل مباشر |
+| `getQueryData` | قراءة القيمة الحالية من الكاش |
+| `cancelQueries` | إلغاء عمليات القراءة الجارية اللي ممكن تستبدل التحديث المؤقت |
+| `invalidateQueries` | تعليم البيانات إنها قديمة وطلب إعادة جلبها عند الحاجة |
+
+التحديث الفوري مناسب لو تقدر تتوقع شكل النتيجة بدقة. لو العملية فيها مخزون وأسعار وخصومات وحسابات سيرفر، ممكن تكتفي بعدّاد مؤقت، أو تستنى رد السيرفر.
+
+<Box type="warn" title="طلبات متزامنة">
+
+مع Mutations متزامنة على نفس السلة، الرجوع المبني على Snapshot كامل ممكن يمسح تحديثًا أحدث. في الحالة دي استخدم استراتيجية متوافقة مع العمليات المتزامنة، أو أعد مزامنة الكاش مع السيرفر، بدل استرجاع نسخة قديمة بشكل أعمى.
+
+</Box>
+
+<Checklist id="fsd-optimistic" title="خلّصت الفصل لما" items={["تعمل setQueryData في onMutate قبل الطلب", "تحفظ previousCart وترجّعها في onError", "تعمل invalidateQueries في onSettled", "متعتبرش السعر المؤقت سعرًا موثوقًا"]} />
+
+<Quiz>
+<Q n={1} q="ليه cancelQueries قبل setQueryData؟">عشان إعادة جلب شغالة متكتبش على التحديث المؤقت.</Q>
+<Q n={2} q="الطلب فشل. الكاش يرجع إزاي؟">`onError` يحط `previousCart` تاني بـ `setQueryData`.</Q>
+<Q n={3} q="الهيدر ليه يتحدث قبل رد السيرفر؟">لأنه بيقرأ نفس المفتاح اللي `setQueryData` عدّله.</Q>
+</Quiz>

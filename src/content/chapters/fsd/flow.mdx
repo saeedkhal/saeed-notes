@@ -1,0 +1,36 @@
+---
+title: المنتج يتضاف للسلة
+short: تدفق السلة
+order: 4
+label: فصل ٤
+badge: التدفق · فصل ٤
+en: add-to-cart · mutation · entities/cart · invalidateQueries
+keywords: زرار · mutation · API · كاش · عرض
+goal: تمشي تدفق إضافة منتج للسلة من الزرار لحد الهيدر، من غير ما الفيتشر تستورد الصفحة.
+part: التدفق
+color: c4
+---
+
+## السؤال
+
+عندي Feature اسمها `add-to-cart` بتتعامل مع Product، وفي نفس الوقت محتاجة تضيفه للـ Cart. المسؤوليات تتوزع كده.
+
+<Flow items={[{"t": "Product Card", "s": "ضغط Add to Cart", "c": 1}, "→", {"t": "add-to-cart", "s": "Mutation وحالات التحميل", "c": 2}, "→", {"t": "entities/cart", "s": "طلب الإضافة للـ API", "c": 3}, "→", {"t": "Backend", "s": "حفظ العنصر", "c": 4}, "→", {"t": "Query Cache", "s": "invalidate وإعادة الجلب", "c": 5}, "→", {"t": "Header والصفحة", "s": "العدد والإجمالي", "c": 1}]} />
+
+1. **Product Card:** المستخدم يضغط Add to Cart.
+2. **`features/add-to-cart`:** الـ Mutation وحالات التحميل والخطأ.
+3. **`entities/cart`:** تنفيذ طلب إضافة المنتج للـ API.
+4. **Backend API:** حفظ العنصر في السلة وإرجاع النتيجة.
+5. **React Query Cache:** تعطيل استعلام السلة وإعادة جلب الداتا.
+6. **Header وصفحة Cart:** عرض العدد والإجمالي والعناصر الجديدة.
+
+<Hl c="g">`add-to-cart` لا تحتاج استيراد `cart-page` أو `header` أو حتى `product-details`.</Hl>
+
+كل جزء مسؤول عن نفسه. التواصل من خلال الـ Entity والـ Query Cache.
+
+<Checklist id="fsd-flow" title="خلّصت الفصل لما" items={["تحط الـ Mutation في feature الإضافة", "تحط طلب الـ API في entities/cart", "تعرف إن الهيدر بيتحدث من الكاش مش من استيراد الفيتشر"]} />
+
+<Quiz>
+<Q n={1} q="add-to-cart تستورد صفحة السلة عشان تحدّثها؟">لأ. بعد نجاح الطلب الكاش يتحدّث، والصفحة تقرأ نفس الاستعلام.</Q>
+<Q n={2} q="مين يبعت طلب إضافة المنتج للـ API؟">`entities/cart`. الفيتشر تشغّل الـ Mutation.</Q>
+</Quiz>

@@ -1,0 +1,32 @@
+---
+title: فيتشر عايزة داتا من فيتشر تانية
+short: بين الفيتشرز
+order: 9
+label: فصل ٩
+badge: القواعد · فصل ٩
+en: productId · entities · page composition · shared
+keywords: المعرف كمدخل · الكيان مش الفيتشر · مش كل مشترك في shared
+goal: تختار مكان الداتا لما فيتشر محتاجة حاجة من فيتشر تانية، من غير اعتماد مباشر بينهم.
+part: القواعد
+color: c4
+---
+
+| السيناريو | التصميم الأنسب |
+| --- | --- |
+| `add-to-cart` محتاجة `productId` | تستقبل الـ ID كـ input، وتستخدم `entities/cart` |
+| `add-to-wishlist` محتاجة Product | تعتمد على `entities/product` عند الحاجة |
+| الهيدر محتاج عدد عناصر السلة | يقرأ `entities/cart` عبر Query |
+| الـ Checkout محتاج بيانات السلة | يقرأ Cart ويستخدم Feature مستقلة لإتمام الطلب |
+| Apply Coupon محتاجة إجمالي الطلب | تتعامل مع مدخلات وبيانات الـ Checkout عبر واجهة واضحة، أو منطق Domain مناسب |
+| Feature محتاجة تنفّذ Feature أخرى | تجنّب الاعتماد المباشر. اجمعهما في Page أو Widget، أو أنشئ Use Case مشتركًا في مكان مناسب |
+
+مش كل منطق مشترك يتحط في `shared`. لو المنطق خاص بالـ Cart، مكانه الطبيعي `entities/cart` أو Slice مسؤولة عن الـ Cart، مش Utilities عامة لمجرد إعادة استخدامه.
+
+مش لازم كل API endpoint يبقى جوه Entity. مكانه يتحدد حسب المسؤولية. الـ Checkout ممكن يكون Feature مستقلة لو هو فعل المستخدم الأساسي، بينما Order كيان له بياناته واستعلاماته الخاصة.
+
+<Checklist id="fsd-cross" title="خلّصت الفصل لما" items={["تمرّر productId كمدخل للفيتشر", "منطق السلة المشترك يروح entities/cart مش shared", "تجميع فيتشرين يكون في الصفحة أو الودجت"]} />
+
+<Quiz>
+<Q n={1} q="منطق خاص بالسلة، أحطه في shared عشان أكتر من فيتشر تستخدمه؟">لأ. مكانه `entities/cart` أو شريحة مسؤولة عن السلة.</Q>
+<Q n={2} q="Checkout يبقى Entity ولا Feature؟">Feature لو هو فعل المستخدم. Order هو الكيان اللي له بيانات واستعلامات.</Q>
+</Quiz>

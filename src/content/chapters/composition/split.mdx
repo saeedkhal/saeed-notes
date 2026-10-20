@@ -1,0 +1,87 @@
+---
+title: قسّم وخلّي الأب يركّب
+short: التقسيم
+order: 2
+label: فصل ٢
+badge: التركيب · فصل ٢
+en: children · ProductImage · ProductInfo · buttons
+keywords: حاوية · أجزاء مستقلة · children
+goal: تقسّم الكارت لأجزاء، والأب يختار يركّب إيه، والحاوية تعرض children بس.
+part: التركيب
+color: c2
+read: true
+---
+
+بدل ما الـ Product Card تتحكم في كل التفاصيل، قسّمها لمكونات صغيرة، وخلّي الأب هو اللي يركّبها بالشكل اللي محتاجه.
+
+- **ProductCard:** الحاوية الرئيسية.
+- **ProductImage**
+- **ProductInfo**
+- **FavoriteButton**
+- **AddToCartButton**
+
+كل جزء مستقل، وتقدر تختار تركّب منه إيه حسب احتياجك.
+
+<File name="parts.tsx">
+
+```tsx
+function ProductCard({ children }) {
+  return <div className="card">{children}</div>;
+}
+
+function ProductImage({ src }) {
+  return <img src={src} alt="" />;
+}
+
+function ProductInfo({ name, price }) {
+  return (
+    <div>
+      <h3>{name}</h3>
+      <p>{price}</p>
+    </div>
+  );
+}
+
+function AddToCartButton() {
+  return <button>Add to Cart</button>;
+}
+
+function FavoriteButton() {
+  return <button>♥</button>;
+}
+```
+
+</File>
+
+<File name="ProductListItem.tsx">
+
+```tsx
+function ProductListItem({ product }) {
+  return (
+    <ProductCard>
+      <ProductImage src={product.image} />
+
+      <ProductInfo
+        name={product.name}
+        price={product.price}
+      />
+
+      <FavoriteButton />
+      <AddToCartButton />
+    </ProductCard>
+  );
+}
+```
+
+</File>
+
+<Hl c="g">ProductCard مش محتاجة تعرف إيه اللي جواها. هي بس بتعرض children.</Hl>
+
+ده مثال بسيط على الـ Composition.
+
+<Checklist id="composition-split" title="خلّصت الفصل لما" items={["الحاوية تاخد children ومتعرفش التفاصيل", "الصورة والمعلومات والأزرار مكونات لوحدها", "الأب هو اللي يختار الترتيب"]} />
+
+<Quiz>
+<Q n={1} q="ProductCard بتعرف إن جواها زرار مفضلة؟">لأ. بتعرض `children` بس.</Q>
+<Q n={2} q="مين يقرر إن الكارت فيه Favorite و Add to Cart؟">الأب، زي `ProductListItem`، مش الحاوية.</Q>
+</Quiz>

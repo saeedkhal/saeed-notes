@@ -1,0 +1,90 @@
+---
+title: البلوكين في ملف واحد
+short: ملف الموقع
+order: 3
+label: فصل ٣
+badge: التطبيق · فصل ٣
+en: sites-available · listen 80 · return 301 · listen 443 ssl · proxy_pass
+keywords: ملف واحد · بلوك 80 · بلوك 443 · مش تختار واحد
+goal: تكتب بلوك التحويل وبلوك HTTPS في نفس الملف، وتعرف إن الاتنين مطلوبين.
+part: التطبيق
+color: c3
+---
+
+على Ubuntu ملف الموقع هنا:
+
+`/etc/nginx/sites-available/example.com`
+
+غيّر `example.com` باسم الدومين. الاتنين اللي تحت **مش اختيار**. الاتنين يتكتبوا في نفس الملف.
+
+<Box type="idea" title="مش واحد أو التاني">
+
+بلوك `80` يحوّل. بلوك `443` يستقبل الشهادة ويسلّم للتطبيق. لو كتبت واحد بس، النص التاني ناقص.
+
+</Box>
+
+<File name="/etc/nginx/sites-available/example.com">
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com www.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name example.com www.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:7000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+</File>
+
+## بلوك 80
+
+أي طلب على HTTP يرجع `301` لنفس الرابط على HTTPS.
+
+مثال: `http://example.com/users?page=2` يبقى `https://example.com/users?page=2`.
+
+`$host` اسم الموقع. `$request_uri` المسار والاستعلام. التحويل ما يضيّعش الصفحة.
+
+<Hl c="g">بلوك 80 ما فيهوش `proxy_pass`. شغله تحويل بس.</Hl>
+
+## بلوك 443
+
+هنا الشهادة. وهنا التسليم للتطبيق.
+
+- `listen 443 ssl` يعني HTTPS على البورت ده. كلمة `ssl` على سطر `listen`. متكتبش `ssl on`. الأمر ده اتشال.
+- مسار الشهادة في المثال من Let's Encrypt. لو المسار عندك مختلف، حط المسار الصح. الملف مش هيشتغل من غير الشهادتين على القرص.
+- `proxy_pass http://127.0.0.1:7000` يسلّم جوّه الجهاز. التطبيق في المثال Express على `7000`. لو بورت التطبيق مختلف، غيّر الرقم.
+- الهيدرز تخلي التطبيق يعرف الدومين الأصلي، وإن الطلب كان HTTPS.
+
+سطر `[::]:80` مع سطر `[::]:443` لنسخة IPv6. لو الجهاز من غيرها، السطرين دول مش هيضرّوا على إعداد Ubuntu العادي.
+
+<Box type="tip" title="شهادة Let's Encrypt">
+
+غالبًا الملفات في `/etc/letsencrypt/live/example.com/`. `fullchain.pem` السلسلة. `privkey.pem` المفتاح. مفتاح الشهادة متتحطّش في git.
+
+</Box>
+
+<Checklist id="nginx-ports-file" title="خلّصت الفصل لما" items={["تحط البلوكين في نفس الملف", "تعرف إن بلوك 80 تحويل وبلوك 443 تسليم", "تبدّل الدومين ومسار الشهادة وبورت التطبيق"]} />
+
+<Quiz>
+<Q n={1} q="أكتب بلوك 80 ولا بلوك 443؟">الاتنين. في نفس الملف.</Q>
+<Q n={2} q="ليه بلوك 80 من غير proxy_pass؟">لأنه ما يسلّمش للتطبيق. بيرجع عنوان HTTPS وبس.</Q>
+<Q n={3} q="proxy_pass على 127.0.0.1:7000 يعني إيه؟">Nginx يكلّم التطبيق من جوّه الجهاز، مش من الإنترنت.</Q>
+</Quiz>

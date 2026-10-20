@@ -1,0 +1,39 @@
+---
+title: "Cheat Sheet: FSD"
+short: Cheat Sheet
+order: 11
+label: الآخر
+badge: الآخر
+en: layers · public API · same layer · query key · entities
+keywords: الأعلى للأدنى · index.ts · نفس المفتاح
+goal: تفتكر اتجاه الاعتماد، وواجهة الـ Slice، ومكان داتا السلة.
+part: القواعد
+color: dark
+---
+
+<Cheat items={[
+  ["الاتجاه", "الطبقة الأعلى تعتمد على الأدنى. العكس ممنوع"],
+  ["features", "تستخدم `entities` و`shared`. مش العكس"],
+  ["نفس الطبقة", "`add-to-cart` متستوردش من `add-to-wishlist`"],
+  ["الداتا", "تطلع من الـ API عبر الـ Entity لحد الصفحة"],
+  ["الواجهة", "استيراد من `index.ts` بس"],
+  ["الإضافة للسلة", "الفيتشر Mutation. `entities/cart` تطلب الـ API"],
+  ["التحديث", "`invalidateQueries` على `['cart', 'current']`"],
+  ["تحديث فوري", "`onMutate` يعمل `setQueryData` قبل رد السيرفر"],
+  ["فشل الطلب", "`onError` يرجّع `previousCart`، وبعدين `onSettled` يعمل invalidate"],
+  ["السعر", "السعر المؤقت في الكاش مش موثوق. الباك يتحقق من السعر والمخزون"],
+  ["الهيدر", "يقرأ `cartQueries.current`، مش props من الفيتشر"],
+  ["الصفحة", "تجمّع الزرار والاستعلام. متنفّذش منطقهم"],
+  ["منطق السلة", "في `entities/cart`، مش في `shared` لمجرد التكرار"],
+  ["Checkout", "Feature لو هو فعل المستخدم. Order هو الكيان"],
+  ["حالة السيرفر", "TanStack Query"],
+  ["حالة الواجهة", "محلية. Zustand لو حالة عميل مشتركة السيرفر مش مالكها"],
+]} />
+
+<Checklist id="fsd-cheat" title="خلّصت الموضوع لما" items={["ترسم الطبقات الست واتجاه الاعتماد", "تمرّر المعرف للفيتشر وتحدّث السلة من الكاش", "تجمّع الفيتشرز في الصفحة من غير ما يعتمدوا على بعض"]} />
+
+<Quiz>
+<Q n={1} q="entities تستورد زرار add-to-cart؟">لأ. الزرار في features، والكيان أدنى منها.</Q>
+<Q n={2} q="شارة السلة وصفحة السلة يتكلموا مع بعض إزاي؟">نفس Query Key بتاع `cartQueries.current`.</Q>
+<Q n={3} q="فيتشر محتاجة تنفّذ فيتشر تانية. الاعتماد المباشر؟">لأ. التجميع في Page أو Widget، أو Use Case في مكان مناسب.</Q>
+</Quiz>

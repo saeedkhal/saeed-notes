@@ -1,0 +1,65 @@
+---
+title: مكون بيعمل كل حاجة
+short: المشكلة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: ProductCard · boolean props · if
+keywords: كارت واحد · props كتير · شروط
+goal: تعرف ليه كارت المنتج اللي فيه كل الأزرار بيبقى صعب تعديله.
+part: البداية
+color: c1
+read: true
+---
+
+تخيل إنك بتعمل متجر وعندك Product Card.
+
+<File name="ProductCard.tsx">
+
+```tsx
+function ProductCard({ product }) {
+  return (
+    <div className="card">
+      <img src={product.image} />
+      <h3>{product.name}</h3>
+      <p>{product.price}</p>
+      <button>Add to Cart</button>
+    </div>
+  );
+}
+```
+
+</File>
+
+في البداية ده تمام. بعد شوية احتجت:
+
+- Product Card عادية.
+- Product Card فيها زرار Favorite.
+- Product Card للـ Admin فيها Edit و Delete.
+- Product Card للموبايل بتصميم مختلف.
+
+ممكن تبدأ تزود props كتير.
+
+<File name="الاستدعاء">
+
+```tsx
+<ProductCard
+  product={product}
+  showFavorite
+  showEdit={isAdmin}
+  showDelete={isAdmin}
+  showAddToCart
+  compact
+/>
+```
+
+</File>
+
+ومع الوقت المكون يبقى مليان شروط `if`، وصعب تعدّله أو تعيد استخدامه.
+
+<Checklist id="composition-problem" title="خلّصت الفصل لما" items={["تشرح إن الكارت الواحد بدأ بكفاية", "تعرف إن كل شكل جديد بقى prop منطقية", "تعرف إن الشروط جوه المكون بتصعّب التعديل"]} />
+
+<Quiz>
+<Q n={1} q="ليه showFavorite و showEdit و compact مشكلة؟">المكون يبقى مليان شروط، وصعب تعدّله أو تعيد استخدامه.</Q>
+<Q n={2} q="كارت الأدمن محتاج Edit و Delete. الحل إنك تزود props على نفس الكارت؟">ده اللي بيحصل في الأول، وبعدين الكارت يتقل. التقسيم في الفصل الجاي.</Q>
+</Quiz>

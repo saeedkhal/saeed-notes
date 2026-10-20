@@ -1,0 +1,35 @@
+---
+title: قواعد عملية للفريق
+short: قواعد الفريق
+order: 10
+label: فصل ١٠
+badge: القواعد · فصل ١٠
+en: public API · no deep imports · server state · UI state
+keywords: index.ts · منع الدائرة · React Query · Zustand للواجهة
+goal: تمشي على الواجهة المعلنة، وتفصل حالة السيرفر عن حالة الواجهة، وتجمّع الفيتشرز في الصفحة مش بين بعض.
+part: القواعد
+color: c5
+---
+
+- **Public API:** كل Slice تصدّر فقط ما يحتاجه باقي التطبيق من `index.ts`.
+- **ممنوع الاستيراد العشوائي:** لا تستورد من `features/add-to-cart/model` خارج الـ Slice. استورد من `features/add-to-cart`.
+- **ممنوع Circular Dependencies:** الـ Entity لا تعتمد على Feature تستخدمها.
+- **Server State:** استخدم React Query للبيانات القادمة من السيرفر، بما فيها الكاش والـ invalidation.
+- **UI State:** استخدم State محلي للـ Modal المفتوح أو الـ Dropdown. لا تحوّل كل شيء إلى Global Store.
+- **Cross-feature orchestration:** لو فيه Workflow يجمع أكتر من Feature، خلي التنسيق في Page أو Widget أو طبقة مناسبة للـ Use Case، من غير اعتماد مباشر بين الـ Features.
+- **Domain boundaries:** لو المشروع كبير، مش شرط كل حاجة تتسمى Entity. اختار الـ Slices بناءً على مفاهيم الدومين الحقيقية.
+
+<Box type="idea" title="ترشيح المتجر المتوسط أو الكبير">
+
+استخدم FSD لتنظيم الكود، و TanStack Query للـ Server State، و Zustand فقط لو عندك Client State مشتركة فعلًا، زي حالة واجهة معقدة أو بيانات مؤقتة لا يمتلكها السيرفر.
+
+</Box>
+
+بكده يبقى فيه فصل بين مسؤوليات الـ UI، وأفعال المستخدم، وبيانات الدومين، والبنية التحتية. من غير ما كل Feature تتحول إلى جزيرة مستقلة، أو شبكة اعتماد متشابكة.
+
+<Checklist id="fsd-rules" title="خلّصت الفصل لما" items={["الاستيراد من مدخل الـ Slice بس", "React Query لحالة السيرفر، والحالة المحلية للواجهة", "Zustand لو فيه حالة عميل مشتركة السيرفر مش مالكها"]} />
+
+<Quiz>
+<Q n={1} q="أستورد useAddToCart من مسار model من بره الفيتشر؟">لأ. من `features/add-to-cart`، والملف ده يصدّر اللي بره محتاجه.</Q>
+<Q n={2} q="حالة فتح المودال تتحط في متجر عام؟">لأ. State محلي. المتجر العام لحالة عميل مشتركة فعلًا.</Q>
+</Quiz>

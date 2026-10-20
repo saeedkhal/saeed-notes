@@ -1,0 +1,33 @@
+---
+title: "Cheat Sheet: Composition"
+short: Cheat Sheet
+order: 5
+label: الآخر
+badge: الآخر
+en: children · compound · slots · boolean props
+keywords: أجزاء صغيرة · الأب يركّب · من غير شروط
+goal: تفتكر إن الحاوية تعرض children، والشاشة تختار الأجزاء.
+part: الطرق
+color: dark
+read: true
+---
+
+<Cheat items={[
+  ["الفكرة", "مكونات صغيرة تتركّب، مش مكون واحد ضخم"],
+  ["المشكلة", "props منطقية زي showFavorite و showEdit و compact"],
+  ["الحاوية", "`ProductCard` تعرض `children` ومتعرفش التفاصيل"],
+  ["الأب", "يختار الصورة والمعلومات والأزرار"],
+  ["العميل", "مفضلة و Add to Cart"],
+  ["الأدمن", "Edit و Delete، ونفس الصورة والمعلومات"],
+  ["children", "محتوى جوّه المكون"],
+  ["Compound", "زي `Tabs` و `Tabs.List` و `Tabs.Content`، وحالة مشتركة بـ Context"],
+  ["Slots", "`header` و `sidebar` و `content`. المكان من غير تفاصيل التنفيذ"],
+]} />
+
+<Checklist id="composition-cheat" title="خلّصت الموضوع لما" items={["متزوّدش prop منطقية لكل شكل جديد", "تركّب الكارت من أجزاء", "تختار children أو compound أو slots"]} />
+
+<Quiz>
+<Q n={1} q="عايز كارت موبايل بترتيب مختلف. تزود prop compact؟">لأ. ركّب نفس الأجزاء بالترتيب اللي الشاشة محتاجاه.</Q>
+<Q n={2} q="الحاوية لازم تعرف أسماء الأزرار اللي جواها؟">لأ. تعرض `children`.</Q>
+<Q n={3} q="الهيدر والسايدبار أماكن ثابتة في الصفحة. أنهي طريقة؟">فتحات بأسماء. الـ Layout يحط كل جزء في مكانه.</Q>
+</Quiz>

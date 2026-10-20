@@ -1,0 +1,56 @@
+---
+title: مكان الحالة في FSD
+short: المكان في FSD
+order: 3
+label: فصل ٣
+badge: المكان · فصل ٣
+en: add-to-cart · filter-products · select-products · header
+keywords: الفيتشر المالكة · الرابط للفلتر · الهيدر يقرأ الكويري
+goal: تحط كل حالة في الشريحة المالكة لها، وتصدّر واجهتها من index.ts، ومتخلّيش الهيدر يحتفظ بعدد سلة لوحده.
+part: المكان
+color: c3
+---
+
+<Tree>
+
+```text
+src/
+├── features/
+│   ├── add-to-cart/
+│   │   ├── model/
+│   │   │   └── use-add-to-cart.ts
+│   │   └── ui/
+│   ├── filter-products/
+│   │   ├── model/
+│   │   └── ui/
+│   └── select-products/
+│       ├── model/
+│       └── ui/
+│
+├── widgets/
+│   ├── header/
+│   └── product-grid/
+│
+└── shared/
+    └── lib/
+```
+
+</Tree>
+
+- **`add-to-cart`:** الـ Mutation وحالة الطلب ممكن يكونوا داخل الـ Feature. بيانات السلة المحفوظة على السيرفر تظل Server State.
+- **`filter-products`:** الفلاتر القابلة للمشاركة تكون في URL.
+- **`select-products`:** المنتجات المحددة ممكن تكون Local State أو Store حسب احتياج باقي المكونات.
+- **`header`:** يقرأ Cart Query لعرض العدد. مش لازم يحتفظ بعدد منفصل في Zustand.
+
+<Box type="idea" title="الستور مش لازم في shared">
+
+مش معنى إنك استخدمت Zustand إن كل الـ Store لازم يكون في `shared`. لو الـ Store خاص بميزة محددة، خليه في الـ Slice المالكة له، وصدّر الواجهة المطلوبة من `index.ts`.
+
+</Box>
+
+<Checklist id="client-state-place" title="خلّصت الفصل لما" items={["الفلاتر القابلة للمشاركة في الرابط", "الهيدر يقرأ استعلام السلة مش عددًا منفصلًا", "ستور الميزة يفضل في الشريحة المالكة ويتصدر من index.ts"]} />
+
+<Quiz>
+<Q n={1} q="فلاتر المنتجات القابلة للمشاركة تتحط فين؟">في الـ URL، جوه فيتشر `filter-products`.</Q>
+<Q n={2} q="ستور خاص بميزة واحدة. مكانه shared؟">لأ. في الـ Slice المالكة، والواجهة تتصدر من `index.ts`.</Q>
+</Quiz>

@@ -1,0 +1,38 @@
+---
+title: قواعد الاعتماد
+short: الاعتماد
+order: 3
+label: فصل ٣
+badge: البداية · فصل ٣
+en: dependency direction · same layer · data flow
+keywords: اتجاه الاعتماد · نفس الطبقة ممنوعة · الداتا تطلع لفوق
+goal: تفرّق بين اتجاه الاعتماد واتجاه الداتا، وتعرف إن Slices نفس الطبقة متعتمدش على بعض.
+part: البداية
+color: c3
+---
+
+## اتجاه الاعتماد
+
+| الطبقة | دورها |
+| --- | --- |
+| `app` | Composition و setup |
+| `pages` | تجميع أجزاء الصفحة |
+| `widgets` | أجزاء UI كبيرة ومتكاملة |
+| `features` | أفعال المستخدم والـ Use Cases |
+| `entities` | Product و Cart و User و Order |
+| `shared` | API client و UI primitives و Utilities |
+
+الأسهم من الأعلى للأدنى بتوضح اتجاه الاعتماد، مش اتجاه انتقال الداتا. الداتا ممكن ترجع من الـ API وتطلع من `entities` للـ `features` والـ `widgets` والـ `pages`.
+
+<Box type="warn" title="نفس الطبقة">
+
+الـ Slices الموجودة في نفس الـ Layer لا تعتمد مباشرة على بعضها في التصميم التقليدي لـ FSD. `add-to-cart` مينفعش يستورد ملفات داخلية من `add-to-wishlist`، ولا العكس.
+
+</Box>
+
+<Checklist id="fsd-deps" title="خلّصت الفصل لما" items={["تفرّق اتجاه الاعتماد عن اتجاه الداتا", "تعرف إن الداتا تطلع من entities لفوق", "متخلّيش feature تستورد من feature تانية في نفس الطبقة"]} />
+
+<Quiz>
+<Q n={1} q="السهم بين الطبقات معناه الداتا ماشية فين؟">لأ. السهم اتجاه الاعتماد. الداتا تقدر تطلع من الـ API لحد الصفحة.</Q>
+<Q n={2} q="add-to-cart تستورد من add-to-wishlist؟">لأ. الاتنين في نفس الطبقة.</Q>
+</Quiz>

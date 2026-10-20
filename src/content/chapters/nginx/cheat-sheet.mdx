@@ -1,41 +1,35 @@
 ---
-title: "Cheat Sheet: Nginx"
+title: "Cheat Sheet: قفل البورتات"
 short: Cheat Sheet
-order: 9
+order: 6
 label: الآخر
 badge: الآخر
-en: proxy_pass · listen ssl · 8443 · fullchain · 502 · reload
-keywords: التوجيه والشهادة في سطر
-goal: تفتكر باب الشارع، والبورت الداخلي، وSSL على الرقم اللي تختاره.
-part: التشغيل
+en: ufw · 80 · 443 · return 301 · proxy_pass · 127.0.0.1
+keywords: جدار ناري · تحويل · شهادة · تطبيق جوّه
+goal: تفتكر ترتيب UFW، وإن البلوكين في ملف واحد، وإن 80 لازم مفتوح عشان التحويل.
+part: بعدها
 color: dark
 ---
 
 <Cheat items={[
-  ["التثبيت", "ريبو nginx.org بعد البصمة. stable افتراضي، وmainline اختياري"],
-  ["حزمة Ubuntu", "`sites-enabled`. حزم nginx.org بتستخدم `conf.d`"],
-  ["دور Nginx", "باب عام يسلّم الطلب لـ 127.0.0.1"],
-  ["الجدار الناري", "افتح بورت Nginx بس، مش بورت Node"],
-  ["`listen`", "البورت العام. `default_server` يلم الباقي"],
-  ["`server_name`", "الدومين اللي يختار البلوك"],
-  ["`proxy_pass` من غير مسار", "الرابط يوصل كما هو"],
-  ["فرونت 3000 وباك 7000", "`/` للتطبيق و`/api/` للباك من غير ما تشيل المسار"],
-  ["`proxy_pass` بشرطة في الآخر", "يشيل جزء الـ location"],
-  ["502", "التطبيق واقع أو البورت غلط"],
-  ["SSL", "`listen 443 ssl` مش `ssl on`"],
-  ["بورت معين", "`listen 8443 ssl` والرابط فيه :8443"],
-  ["التحويل", "من 80 لـ HTTPS، واذكر البورت لو مش 443"],
-  ["الشهادة", "`fullchain.pem` ثم `privkey.pem`"],
-  ["الهيدرز", "Host وX-Forwarded-For وX-Forwarded-Proto"],
-  ["WebSocket", "Upgrade وConnection مع HTTP 1.1"],
-  ["413", "ارفع `client_max_body_size`"],
-  ["التطبيق", "`nginx -t` وبعدين `systemctl reload nginx`"],
+  ["شغلتين", "الجدار الناري يقفل البورتات. Nginx يحوّل ويسلّم"],
+  ["بورت 80", "مفتوح عشان التحويل. لو اتقفل، http:// مش هيوصل Nginx"],
+  ["تثبيت UFW", "`sudo apt install ufw` ثم `ufw version`"],
+  ["الترتيب", "اسمح بـ SSH، بعدين 443، بعدين 80، بعدين deny الوارد، بعدين enable"],
+  ["بعد الريستارت", "`ufw enable` بيفضل. شوف `ufw status verbose`"],
+  ["ملف الموقع", "`/etc/nginx/sites-available/example.com`"],
+  ["بلوكين", "الاتنين في نفس الملف. مش تختار واحد"],
+  ["بلوك 80", "`return 301 https://$host$request_uri`"],
+  ["بلوك 443", "`listen 443 ssl` ثم `proxy_pass` للتطبيق"],
+  ["الشهادة", "`fullchain.pem` و`privkey.pem` من Let's Encrypt"],
+  ["التفعيل", "رابط في `sites-enabled` ثم `nginx -t` ثم `reload`"],
+  ["التطبيق", "`listen` على `127.0.0.1`، مش على `0.0.0.0`"],
 ]} />
 
-<Checklist id="nginx-cheat" title="خلّصت الموضوع لما" items={["توجّه دومين أو مسار لبورت محلي", "تفتح SSL على 443 أو على بورت تختاره", "تفحص الإعداد قبل إعادة التحميل"]} />
+<Checklist id="nginx-ports-cheat" title="خلّصت الموضوع لما" items={["تسمح بـ SSH وبورت 80 وبورت 443 وتقفل الباقي", "تكتب البلوكين في ملف واحد", "تفحص بـ nginx -t قبل reload", "تخلي التطبيق على 127.0.0.1"]} />
 
 <Quiz>
-<Q n={1} q="عايز تطبيقين على 3000 و4000 ورا بورت 80. التفرقة بإيه؟">بـ `location` لكل مسار، أو بـ `server` لكل دومين.</Q>
-<Q n={2} q="HTTPS على 8443 والتطبيق HTTP على 3000. ده مظبوط؟">أيوه. SSL على `listen`، و`proxy_pass` يكمّل على `http://127.0.0.1:3000`.</Q>
-<Q n={3} q="قبل ما الزوار يدخلوا، إيه الأمر؟">`sudo nginx -t` وبعدين `sudo systemctl reload nginx`.</Q>
+<Q n={1} q="عايز تحويل من HTTP وعايز تقفل 80. ينفع الاتنين؟">لأ. التحويل محتاج 80 يوصل Nginx.</Q>
+<Q n={2} q="فين بلوك 80 وبلوك 443؟">نفس الملف في `sites-available`.</Q>
+<Q n={3} q="أول أمر UFW قبل enable؟">`allow OpenSSH` أو بورت SSH الفعلي.</Q>
 </Quiz>
