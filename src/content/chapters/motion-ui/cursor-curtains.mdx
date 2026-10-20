@@ -1,0 +1,89 @@
+---
+title: Cursor و Curtains — الماوس والانتقال بين الشاشات
+short: Cursor و Curtains
+order: 4
+label: فصل ٤
+badge: التفكيك · فصل ٤
+en: Cursor · magnetic · pointer:fine · spring follow · Curtains · clip-path · wipe · iris · blinds · pixels · useCurtains
+keywords: spring بيتبع · snap على الزرار · pointer:fine · clip-path · قفل ثم فتح
+goal: تعمل cursor مخصوص من غير ما تبوّظ الموبايل والـ accessibility، وتعمل ستارة بين شاشتين.
+part: التفكيك
+color: c4
+---
+
+## Cursor: إيه اللي الـ docs بتقوله
+
+- `<Cursor />` لما يتركب بيستبدل cursor النظام، ولما يتشال بيرجّعه.
+- بيتستايل بـ `className` و `style` عادي.
+- بيتغير **حسب اللي تحته**: لينك، زرار، نص تقدر تختاره، ولما تدوس.
+- ينفع يتقفل لمستخدمين reduced motion.
+
+<MotionUiDemo kind="cursor" title="Cursor بيتمغنط على الزراير" />
+
+لو انت على موبايل، الديمو مش هيعمل حاجة، وده مقصود (تحت).
+
+## ٣ حالات للـ cursor
+
+| فوق إيه | شكله | الحركة |
+| --- | --- | --- |
+| مكان فاضي | دايرة صغيرة | spring بتتبع الماوس |
+| زرار أو لينك | **ياخد شكل الزرار** ويكبر عنه شوية | يتحرك ٢٠٪ بس من حركة الماوس، والزرار نفسه يتشد ناحية الماوس ١٥٪ (magnetic) |
+| نص | خط رفيع زي I-beam | spring عادية |
+
+السر في الطراوة: الـ cursor <Hl c="y">مش بيروح مكان الماوس، بيروح لهدف بـ spring</Hl>. الهدف بيتغير (مكان الماوس، أو نص الزرار، أو مقاس الزرار)، والـ spring بتوصّل له بنعومة. وبنحرّك الـ `width` و `height` بـ spring كمان، فالدايرة "بتتمط" لحد ما تبقى قد الزرار.
+
+<File name="الفكرة في سطرين (React + motion)">
+
+```tsx
+const x = useSpring(0, { stiffness: 420, damping: 32 });
+const y = useSpring(0, { stiffness: 420, damping: 32 });
+// في pointermove: x.set(target.x); y.set(target.y)
+<motion.div style={{ x, y, position: "fixed", pointerEvents: "none" }} />
+```
+
+</File>
+
+<Box type="warn" title="الـ cursor المخصوص ممكن يبوّظ حاجات كتير">
+
+- **اللمس ملوش cursor.** شغّله بس لو `matchMedia("(pointer: fine)")`. على الموبايل مترسمش حاجة خالص.
+- **`pointer-events: none`** على الـ cursor، وإلا هو اللي هياخد الكليك بدل الزرار.
+- **متخفيش الـ cursor في كل الصفحة.** حطّه جوه area معينة (hero مثلًا). الناس اللي بتستخدم مكبّر الشاشة أو cursor كبير من إعدادات النظام هتتوه.
+- **reduced motion**: سيب cursor النظام زي ما هو.
+- **الـ focus بالكيبورد** ملوش علاقة بالـ cursor، فمتشيلش `:focus-visible` عشان "الـ cursor كفاية".
+
+</Box>
+
+## Curtains: ستارة بين حالتين
+
+Curtains في Motion UI بيعمل انتقال بين صفحتين أو عنصرين بأشكال: **wipe** و **blind** و **iris** و **pixel**، وفيه hook `useCurtains` لـ React.
+
+<MotionUiDemo kind="curtains" title="أربع ستاير" />
+
+كل ستارة بتمشي بنفس الـ ٣ خطوات:
+
+<Flow items={[{t:"الستارة تقفل",s:"ease-in",c:1},"→",{t:"بدّل المحتوى",s:"وهو متغطي",c:2},"→",{t:"الستارة تفتح",s:"ease-out",c:3}]} />
+
+والفرق بين الأنواع هو **إيه اللي بيتحرك**:
+
+| النوع | بنحرّك إيه | ملاحظة |
+| --- | --- | --- |
+| wipe | `clip-path: inset(0 0 0 100%)` لـ `inset(0)` | بيبدأ من اليمين (أول السطر في العربي). في LTR اعكسه |
+| iris | `clip-path: circle(0%)` لـ `circle(75%)` | ممكن تبدأ من مكان الكليك |
+| blinds | ٦ شرايح `scaleX(0)` لـ `1` | stagger 40ms |
+| pixels | ٤٨ مربع `opacity` | delay عشوائي لكل مربع |
+
+`clip-path` و `transform` و `opacity` كلهم رخيصين على الـ GPU، فالستارة ناعمة حتى على موبايل ضعيف.
+
+<Box type="tip" title="View Transitions API">
+
+لو بتنقل بين صفحات حقيقية، المتصفح فيه `document.startViewTransition()` (و Astro و Next بيدعموه). تقدر تعمل نفس الـ wipe و الـ iris بـ `::view-transition-new(root)` و `clip-path` في CSS، من غير ما تغطي الصفحة بـ div. الستارة اليدوي مفيدة لما المتصفح ميدعمش، أو لما الانتقال جوه component مش صفحة.
+
+</Box>
+
+<Checklist id="motion-ui-w4" title="خلّصت الفصل لما" items={["تخلي الـ cursor يروح لهدف بـ spring مش لمكان الماوس", "تشغّله على pointer:fine بس وتحط pointer-events:none", "تفهم خطوات الستارة: قفل، تبديل، فتح", "تعرف إن clip-path بيعمل wipe و iris"]} />
+
+<Quiz>
+<Q n={1} q="المستخدم فتح الصفحة على موبايل. الـ Cursor يعمل إيه؟">ولا حاجة. الـ check على `(pointer: fine)` بيرجع false، فمبنرسمش cursor ومبنخفيش حاجة.</Q>
+<Q n={2} q="ليه الستارة بتقفل بـ ease-in وتفتح بـ ease-out؟">القفل بيبدأ هادي ويسرّع، فالمحتوى بيتغطى بحسم. الفتح بيبدأ سريع ويهدى، فالشاشة الجديدة "بتستقر". نفس قاعدة "القفل أسرع ومن غير نطة".</Q>
+<Q n={3} q="الـ wipe في الديمو بيبدأ من اليمين. عايزه يبدأ من الشمال لواجهة إنجليزي. تغيّر إيه؟">اعكس الـ inset: ابدأ من `inset(0 100% 0 0)` بدل `inset(0 0 0 100%)`. الأحسن تختار حسب `dir` أوتوماتيك.</Q>
+</Quiz>

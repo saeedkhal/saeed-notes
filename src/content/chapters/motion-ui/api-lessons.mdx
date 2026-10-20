@@ -1,0 +1,144 @@
+---
+title: دروس الـ API — إزاي تصمم animated component زي ما Motion UI بيعمل
+short: دروس الـ API
+order: 5
+label: فصل ٥
+badge: للـ lib بتاعتك · فصل ٥
+en: headless · className · style · transition prop · motion values · part classes · reducedMotion · RTL · ARIA · bundle size · subpath exports
+keywords: ٨ قواعد · transition prop · part classes · forwardRef · tree-shaking
+goal: تطلع بـ ٨ قواعد API تطبقها على كل component بيتحرك في الـ lib بتاعتك.
+part: للـ lib بتاعتك
+color: c5
+---
+
+لو جمعت اللي اتقال في docs الـ components مع بعض، هتلاقي **نفس الأنماط بتتكرر**. دي اللي تاخدها، مش الكود.
+
+## ١. Headless: الحركة عندك، الشكل عند المستخدم
+
+Motion بيوصف الـ components بإنها "headless". الـ Cursor رمادي by default، وتغيّره بـ `className` و `style`. الـ Ticker بياخد `items` أيًّا كانت.
+
+<Hl c="y">الـ component بيملك السلوك والحركة، والمستخدم بيملك الشكل.</Hl> يعني:
+
+- كل component بيقبل `className` و `style` ويمرّرهم للعنصر الأساسي.
+- `...rest` props تروح للعنصر (عشان `data-*` و `aria-*` و events).
+- `ref` يوصل للعنصر الحقيقي (في React 19 بقى prop عادي، قبلها `forwardRef`).
+- مفيش ألوان hardcoded. لو لازم default، خليه CSS variable يتغير.
+
+## ٢. Class لكل جزء
+
+AnimateNumber بيدّي **CSS class لكل جزء** من الرقم (prefix، integer، fraction، suffix). ده بيخلي المستخدم يعمل الكسور أصغر أو العملة بلون تاني من غير ما يفتح الكود.
+
+```tsx
+<span className="num">
+  <span className="num-prefix">$</span>
+  <span className="num-integer">12,480</span>
+  <span className="num-fraction">.50</span>
+</span>
+```
+
+نفس الفكرة في كل component: الـ Carousel يبقى فيه `carousel-track` و `carousel-item`، والـ Cursor فيه حالة على `data-state="pointer|text|pressed"`. أو اعمل زي Radix: `data-state` و `data-*` بدل classes، وده أحسن مع Tailwind (`data-[state=open]:…`).
+
+## ٣. الـ transition prop من نوع transition بتاع Motion
+
+AnimateNumber بيقبل `transition` **بنفس شكل Motion**، ومعاه إعداد لكل قيمة لوحدها:
+
+```tsx
+<AnimateNumber
+  transition={{
+    y: { type: "spring", stiffness: 320, damping: 20 },
+    layout: { duration: 0.3 },
+    opacity: { duration: 0.15 },
+  }}
+/>
+```
+
+ليه ده ذكي؟ المستخدم **مش محتاج يتعلم API جديد**. اللي يعرف Motion يعرف يظبطه. والـ defaults بتاعتك تيجي من الـ motion tokens (راجع [أنيميشن Filee](../../filee-motion/cheat-sheet/)).
+
+## ٤. باب مفتوح للحالات المتقدمة: motion values
+
+الـ Ticker بيقبل motion value يحرّكه بيها. ده بيخليك تربطه بالـ scroll (`useScroll`) أو بالسحب، **من غير** ما الـ component يكون فيه props اسمها `scrollLinked` و `draggable` و `syncWith`…
+
+<Box type="idea" title="القاعدة">
+
+الحالة العادية: props قليلة ببساطة (`items`, `velocity`). الحالة المتقدمة: prop واحد بياخد primitive من المكتبة (motion value، render function، أو `asChild`)، والمستخدم يعمل اللي هو عايزه.
+
+</Box>
+
+## ٥. Reduced motion جوه الـ component، مش مسؤولية المستخدم
+
+Ticker و Carousel بيقولوا إنهم بيدعموا reduced motion **أوتوماتيك**. والـ Cursor ينفع يتقفل. يعني المستخدم بتاع الـ lib مش لازم يفتكر.
+
+```tsx
+const reduced = useReducedMotion(); // من motion/react
+// Ticker: يقف ويبقى scroll عادي · Number: يتغير علطول · Cursor: ميتركبش
+```
+
+واعمل override: `<MotionConfig reducedMotion="user">` (من motion) أو prop `reducedMotion` على الـ component لو حد عايز يجبرها.
+
+## ٦. RTL و accessibility من أول يوم
+
+- Ticker و Carousel بيقولوا "RTL-compatible". ده مش ببلاش: كل `translateX` و `wipe` و "يمين/شمال" لازم يقرا `dir`.
+- Carousel فيه ARIA labels أوتوماتيك، وكيبورد.
+- كل حاجة بتتكرر للعين (نسخ الـ Ticker، أعمدة الرقم، حروف الـ scramble) عليها `aria-hidden`، والقيمة الحقيقية في `aria-label`.
+
+<Box type="warn" title="لو هتختبر حاجة واحدة بس">
+
+افتح الـ component بـ `dir="rtl"`، واقفل الحركة من إعدادات النظام، وامشي عليه بالكيبورد بس. لو اشتغل في التلاتة، انت أحسن من نص المكتبات اللي برا.
+
+</Box>
+
+## ٧. حجم صغير لكل component
+
+كل component مكتوب جنبه حجمه **فوق Motion**: Ticker +2.1kb، AnimateNumber +2.5kb، Carousel +5.5kb. ده بيقول حاجتين:
+
+- Motion نفسها **peer dependency**، مش متحطة جوه كل component.
+- كل component لوحده، فاللي بيستخدم Ticker بس مبيدفعش تمن Carousel.
+
+<File name="package.json (الـ lib بتاعتك)">
+
+```json
+{
+  "name": "@nile/motion-kit",
+  "type": "module",
+  "sideEffects": ["**/*.css"],
+  "exports": {
+    ".": "./dist/index.js",
+    "./ticker": "./dist/ticker.js",
+    "./animate-number": "./dist/animate-number.js",
+    "./styles.css": "./dist/styles.css"
+  },
+  "peerDependencies": {
+    "motion": ">=12",
+    "react": ">=18"
+  }
+}
+```
+
+</File>
+
+`sideEffects` بيقول للـ bundler إن ملفات JS ينفع تتشال لو محدش استخدمها، و `exports` بيدّي subpath لكل component. اقيس الحجم بـ `size-limit` في الـ CI وحط حد لكل component.
+
+## ٨. أمثلة حقيقية مع كل component
+
+صفحة Motion UI بتقول إن كل component "ships with real examples"، و الـ ٥٠ section مبنية منهم. ده نفسه درس: <Hl c="g">الـ component اللي مالوش مثال حقيقي محدش هيعرف يستخدمه</Hl>. في الـ docs بتاعتك، حط تحت كل component ٢–٣ استخدامات حقيقية (logo strip، price counter، hero) مش بس "Hello World".
+
+## الـ ٨ في جدول
+
+| القاعدة | تتأكد منها إزاي |
+| --- | --- |
+| headless | `className` و `style` و `ref` و `...rest` شغالين |
+| class أو `data-*` لكل جزء | تقدر تستايل كل جزء من برا |
+| `transition` بشكل Motion | نفس الـ type بتاع Motion، والـ default من الـ tokens |
+| باب للمتقدم | prop واحد بياخد motion value أو render function |
+| reduced motion جوه | اقفل الحركة من النظام، الـ component لسه شغال |
+| RTL و ARIA | `dir="rtl"` + قارئ شاشة + كيبورد |
+| حجم صغير | motion peer dep + subpath exports + size-limit |
+| أمثلة حقيقية | ٢–٣ استخدامات في الـ docs |
+
+<Checklist id="motion-ui-w5" title="خلّصت الفصل لما" items={["تعرف ليه headless أحسن لـ lib", "تدّي class أو data-state لكل جزء", "تخلي الـ transition prop بنفس شكل Motion", "تحط reduced motion و RTL و ARIA جوه الـ component", "تخلي motion peer dependency وكل component subpath لوحده"]} />
+
+<Quiz>
+<Q n={1} q="ليه motion تبقى peerDependency مش dependency؟">عشان المشروع يبقى فيه نسخة واحدة من motion يستخدمها هو والـ lib. لو dependency، ممكن تتنزل نسختين والحجم يتضاعف و `MotionConfig` بتاع المشروع ميأثرش على الـ lib.</Q>
+<Q n={2} q="حد عايز الـ Ticker يمشي مع الـ scroll. تزوّد prop اسمه scrollLinked؟">لأ. خليه يقبل motion value، والمستخدم يعمل `useScroll` ويحوّلها بـ `useTransform` ويديها له.</Q>
+<Q n={3} q="إيه الفرق بين class لكل جزء و data-state؟">الـ class بيقول "ده أنهي جزء"، و `data-state` بيقول "الجزء ده في أنهي حالة". الاتنين مع بعض بيخلّوا المستخدم يستايل أي حاجة من برا.</Q>
+</Quiz>

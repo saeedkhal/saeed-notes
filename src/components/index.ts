@@ -16,5 +16,6 @@ import Diagram from "./Diagram.astro";
 import ScrollDemo from "./ScrollDemo.astro";
 import MotionDemo from "./MotionDemo.astro";
 import EaseCanvas from "./EaseCanvas.astro";
+import MotionUiDemo from "./MotionUiDemo.astro";
 
-export const mdxComponents = { Box, Hl, En, Flow, Grid2, Card, Chips, File, Tree, Quiz, Q, Checklist, Cheat, Diagram, ScrollDemo, MotionDemo, EaseCanvas };
+export const mdxComponents = { Box, Hl, En, Flow, Grid2, Card, Chips, File, Tree, Quiz, Q, Checklist, Cheat, Diagram, ScrollDemo, MotionDemo, EaseCanvas, MotionUiDemo };

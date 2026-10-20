@@ -52,6 +52,8 @@ public/icons/                  # PWA icons (PNG, rendered from favicon.svg)
 - `<MotionDemo kind="press|chips|colors|dropzone|lift|nav|toast|page|dropdown|select|tabs|modal|switch|tooltip|accordion|donut|spring" title? />` is a live UI-motion demo. Its CSS is global with a `.mo-` prefix, because the toast demo adds elements from JS. `donut` and `spring` are canvas demos that port Filee's `Spring` (with 1/120 s substeps).
 - `<EaseCanvas title? curves={["linear","in-cubic","out-cubic","back-out","av-back","spring"]} overshoot? height? />` draws easing curves on a canvas with a ball lane under each. `back-out` is Filee's `EaseOutBack` (c1 = 1.55), `av-back` is Avalonia's built-in `BackEaseOut`. `overshoot` adds a c1 slider.
 
+- `<MotionUiDemo kind="ticker|number|scramble|typewriter|split|cursor|curtains" title? />` is a live demo of a Motion UI idea, built from scratch in plain TS (not Motion+ code). Its CSS is global with a `.mu-` prefix. `cursor` only runs on `(pointer: fine)`.
+
 - String props (`items`, `q`) support `` `code` `` and Checklist also supports `**bold**`. These are converted by the component, not by Markdown.
 - `Checklist` `id` must be globally unique (`<topic>-w1`…), because it is the localStorage key.
 

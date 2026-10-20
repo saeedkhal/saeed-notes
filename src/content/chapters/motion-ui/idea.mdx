@@ -1,0 +1,128 @@
+---
+title: Motion UI إيه أصلًا؟ ومين بيدفع إيه
+short: الفكرة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: Motion · Motion+ · Motion UI · Sections · motion-plus · MOTION_TOKEN · MIT · Builder's Licence
+keywords: مجاني ولا مدفوع · ٩ components · ٥٠ section · الترخيص
+goal: تعرف Motion UI فيه إيه، بيتنزل إزاي، وإيه اللي ينفع ومينفعش تاخده للـ lib بتاعتك.
+part: البداية
+color: c1
+---
+
+## تلات أسماء شبه بعض
+
+الاسم بيلخبط، فخلّينا نفصلهم من الأول:
+
+<Grid2>
+<Card title="Motion (مجانية)" c={1}>
+
+المكتبة اللي كان اسمها **Framer Motion** زمان. `npm i motion`، رخصة <En>MIT</En>، وفيها `motion.div` و `AnimatePresence` و `layout` و `useSpring` و `animate()`. دي اللي هنبني عليها.
+
+</Card>
+<Card title="Motion+ (مدفوعة)" c={2}>
+
+عضوية بتدفعها مرة واحدة (Solo) أو اشتراك سنوي (Pro). فيها أمثلة كتير، و **Motion UI**، وأدوات تانية زي AI Kit و Studio. السعر بيتغير، فراجع `motion.dev/plus`.
+
+</Card>
+</Grid2>
+
+**Motion UI** نفسه جزء من Motion+. هو حاجتين:
+
+- **Components**: حتت "headless" بتعمل حركة صعبة، زي شريط بيلف (Ticker) أو رقم بيتقلّب (AnimateNumber).
+- **Sections**: حوالي ٥٠ section جاهزة لصفحات الـ marketing (hero، pricing، testimonials، bento، footer…) مبنية من الـ components دي، وبتاخد الـ theme بتاعك.
+
+## الـ components بالأسماء
+
+<Hl c="g">الـ menu ده هو أهم حاجة في المذكرة</Hl>، لأنه بيقولك الناس محتاجة إيه فعلًا لما تيجي تعمل حركة:
+
+| Component | بيعمل إيه | الأطر | حجمه فوق Motion |
+| --- | --- | --- | --- |
+| `Ticker` | شريط بيلف لا نهائي (marquee) بسرعة تتحكم فيها | React، Vue | ~2.1kb |
+| `Carousel` | كاروسيل بـ snap وسحب وعجلة الماوس وكيبورد ولفة لا نهائية | React، Vue | ~5.5kb |
+| `AnimateNumber` | رقم بيتقلّب (عدّاد، سعر، إحصائية) بـ `Intl.NumberFormat` | React، Vue | ~2.5kb |
+| `Typewriter` | كتابة حرف حرف بسرعة متغيرة ووقفات | React، Vue، JS | — |
+| `ScrambleText` | النص يتلخبط ويتفك على جملة جديدة | JS | — |
+| `splitText` | تقطيع النص لحروف وكلمات وسطور عشان تحرّكهم | JS | — |
+| `Cursor` | cursor مخصوص يتمغنط على الزراير ويتغير حسب اللي تحته | React، Vue | — |
+| `Curtains` | ستاير بين الصفحات: wipe، blinds، iris، pixels | React (`useCurtains`)، JS | — |
+| `Gallery` | معرض صور وفيديو بأشكال coverflow و ring و helix و sphere | React | — |
+
+الأحجام من الـ docs العامة وقت كتابة المذكرة. الشَرطة معناها إن الرقم مش مكتوب في الجزء المفتوح.
+
+<Box type="tip" title="لاحظ حاجة في الجدول">
+
+مفيش Button ولا Dialog ولا Select. Motion UI **مش** component library عادية زي shadcn. هو الحاجات اللي **صعب** تعملها لوحدك: لفة لا نهائية من غير ما تبان، رقم بيتقلّب صح في كل اللغات، cursor بيتمغنط. ده درس أول: الـ lib بتاعتك ممكن يكون ليها طبقة "motion primitives" منفصلة عن الـ components العادية.
+
+</Box>
+
+## بيتنزل إزاي؟
+
+مش copy-paste ومش npm عام. ده **npm registry خاص** بـ token:
+
+<File name=".npmrc">
+
+```ini
+@motionplus:registry=https://api.motion.dev/npm/
+//api.motion.dev/npm/:_authToken=${MOTION_TOKEN}
+```
+
+</File>
+
+<File name="package.json">
+
+```json
+{
+  "dependencies": {
+    "motion-plus": "npm:@motionplus/core@^2.12.0"
+  }
+}
+```
+
+</File>
+
+```bash
+export MOTION_TOKEN=xxxx   # من حسابك في Motion+
+pnpm install
+```
+
+```tsx
+import { Ticker, AnimateNumber } from "motion-plus/react";
+```
+
+حاجتين حلوين هنا تتعلمهم:
+
+1. الـ `.npmrc` فيه **اسم متغير** مش الـ token نفسه، فتعمله commit عادي. في الـ CI تحط `MOTION_TOKEN` كـ secret.
+2. الـ package اسمها الحقيقي `@motionplus/core`، بس بيتنزل باسم `motion-plus` (npm alias). كده الـ imports في كودك مش متربطة باسم الـ scope.
+
+<Box type="interview" title="لو سألوك: ليه private registry مش shadcn؟">
+
+الـ registry الخاص بيخليك تعمل `update` بأمر واحد وتاخد إصلاحات الـ bugs، والكود محمي ورا الـ token. الـ shadcn registry بينسخ الكود جوه مشروعك، فتقدر تعدّل فيه براحتك بس التحديث بقى مسؤوليتك. الصفحة بتقول إن Motion+ بيدعم الطريقتين (فيه كلام عن shadcn)، فراجع docs التثبيت.
+
+</Box>
+
+## أهم سؤال: ينفع أحطه في الـ lib بتاعتي؟
+
+صفحة Motion+ بتقول حاجتين:
+
+- الـ APIs والأمثلة **MIT** "بعد ما تضيف الكود لموقعك، بقى بتاعك". يعني لو اشتريت واستخدمته في **مشروعك**، تمام.
+- لو **منتجك بيعيد بيع إمكانيات Motion+ لمستخدمينه**، محتاج **Builder's Licence**.
+
+<Box type="warn" title="الـ component library حالة رمادية">
+
+لو هتعمل lib داخلية لشركتك ومشاريعها، فده استخدام عادي غالبًا. بس لو الـ lib هتبقى **open source** أو هتتباع، وهي جواها كود Motion+، فانت كده بتوزّع كود مدفوع لناس مدفعتش. الصفحة مش بتتكلم عن الحالة دي بالظبط، وبتقول ابعت لـ `support@motion.dev`. **اسألهم قبل ما تنشر.**
+
+</Box>
+
+الحل الآمن اللي المذكرة كلها ماشية عليه: <Hl c="p">اتعلم الفكرة، وابنيها بنفسك على `motion` المجانية</Hl>. كل الديموهات الجاية معمولة كده.
+
+<Flow items={[{t:"اقرا الـ menu",s:"motion.dev/ui",c:1},"→",{t:"دوق الأمثلة العامة",s:"examples.motion.dev",c:2},"→",{t:"ابني نسختك",s:"motion (MIT)",c:3},"→",{t:"وزّعها",s:"registry بتاعك",c:4}]} />
+
+<Checklist id="motion-ui-w1" title="خلّصت الفصل لما" items={["تفرّق بين Motion و Motion+ و Motion UI", "تعرف الـ ٩ components بيعملوا إيه", "تعرف الـ .npmrc بتاع الـ token ومتحطش الـ token نفسه في git", "تعرف ليه الـ lib المفتوحة اللي جواها كود Motion+ محتاجة سؤال للـ support"]} />
+
+<Quiz>
+<Q n={1} q="Framer Motion بقت اسمها إيه؟ ومجانية؟">بقت `motion`، ومجانية برخصة MIT. Motion+ هي العضوية المدفوعة اللي فيها Motion UI.</Q>
+<Q n={2} q="ليه الـ .npmrc فيه ${MOTION_TOKEN} مش الـ token نفسه؟">عشان تعمل commit للملف من غير ما تسرّب الـ token. القيمة بتيجي من الـ environment وقت الـ install.</Q>
+<Q n={3} q="إيه الدرس من إن Motion UI مفيهوش Button ولا Dialog؟">إن الحاجات الصعبة (لفة لا نهائية، رقم بيتقلّب، cursor) تستاهل طبقة primitives لوحدها جوه الـ lib، منفصلة عن الـ components العادية.</Q>
+</Quiz>

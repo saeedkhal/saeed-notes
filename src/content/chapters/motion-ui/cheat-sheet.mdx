@@ -1,0 +1,61 @@
+---
+title: "Cheat Sheet: Motion UI في صفحة"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: One-page recall for Motion UI ideas and animated-component API design
+keywords: cheatsheet · primitives · API · ترخيص
+goal: تفتكر كل component مبني إزاي وقواعد الـ API من غير ما ترجع للفصول.
+part: للـ lib بتاعتك
+color: dark
+---
+
+## كل component في سطر
+
+<Cheat items={[
+  ["Ticker", "أقل نسخ: ceil(viewport / set) + 1 · wrap(-w, 0, x) · النسخ aria-hidden + inert · يقف في focus"],
+  ["هدوء الـ Ticker في الـ hover", "spring على معامل السرعة من 1 لـ 0.2، مش قفزة"],
+  ["Carousel", "Ticker + سحب (spring بالـ velocity) + عجلة + كيبورد + ARIA · من غير لفة؟ CSS scroll-snap"],
+  ["AnimateNumber", "formatToParts · عمود 0–9 لكل رقم · translateY(-d em) · اربط من اليمين · tabular-nums"],
+  ["رقم عربي", "Intl.NumberFormat(\"ar-EG\") · الأرقام من format(1234567890) · فيه علامة RTL مخفية في الأول"],
+  ["Typewriter", "Intl.Segmenter grapheme · 35–105ms لكل حرف · 320ms عند العلامات · الـ caret بيرمش وهو واقف بس"],
+  ["ScrambleText", "لكل حرف start و end بيزيدوا مع مكانه · المسافات ثابتة · aria-label بالجملة النهائية"],
+  ["splitText", "inline-block لكل حتة · إنجليزي حروف · عربي كلمات · aria-label على الأب"],
+  ["Cursor", "pointer:fine بس · pointer-events:none · spring لهدف · ياخد شكل الزرار · magnetic 15–20٪"],
+  ["Curtains", "تقفل ease-in ← بدّل ← تفتح ease-out · clip-path للـ wipe و iris · stagger للـ blinds"],
+]} />
+
+## قواعد الـ API
+
+<Cheat items={[
+  ["headless", "className و style و ref و ...rest تروح للعنصر"],
+  ["الأجزاء", "class أو data-state لكل جزء"],
+  ["transition prop", "نفس شكل Motion، ولكل قيمة لوحدها، والـ default من الـ tokens"],
+  ["الحالة المتقدمة", "prop واحد بياخد motion value، مش ١٠ props"],
+  ["reduced motion", "جوه الـ component · Ticker يقف · Number يتغير علطول · Cursor ميتركبش"],
+  ["RTL", "كل translateX و wipe و سرعة بيقروا dir"],
+  ["الحجم", "motion peer dependency · subpath export لكل component · size-limit"],
+  ["الأمثلة", "٢–٣ استخدامات حقيقية لكل component"],
+]} />
+
+## الترخيص والتثبيت
+
+<Cheat items={[
+  ["Motion", "مجانية · MIT · npm i motion · ابني عليها"],
+  ["Motion+", "مدفوعة · فيها Motion UI · registry خاص بـ MOTION_TOKEN في .npmrc"],
+  ["استخدمته في مشروعك", "MIT بعد ما تضيفه، بتاعك"],
+  ["منتجك بيبيع إمكانياته", "محتاج Builder's Licence"],
+  ["lib مفتوحة جواها كود Motion+", "اسأل support@motion.dev قبل ما تنشر · الآمن: ابني نسختك"],
+]} />
+
+## الطبقات
+
+| الطبقة | أمثلة |
+| --- | --- |
+| tokens | `ease.back` · `dur.press` · `spring.snappy` |
+| primitives | `useReducedMotion` · `useFinePointer` · Ticker · AnimateNumber · splitText |
+| components | Button · Tabs · Dialog · Select |
+| sections | Hero · Pricing · Logo strip · Stats |
+
+<Checklist id="motion-ui-cheat" title="قبل ما تنشر أي component بيتحرك" items={["اشتغل بـ dir=\"rtl\"", "اشتغل والحركة مقفولة من النظام", "اشتغل بالكيبورد بس", "قارئ الشاشة بيقرا القيمة مرة واحدة", "حجمه تحت الحد في size-limit", "فيه مثال حقيقي في الـ docs"]} />

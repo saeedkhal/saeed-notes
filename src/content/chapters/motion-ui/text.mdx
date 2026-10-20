@@ -1,0 +1,136 @@
+---
+title: النص بيتحرك — AnimateNumber و Typewriter و ScrambleText و splitText
+short: النص والأرقام
+order: 3
+label: فصل ٣
+badge: التفكيك · فصل ٣
+en: AnimateNumber · Intl.NumberFormat · formatToParts · Typewriter · ScrambleText · splitText · Intl.Segmenter
+keywords: عمود لكل رقم · ar-EG · graphemes · العربي يتقطّع كلمات
+goal: تبني رقم بيتقلّب صح في أي لغة، وتعرف ليه العربي ميتقطّعش حروف.
+part: التفكيك
+color: c3
+---
+
+## AnimateNumber: كل رقم عمود
+
+الـ docs بتقول تلات حاجات عن AnimateNumber:
+
+1. التنسيق بـ `Intl.NumberFormat`، يعني عملة وفواصل ولغة صح.
+2. مبني على **layout animations** بتاعة Motion.
+3. فيه **CSS class لكل جزء**: prefix، integer، fraction، suffix، عشان تستايل كل واحد لوحده.
+
+الفكرة اللي بنبنيها: كل رقم (digit) هو **عمود** فيه من 0 لـ 9 فوق بعض، وإحنا بنحرّك العمود لفوق بـ `translateY(-d em)`. كل عمود بيتحرك لوحده، فالآحاد بتلف كتير والألوف بتتحرك خطوة.
+
+<MotionUiDemo kind="number" title="رقم بيتقلّب، بالإنجليزي والعربي" />
+
+دوس "اللغة" وشوف `ar-EG` بيطلّع `١٢٬٤٨٠٫٥٠ US$` بأرقام عربية، والأعمدة فيها `٠–٩` بدل `0–9`.
+
+<File name="الحتة المهمة: formatToParts">
+
+```ts
+const nf = new Intl.NumberFormat("ar-EG", { style: "currency", currency: "USD" });
+nf.formatToParts(12480.5);
+// [{type:"literal",value:"\u200F"},  ← علامة RTL مخفية في الأول
+//  {type:"integer",value:"١٢"}, {type:"group",value:"٬"}, {type:"integer",value:"٤٨٠"},
+//  {type:"decimal",value:"٫"}, {type:"fraction",value:"٥٠"}, {type:"literal",value:" "},
+//  {type:"currency",value:"US$"}]
+
+// الأرقام بتاعة أي لغة، مرتبة من 0 لـ 9
+const d = new Intl.NumberFormat("ar-EG", { useGrouping: false }).format(1234567890).split("");
+const digits = [d[9], ...d.slice(0, 9)]; // ["٠","١",…,"٩"]
+```
+
+</File>
+
+<Box type="idea" title="تلات قرارات تصميم في الديمو">
+
+- **الأعمدة بتتربط من اليمين.** لو الرقم كبر من `999` لـ `1000`، الآحاد تفضل نفس العمود وبيتزود عمود جديد على الشمال. لو ربطتها من الشمال، كل الأرقام هتقفز مكان.
+- **قارئ الشاشة يسمع الرقم كله.** الأعمدة عليها `aria-hidden`، والـ container عليه `aria-label` بالرقم المتنسق. من غير كده هيقرا "صفر واحد اتنين تلاتة…" لكل عمود.
+- **`tabular-nums`.** كل الأرقام نفس العرض، فالرقم مبيترقّصش يمين وشمال وهو بيتقلّب.
+
+</Box>
+
+لو بتبنيها في React على motion، العمود يبقى `motion.span` بيتحرك لـ `y` بقيمة `-d` em، والـ container `layout` عشان العرض يتغير بنعومة لما عمود يتزود أو يتشال. وخلّي الـ `transition` prop يقبل نفس شكل transition بتاع Motion، زي ما AnimateNumber بيعمل (فيه إعداد لـ `layout` و `y` و `opacity` لوحدهم).
+
+## Typewriter: البني آدم مش بيكتب بسرعة ثابتة
+
+<MotionUiDemo kind="typewriter" title="Typewriter بسرعة متغيرة" />
+
+الحاجات اللي بتخليه يبان حقيقي:
+
+- **سرعة عشوائية شوية** لكل حرف (35–105ms)، مش رقم ثابت.
+- **وقفة عند العلامات** `،` و `.` و `؟` (320ms).
+- **المسح أسرع من الكتابة**.
+- الـ caret **مش بيرمش وانت بتكتب**، بيرمش بس وانت واقف. زي أي text editor.
+
+<Box type="warn" title='متقطّعش بـ "split("")"'>
+
+`"👩🏽‍💻".split("")` بيطلع ٧ حتت، فالـ typewriter هيطبع نص إيموجي مكسور. استخدم `Intl.Segmenter` بـ `granularity: "grapheme"`، وده بيرجّع الإيموجي (والحروف المركّبة) حتة واحدة. السطر التالت في الديمو بيختبر ده.
+
+</Box>
+
+## ScrambleText: موجة من الفوضى
+
+<MotionUiDemo kind="scramble" title="ScrambleText" />
+
+كل حرف ليه **وقت يبدأ يتلخبط فيه** و **وقت يثبت فيه**، والاتنين بيزيدوا مع مكان الحرف + شوية عشوائية. النتيجة موجة بتمشي من الشمال لليمين. المسافات مبتتلخبطش، عشان شكل الكلام يفضل باين.
+
+```ts
+const plan = chars.map((_, k) => ({
+  start: k * 18 + Math.random() * 120,       // إمتى يبدأ يتلخبط
+  end: 260 + k * 22 + Math.random() * 200,   // إمتى يثبت على الحرف الصح
+}));
+```
+
+وزي الرقم: `aria-label` بالجملة النهائية، عشان قارئ الشاشة ميقراش الحروف العشوائية.
+
+<Box type="tip" title="ScrambleText والعربي">
+
+الحروف العشوائية العربية بتتوصل ببعض وبتبان غريبة، والجملة بتتمد وتتقلص. لو هتستخدمه في واجهة عربية، خليه للعناوين الإنجليزي أو الأرقام والأكواد.
+
+</Box>
+
+## splitText: حروف ولا كلمات؟
+
+`splitText` بيقطّع النص لـ spans عشان تحرّك كل حتة لوحدها (stagger). وهنا أهم درس للي بيكتب عربي:
+
+<MotionUiDemo kind="split" title="جرّب الـ ٣ حالات" />
+
+لما تحط كل حرف عربي في `span` عليه `inline-block` (لازم عشان `transform` يشتغل)، <Hl c="o">الحرف بيفقد شكله الموصول</Hl> وبيبان زي حروف منفصلة. فالقاعدة:
+
+| اللغة | قطّع لـ | ليه |
+| --- | --- | --- |
+| إنجليزي ولاتيني | حروف أو كلمات | الحروف منفصلة أصلًا |
+| عربي وفارسي وأردو | **كلمات** أو سطور | الحروف موصولة، والتقطيع بيكسرها |
+| ياباني وصيني | حروف | مفيش مسافات بين الكلمات أصلًا |
+
+<File name="splitText.ts (تنفيذي)">
+
+```ts
+export function splitText(el: HTMLElement, by: "grapheme" | "word" = "grapheme") {
+  const text = el.textContent ?? "";
+  const seg = new Intl.Segmenter(el.lang || undefined, { granularity: by });
+  el.setAttribute("aria-label", text); // قارئ الشاشة يقرا الجملة مرة واحدة
+  el.replaceChildren(
+    ...Array.from(seg.segment(text), (s, i) => {
+      const span = document.createElement("span");
+      span.textContent = s.segment;
+      span.style.cssText = `display:inline-block;white-space:pre;--i:${i}`;
+      span.setAttribute("aria-hidden", "true");
+      return span;
+    }),
+  );
+}
+```
+
+</File>
+
+لو بتعمل lib تشتغل في لغات كتير، خلّي الـ default يعتمد على اللغة: `word` لو `dir="rtl"`، و `grapheme` غير كده.
+
+<Checklist id="motion-ui-w3" title="خلّصت الفصل لما" items={["تستخدم formatToParts وتربط الأعمدة من اليمين", "تحط aria-label بالقيمة النهائية و aria-hidden على الحتت", "تقطّع بـ Intl.Segmenter مش split(\"\")", "تعرف ليه العربي يتقطّع كلمات مش حروف"]} />
+
+<Quiz>
+<Q n={1} q="ليه الأرقام محتاجة tabular-nums؟">عشان كل رقم ياخد نفس العرض، فالرقم كله مبيتحركش يمين وشمال وهو بيتقلّب.</Q>
+<Q n={2} q="إزاي تعرف أرقام اللغة العربية من غير ما تكتبها بإيدك؟">`new Intl.NumberFormat("ar-EG", { useGrouping: false }).format(1234567890)` وترتبهم من 0 لـ 9.</Q>
+<Q n={3} q="عندك عنوان عربي وعايز تعمل له stagger. تقطّعه إزاي؟">كلمات بـ `Intl.Segmenter` و `granularity: "word"`، عشان الحروف تفضل موصولة.</Q>
+</Quiz>
