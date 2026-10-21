@@ -1,0 +1,167 @@
+---
+title: تست List — Loading وData وEmpty وError
+short: تست القائمة
+order: 5
+label: فصل ٥
+badge: التطبيق · فصل ٥
+en: findAllByRole · within · queryByRole · GET · empty state
+keywords: async list · loading · rows · empty · error
+goal: تختبر دورة حياة القائمة كاملة، وتفحص كل row من غير selectors مرتبطة بالـ CSS.
+part: القائمة
+color: c5
+---
+
+## الـ component
+
+<File name="AcademicYearsList.tsx">
+
+```tsx
+import { useEffect, useState } from "react";
+import { API_URL } from "../test/academicYearsMocks";
+
+type Year = { id: string; name: string };
+
+export function AcademicYearsList() {
+  const [years, setYears] = useState<Year[]>([]);
+  const [state, setState] =
+    useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(API_URL, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("load failed");
+        return response.json();
+      })
+      .then((data: Year[]) => {
+        setYears(data);
+        setState("ready");
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") setState("error");
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  if (state === "loading") return <p role="status">جاري التحميل…</p>;
+  if (state === "error") return <p role="alert">حصل خطأ في التحميل</p>;
+  if (years.length === 0) return <p>مفيش سنين دراسية</p>;
+
+  return (
+    <ul aria-label="السنين الدراسية">
+      {years.map((year) => (
+        <li key={year.id}>
+          <span>{year.name}</span>
+          <button>تعديل {year.name}</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+</File>
+
+الـ `AbortController` يمنع request قديمة تحدّث component اتشالت. الاختبار مش محتاج يعرف implementation دي؛ هي بتشوف الحالات الظاهرة بس.
+
+## Loading ثم البيانات
+
+```tsx
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { AcademicYearsList } from "./AcademicYearsList";
+
+describe("AcademicYearsList", () => {
+  it("تعرض loading وبعدها السنين", async () => {
+    render(<AcademicYearsList />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("جاري التحميل");
+
+    const list = await screen.findByRole("list", {
+      name: "السنين الدراسية",
+    });
+    const rows = within(list).getAllByRole("listitem");
+
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText("2025 / 2026"))
+      .toBeInTheDocument();
+    expect(
+      within(rows[1]).getByRole("button", {
+        name: "تعديل 2026 / 2027",
+      }),
+    ).toBeInTheDocument();
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+```
+
+`findByRole("list")` يستنى GET تخلص. بعد ظهور القائمة، queries جوه `within(list)` synchronous.
+
+## ليه `within`؟
+
+لو الصفحة فيها زر «تعديل» لكل row، `screen.getByRole("button", { name: "تعديل" })` هيلاقي أكتر من زر. اختار row الأول، وبعدها دوّر جواه:
+
+```ts
+const row = screen.getByText("2026 / 2027").closest("li");
+expect(row).not.toBeNull();
+
+const edit = within(row!).getByRole("button", {
+  name: "تعديل 2026 / 2027",
+});
+```
+
+الأفضل كمان إن اسم الزر نفسه يبقى محدد زي المثال؛ ده يحسن accessibility والـ test مع بعض.
+
+## Empty state
+
+```tsx
+import { http, HttpResponse } from "msw";
+import { server } from "../test/server";
+import { API_URL } from "../test/academicYearsMocks";
+
+it("تعرض empty state", async () => {
+  server.use(
+    http.get(API_URL, () => HttpResponse.json([])),
+  );
+
+  render(<AcademicYearsList />);
+
+  expect(await screen.findByText("مفيش سنين دراسية"))
+    .toBeInTheDocument();
+  expect(screen.queryByRole("list")).not.toBeInTheDocument();
+});
+```
+
+## Error state
+
+```tsx
+it("تعرض error لو GET فشلت", async () => {
+  server.use(
+    http.get(API_URL, () => {
+      return HttpResponse.json(
+        { message: "unavailable" },
+        { status: 503 },
+      );
+    }),
+  );
+
+  render(<AcademicYearsList />);
+
+  expect(await screen.findByRole("alert"))
+    .toHaveTextContent("حصل خطأ في التحميل");
+  expect(screen.queryByRole("list")).not.toBeInTheDocument();
+});
+```
+
+<Hl c="g">اختبار القائمة مش «اتنادت fetch؟». هو: اليوزر شاف إيه في كل رد ممكن؟</Hl>
+
+<Checklist id="react-vitest-list" title="خلّصت الفصل لما" items={["تثبت loading قبل البيانات", "تستنى القائمة بـ findByRole", "تحدد العناصر جوه list أو row بـ within", "تختبر empty response", "تختبر server error", "تستخدم queryBy لإثبات إن عنصر اختفى أو مش موجود"]} />
+
+<Quiz>
+<Q n={1} q="ليه findByRole للقائمة وgetAllByRole للـ rows؟">القائمة بتظهر async بعد GET؛ بعد ما ظهرت، الـ rows موجودة فورًا جواها.</Q>
+<Q n={2} q="عايز تثبت إن القائمة مش موجودة في error state. تستخدم إيه؟">`queryByRole` لأنها ترجع null بدل ما ترمي error.</Q>
+<Q n={3} q="عندك خمس أزرار تعديل. إزاي تختار زر row معينة؟">حدد الـ row، وبعدها استخدم `within(row).getByRole(...)` باسم واضح.</Q>
+</Quiz>

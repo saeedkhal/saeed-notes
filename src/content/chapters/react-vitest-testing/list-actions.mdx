@@ -1,0 +1,107 @@
+---
+title: تفاعل جوه القائمة — حذف Row
+short: تفاعل القائمة
+order: 6
+label: فصل ٦
+badge: التطبيق · فصل ٦
+en: user.click · DELETE · route params · waitForElementToBeRemoved
+keywords: row action · delete request · disappearance
+goal: تختار row بعينها، تضغط زرها، وتتأكد من DELETE واختفاء العنصر.
+part: القائمة
+color: c1
+---
+
+## زوّد الحذف للـ component
+
+جوه `AcademicYearsList`، ضيف function تبعت DELETE وتحدّث القائمة بعد النجاح:
+
+```tsx
+async function removeYear(id: string) {
+  const response = await fetch(`${API_URL}/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) throw new Error("delete failed");
+  setYears((current) => current.filter((year) => year.id !== id));
+}
+```
+
+وزر كل row يبقى:
+
+```tsx
+<button onClick={() => removeYear(year.id)}>
+  حذف {year.name}
+</button>
+```
+
+اسم الزر فيه اسم السنة، فمستخدم قارئ الشاشة والـ test يقدروا يفرقوا الأزرار عن بعض.
+
+## Test كاملة
+
+```tsx
+import {
+  render,
+  screen,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { expect, it, vi } from "vitest";
+import { API_URL } from "../test/academicYearsMocks";
+import { server } from "../test/server";
+import { AcademicYearsList } from "./AcademicYearsList";
+
+it("تحذف السنة المختارة", async () => {
+  const removed = vi.fn();
+  server.use(
+    http.delete(`${API_URL}/:id`, ({ params }) => {
+      removed(params.id);
+      return new HttpResponse(null, { status: 204 });
+    }),
+  );
+
+  const user = userEvent.setup();
+  render(<AcademicYearsList />);
+
+  const yearName = await screen.findByText("2025 / 2026");
+  const row = yearName.closest("li");
+  expect(row).not.toBeNull();
+
+  await user.click(
+    within(row!).getByRole("button", {
+      name: "حذف 2025 / 2026",
+    }),
+  );
+
+  await waitForElementToBeRemoved(row);
+  expect(removed).toHaveBeenCalledWith("y1");
+  expect(screen.getByText("2026 / 2027")).toBeInTheDocument();
+});
+```
+
+## بنثبت إيه؟
+
+1. البيانات اتحملت فعلًا.
+2. اخترنا زر row المطلوبة، مش أول زر وخلاص.
+3. URL حملت `id` الصح.
+4. الـ row اختفت بعد نجاح الرد.
+5. باقي القائمة لسه موجود.
+
+<Box type="warn" title="اختفاء متفائل ولا بعد النجاح؟">
+
+المثال بيحذف من الشاشة بعد response ناجحة. لو UI بتعمل optimistic delete قبل الرد، اختبر كمان rollback لما DELETE ترجع 500. متكتبش test لسلوك مش موجود في المنتج.
+
+</Box>
+
+## PATCH نفس الفكرة
+
+في تعديل السنة، غيّر handler لـ `http.patch`، افحص `params.id` و`request.json()`، وبعد success استنى الاسم الجديد يظهر. المبدأ واحد: تفاعل مستخدم، network contract، ثم نتيجة مرئية.
+
+<Checklist id="react-vitest-list-actions" title="خلّصت الفصل لما" items={["تدي كل زر accessible name محدد", "تختار الزر بـ within(row)", "تعمل mock لـ DELETE ومعاها route param", "تستنى اختفاء العنصر", "تتأكد إن باقي القائمة متأثرش"]} />
+
+<Quiz>
+<Q n={1} q="ليه اسم الزر «حذف 2025 / 2026» أحسن من «حذف»؟">بيحدد الزر لقارئ الشاشة، وبيخلي اختيار test واضح من غير الاعتماد على ترتيب العناصر.</Q>
+<Q n={2} q="ليه نفحص السنة التانية بعد الحذف؟">عشان نثبت إننا حذفنا row المطلوبة بس، مش القائمة كلها.</Q>
+<Q n={3} q="لو الحذف optimistic، أنهي حالة إضافية مهمة؟">رد 500 والـ rollback: العنصر لازم يرجع أو تظهر معالجة الخطأ حسب تصميم المنتج.</Q>
+</Quiz>

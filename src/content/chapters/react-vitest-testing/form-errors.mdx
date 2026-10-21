@@ -1,0 +1,123 @@
+---
+title: الفورم — Validation وServer Error
+short: أخطاء الفورم
+order: 4
+label: فصل ٤
+badge: التطبيق · فصل ٤
+en: validation · no request · 500 response · disabled button
+keywords: client error · server error · isolation
+goal: تثبت إن الفورم تمنع الطلب الغلط وتعرض خطأ السيرفر من غير ما حالات test تتسرب.
+part: الفورم
+color: c4
+---
+
+## Validation من غير request
+
+الـ component عندها validation في `handleSubmit`. المطلوب نثبت حاجتين: الرسالة ظهرت، والـ backend متضربتش.
+
+```tsx
+import { http, HttpResponse } from "msw";
+import { server } from "../test/server";
+import { API_URL } from "../test/academicYearsMocks";
+
+it("متبعتش لو الاسم فاضي", async () => {
+  const received = vi.fn();
+  server.use(
+    http.post(API_URL, () => {
+      received();
+      return HttpResponse.json({}, { status: 201 });
+    }),
+  );
+
+  const user = userEvent.setup();
+  render(<AcademicYearForm onCreated={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "حفظ" }));
+
+  expect(screen.getByRole("status")).toHaveTextContent("اسم السنة مطلوب");
+  expect(received).not.toHaveBeenCalled();
+});
+```
+
+الرسالة synchronous، فـ `getByRole` كفاية. مفيش داعي لـ `waitFor` لمجرد إن test مكتوبة `async`.
+
+## Server error
+
+كل test تقدر تغيّر رد MSW مؤقتًا:
+
+```tsx
+it("تعرض خطأ لو السيرفر وقع", async () => {
+  server.use(
+    http.post(API_URL, () => {
+      return HttpResponse.json(
+        { message: "database unavailable" },
+        { status: 500 },
+      );
+    }),
+  );
+
+  const user = userEvent.setup();
+  const onCreated = vi.fn();
+  render(<AcademicYearForm onCreated={onCreated} />);
+
+  await user.type(screen.getByLabelText("اسم السنة"), "2027 / 2028");
+  await user.click(screen.getByRole("button", { name: "حفظ" }));
+
+  expect(
+    await screen.findByRole("status"),
+  ).toHaveTextContent("مقدرناش نحفظ السنة");
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("اسم السنة")).toHaveValue("2027 / 2028");
+});
+```
+
+احتفاظ الفورم بالقيمة مهم: لو الحفظ فشل، متجبرش اليوزر يكتب من الأول.
+
+## Loading state
+
+لو عايز تثبت إن الزر بيتقفل أثناء الطلب، خلّي response تستنى Promise أنت متحكم فيها:
+
+```tsx
+it("تقفل زر الحفظ أثناء الطلب", async () => {
+  let finish!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+
+  server.use(
+    http.post(API_URL, async () => {
+      await gate;
+      return HttpResponse.json(
+        { id: "y3", name: "2027 / 2028" },
+        { status: 201 },
+      );
+    }),
+  );
+
+  const user = userEvent.setup();
+  render(<AcademicYearForm onCreated={vi.fn()} />);
+
+  await user.type(screen.getByLabelText("اسم السنة"), "2027 / 2028");
+  await user.click(screen.getByRole("button", { name: "حفظ" }));
+
+  expect(screen.getByRole("button", { name: "جاري الحفظ…" }))
+    .toBeDisabled();
+
+  finish();
+  expect(await screen.findByText("اتحفظت السنة")).toBeInTheDocument();
+});
+```
+
+<Box type="warn" title="متستخدمش sleep">
+
+`setTimeout(500)` يخلي test بطيئة ومتذبذبة. Promise gate تديك تحكم دقيق: افحص loading، وبعدها افتح البوابة.
+
+</Box>
+
+<Checklist id="react-vitest-form-errors" title="خلّصت الفصل لما" items={["تثبت إن validation منعت request", "تعمل override لـ 500 بـ server.use", "تثبت إن success callback متنادتش عند الفشل", "تحافظ على قيمة الحقل بعد الفشل", "تختبر loading من غير sleep"]} />
+
+<Quiz>
+<Q n={1} q="ليه override بتاعة 500 مش هتبوظ test بعدها؟">لأن `server.resetHandlers()` في `afterEach` بترجع handlers الأصلية.</Q>
+<Q n={2} q="الرسالة ظهرت فورًا من validation. نستخدم findBy؟">مش لازم؛ `getBy` أدق لأنها موجودة في نفس التحديث بعد click.</Q>
+<Q n={3} q="إزاي نثبت loading من غير تأخير زمني عشوائي؟">نخلّي MSW handler تستنى Promise gate، نفحص الحالة، وبعدين نعمل resolve.</Q>
+</Quiz>

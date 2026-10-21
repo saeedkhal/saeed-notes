@@ -1,0 +1,169 @@
+---
+title: تست Form Submission خطوة بخطوة
+short: تست الفورم
+order: 3
+label: فصل ٣
+badge: التطبيق · فصل ٣
+en: user.type · user.click · POST · waitFor · validation · server error
+keywords: submit success · request body · validation · error
+goal: تختبر الفورم من منظور اليوزر، وتتأكد من POST والنجاح والـ validation وفشل السيرفر.
+part: الفورم
+color: c3
+---
+
+## الـ component اللي هنختبرها
+
+الفورم بتاخد اسم سنة دراسية، تعمل validation بسيطة، تبعت POST، وبعد النجاح تنادي `onCreated` وتفضّي الحقل:
+
+<File name="AcademicYearForm.tsx">
+
+```tsx
+import { FormEvent, useState } from "react";
+import { API_URL } from "../test/academicYearsMocks";
+
+type Year = { id: string; name: string };
+
+export function AcademicYearForm({
+  onCreated,
+}: {
+  onCreated: (year: Year) => void;
+}) {
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+
+    if (!name.trim()) {
+      setMessage("اسم السنة مطلوب");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!response.ok) throw new Error("save failed");
+
+      const year = (await response.json()) as Year;
+      onCreated(year);
+      setName("");
+      setMessage("اتحفظت السنة");
+    } catch {
+      setMessage("مقدرناش نحفظ السنة");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <label>
+        اسم السنة
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </label>
+      <button disabled={saving}>
+        {saving ? "جاري الحفظ…" : "حفظ"}
+      </button>
+      {message && <p role="status">{message}</p>}
+    </form>
+  );
+}
+```
+
+</File>
+
+في المشروع الحقيقي `API_URL` متجيش من test folder؛ خليها config مشتركة. هنا حطيناها جنب الـ mocks عشان المثال يفضل قصير ونفس الـ URL يتكتب مرة.
+
+## Happy path
+
+<File name="AcademicYearForm.test.tsx">
+
+```tsx
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { AcademicYearForm } from "./AcademicYearForm";
+
+describe("AcademicYearForm", () => {
+  it("يبعت السنة ويعرض النجاح", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    render(<AcademicYearForm onCreated={onCreated} />);
+
+    const nameInput = screen.getByLabelText("اسم السنة");
+    await user.type(nameInput, "2027 / 2028");
+    await user.click(screen.getByRole("button", { name: "حفظ" }));
+
+    expect(
+      await screen.findByRole("status"),
+    ).toHaveTextContent("اتحفظت السنة");
+
+    expect(onCreated).toHaveBeenCalledWith({
+      id: "y3",
+      name: "2027 / 2028",
+    });
+    expect(nameInput).toHaveValue("");
+  });
+});
+```
+
+</File>
+
+`findByRole` استنت request والـ re-render. `waitFor` مش مطلوب هنا لأن الرسالة نفسها هي العلامة async.
+
+## اتأكد من body الطلب
+
+لو body جزء مهم من الـ contract، اعمل override في test وخلي handler تسجل اللي وصل:
+
+```tsx
+import { http, HttpResponse } from "msw";
+import { server } from "../test/server";
+import { API_URL } from "../test/academicYearsMocks";
+
+it("يبعت الاسم في JSON body", async () => {
+  const received = vi.fn();
+  server.use(
+    http.post(API_URL, async ({ request }) => {
+      received(await request.json());
+      return HttpResponse.json(
+        { id: "y9", name: "2030 / 2031" },
+        { status: 201 },
+      );
+    }),
+  );
+
+  const user = userEvent.setup();
+  render(<AcademicYearForm onCreated={vi.fn()} />);
+
+  await user.type(screen.getByLabelText("اسم السنة"), "2030 / 2031");
+  await user.click(screen.getByRole("button", { name: "حفظ" }));
+
+  await waitFor(() => {
+    expect(received).toHaveBeenCalledWith({ name: "2030 / 2031" });
+  });
+});
+```
+
+<Box type="tip" title="اختبر behavior قبل implementation">
+
+الأهم إن اليوزر كتب، ضغط، وشاف نجاح، وإن callback خدت البيانات. فحص body مفيد للـ contract، لكن متعملش spy على `useState` أو تختبر عدد مرات render؛ دي تفاصيل داخلية.
+
+</Box>
+
+<Checklist id="react-vitest-form" title="خلّصت الفصل لما" items={["تعمل userEvent.setup لكل test", "تلاقي input بالـ label والزر بالـ role", "تستنى نتيجة الـ submit بـ findBy أو waitFor", "تختبر callback والرسالة وتفريغ الحقل", "تستخدم MSW لفحص POST بدل mock fetch"]} />
+
+<Quiz>
+<Q n={1} q="ليه await قبل user.type وuser.click؟">لأن user-event ينفذ سلسلة events async أقرب لسلوك المتصفح.</Q>
+<Q n={2} q="ليه منعملش vi.spyOn(global, 'fetch') كاختيار أول؟">MSW تختبر request عند network boundary وتسيب كود التطبيق يستخدم fetch طبيعي.</Q>
+<Q n={3} q="إمتى نستخدم waitFor؟">لما assertion هتبقى صح بعد async updates ومفيش `findBy` واحدة مناسبة تمثل النتيجة.</Q>
+</Quiz>

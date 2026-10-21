@@ -1,0 +1,84 @@
+---
+title: المكتبات السبعة — كل واحدة فين؟
+short: المكتبات السبعة
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: vitest · jsdom · testing-library · user-event · jest-dom · MSW
+keywords: runner · fake browser · render · interaction · network
+goal: تعرف دور كل package ومسار الحدث من كتابة اليوزر لحد assertion النهائي.
+part: التجهيز
+color: c1
+---
+
+## مش سبع بدائل
+
+المكتبات دي طبقات فوق بعض. كل واحدة ماسكة جزء مختلف:
+
+| المكتبة | دورها | بنستخدم منها إيه | فين |
+| --- | --- | --- | --- |
+| `vitest` | يشغّل tests ويقارن ويعمل mocks | `describe`، `it`، `expect`، hooks، `vi.fn`، `vi.mock`، `vi.spyOn` | ملفات الـ test و`setup.ts` و`vitest.config.ts` |
+| `jsdom` | متصفح وهمي جوه Node | `document` و`window` من غير import | `environment: "jsdom"` في config |
+| `@testing-library/react` | يرسم React والـ hooks | `render`، `renderHook`، `act`، `cleanup`، `screen`، `within`، `waitFor` | helpers والـ setup وكل UI tests |
+| `@testing-library/dom` | محرك البحث في الصفحة | مش بنستورده غالبًا | peer dependency لـ React Testing Library وuser-event |
+| `@testing-library/user-event` | يقلّد كتابة وضغط اليوزر | `setup`، `click`، `type`، `clear` | تست الفورم والصفحات |
+| `@testing-library/jest-dom` | يزوّد `expect` بفحص HTML | `toBeInTheDocument`، `toHaveValue`، `toHaveAttribute` | بيتفعّل مرة في `setup.ts` |
+| `msw` | backend وهمية تمسك requests | `setupServer`، `http.get/post/patch/delete`، `HttpResponse` | `server.ts` وملفات handlers والـ overrides |
+
+<Box type="warn" title="الاسم jest-dom مش معناه Jest بس">
+
+مع Vitest استورده مرة في setup من `@testing-library/jest-dom/vitest`. هو بيزوّد `expect` بتاعة Vitest بالـ DOM matchers.
+
+</Box>
+
+## الرحلة جوه test واحدة
+
+<Flow items={[
+  { t: "Vitest", s: "يشغّل test", c: 1 },
+  "→",
+  { t: "jsdom", s: "يجهّز DOM", c: 2 },
+  "→",
+  { t: "render", s: "يرسم React", c: 3 },
+  "→",
+  { t: "user-event", s: "يكتب ويدوس", c: 4 },
+  "→",
+  { t: "MSW", s: "يرد على request", c: 5 },
+  "→",
+  { t: "jest-dom", s: "يفحص الشاشة", c: 1 },
+]} />
+
+## Queries تختارها إزاي؟
+
+الأولوية للحاجة اللي اليوزر أو قارئ الشاشة يعرفها:
+
+```ts
+screen.getByRole("button", { name: "حفظ" });
+screen.getByLabelText("اسم السنة");
+screen.findByRole("status");
+```
+
+- `getBy...`: العنصر موجود **دلوقتي**؛ يرمي error لو مش موجود.
+- `queryBy...`: بنثبت إن العنصر **مش موجود**؛ يرجع `null`.
+- `findBy...`: العنصر هيظهر **بعد async work**؛ بيرجع Promise.
+
+<Hl c="b">لو مش عارف تلاقي الزر بـ role وname، ممكن تكون المشكلة accessibility في الـ UI مش في test.</Hl>
+
+## `user-event` مش `fireEvent`
+
+`user-event` يعمل سلسلة أقرب للمتصفح: focus وkeyboard/input/change، ومعظم أوامره async:
+
+```ts
+const user = userEvent.setup();
+await user.type(nameInput, "2026 / 2027");
+await user.click(saveButton);
+```
+
+استخدم `fireEvent` للحالات المنخفضة المستوى اللي فعلًا محتاج تبعت event واحدة بعينها، مش كاختيار أول.
+
+<Checklist id="react-vitest-stack" title="خلّصت الفصل لما" items={["تعرف دور المكتبات السبعة", "تفرق getBy وqueryBy وfindBy", "تستخدم role وlabel قبل test id", "تعمل await لأوامر user-event"]} />
+
+<Quiz>
+<Q n={1} q="مين بيرسم React: jsdom ولا Testing Library؟">jsdom يوفّر الـ DOM، وReact Testing Library ترسم الـ component جواه.</Q>
+<Q n={2} q="رسالة نجاح هتظهر بعد request. getByRole ولا findByRole؟">`findByRole` لأنها async وبتستنى العنصر يظهر.</Q>
+<Q n={3} q="مين يمسك POST الحقيقي من component؟">MSW، من خلال handler على نفس method والـ URL.</Q>
+</Quiz>

@@ -1,0 +1,52 @@
+---
+title: تست واجهات React بـ Vitest
+highlight: React بـ Vitest
+subtitle: jsdom · Testing Library · user-event · jest-dom · MSW
+description: إعداد test stack لمشروع React، واختبار form submission وقائمة بيانات بكل حالات loading وsuccess وempty وerror.
+emoji: 🧫
+order: 35
+tags: [testing]
+note: أمثلة عملية بأسلوبي مبنية على stack مشروع school-admin وعلى الـ docs الرسمية (أكتوبر 2026). راجع docs المكتبات لو نسخة المشروع مختلفة.
+---
+
+الموضوع ده مش شرح نظري لكل أنواع الاختبارات. هنا هنبني test stack واحدة، وبعدها نستخدمها في سيناريوهين بيظهروا في أي admin panel: **فورم بتبعت بيانات** و**قائمة بتجيب بيانات**.
+
+<Hl c="y">هنختبر اللي اليوزر يشوفه ويعمله، ونخلي MSW تمثل الـ backend عند حدود الشبكة.</Hl>
+
+<Box type="story" icon="🏫" title="معمل المدرسة">
+
+Vitest هو المراقب، وjsdom الفصل الوهمي، وTesting Library تدخلنا الفصل، وuser-event يمثل الطالب وهو بيكتب ويدوس. MSW قاعدة شباك شؤون الطلبة ترد على الطلبات، وjest-dom يدينا جمل واضحة نحكم بيها على الشاشة.
+
+</Box>
+
+## ملخص اللي بيحصل
+
+<Tree>
+
+```text
+Vitest
+└── يشغّل ملف الـ test والـ hooks والـ expect
+    └── jsdom
+        └── يجهّز document وwindow كمتصفح وهمي
+            └── React Testing Library
+                └── ترسم الصفحة وتدور على العناصر
+                    └── user-event
+                        └── اليوزر يكتب ويدوس "حفظ"
+                            └── MSW
+                                └── تمسك request وترد بدل الـ backend
+                                    └── jest-dom
+                                        └── تفحص النتيجة الظاهرة في الـ HTML
+```
+
+</Tree>
+
+يعني Vitest هي اللي بتدير الرحلة كلها، لكن مش هي اللي بترسم React أو بتمثل الشبكة. كل طبقة بتعمل شغلتها، وفي الآخر `expect` تحكم على حاجة اليوزر يقدر يشوفها: رسالة نجاح، row ظهرت، زرار اتقفل، أو error اتعرضت.
+
+<Box type="idea" title="هنطلع بإيه؟">
+
+- إعداد `vitest.config.ts` و`setup.ts` مرة واحدة.
+- handler مشتركة للـ academic years في MSW.
+- تست form: كتابة، submit، request، success، validation، server error.
+- تست list: loading، data، empty، error، وتحديد row بعينها بـ `within`.
+
+</Box>

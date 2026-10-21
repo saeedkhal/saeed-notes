@@ -1,0 +1,79 @@
+---
+title: "Cheat Sheet: React مع Vitest"
+short: Cheat Sheet
+order: 7
+label: الآخر
+badge: الآخر
+en: render · screen · userEvent · MSW · async queries
+keywords: setup · form · list · common mistakes
+goal: تفتكر إعداد الـ stack واختيار query وخطوات تست الفورم والقائمة بسرعة.
+part: الخلاصة
+color: dark
+---
+
+## المكتبات
+
+<Cheat items={[
+  ["vitest", "runner + expect + hooks + `vi.fn` و`vi.mock` و`vi.spyOn`"],
+  ["jsdom", "DOM وهمي في Node؛ اختاره بـ `environment: \"jsdom\"`"],
+  ["@testing-library/react", "`render` و`screen` و`within` و`waitFor` و`cleanup`"],
+  ["@testing-library/dom", "الأساس والـ peer dependency؛ غالبًا مش هتستورده مباشرة"],
+  ["user-event", "تفاعل قريب من اليوزر؛ اعمل `setup()` و`await` للكتابة والضغط"],
+  ["jest-dom", "DOM matchers؛ استورد `/vitest` مرة في setup"],
+  ["MSW", "اعتراض network بـ handlers؛ `setupServer` في Node tests"],
+]} />
+
+## اختار الـ query
+
+<Cheat items={[
+  ["موجود دلوقتي", "`getByRole` أو `getByLabelText`"],
+  ["هيظهر بعد async", "`findByRole` أو `findByText`"],
+  ["لازم مش يكون موجود", "`queryByRole` ثم `not.toBeInTheDocument()`"],
+  ["عناصر كتير", "`getAllBy` أو `findAllBy`"],
+  ["جوه container أو row", "`within(container)`"],
+  ["شرط async مركب", "`waitFor(() => expect(...))`"],
+]} />
+
+## تست الفورم
+
+<Cheat items={[
+  ["Arrange", "user + callback mock + render"],
+  ["Act", "type بالـ label ثم click بالـ role والـ name"],
+  ["Success", "استنى status، افحص callback، والقيمة اتفضت"],
+  ["Request contract", "MSW handler تسجل `request.json()`"],
+  ["Validation", "رسالة ظاهرة والـ POST متنادتش"],
+  ["Server error", "override بـ `server.use` ورد 500"],
+  ["Loading", "Promise gate بدل sleep عشوائي"],
+]} />
+
+## تست القائمة
+
+<Cheat items={[
+  ["Loading", "`getByRole(\"status\")` فور render"],
+  ["Data", "`findByRole(\"list\")` ثم `within(list)`"],
+  ["Row", "حددها بالنص، وبعدها اختبر الأزرار جواها"],
+  ["Empty", "GET ترجع `[]`، ورسالة empty تظهر والقائمة تختفي"],
+  ["Error", "GET ترجع 503، واستنى `role=\"alert\"`"],
+  ["Delete", "click زر row، افحص params، واستنى اختفاء row"],
+]} />
+
+## أخطاء متكررة
+
+<Cheat items={[
+  ["نسيان await", "أوامر user-event async"],
+  ["getBy بعد request", "استخدم findBy للحاجة اللي هتظهر لاحقًا"],
+  ["test ids لكل حاجة", "ابدأ role وlabel عشان تختبر UI قابلة للاستخدام"],
+  ["mock fetch", "فضّل MSW لاختبار network behavior"],
+  ["handler بتتسرب", "`server.resetHandlers()` بعد كل test"],
+  ["DOM بتتسرب", "`cleanup()` لو Vitest globals مقفولة"],
+  ["sleep", "استنى عنصر/شرط، أو استخدم Promise gate"],
+]} />
+
+<Checklist id="react-vitest-cheat" title="خلصت الموضوع لما" items={["تجهز المكتبات السبعة وتعرف دورهم", "تكتب form test للنجاح والvalidation والerror", "تكتب list test لكل الحالات", "تختار queries حسب التوقيت والعدد", "تنضف DOM والhandlers والmocks بين التستات"]} />
+
+<Quiz>
+<Q n={1} q="بعد click، رسالة النجاح هتظهر لما POST تخلص. تستخدم إيه؟">`await screen.findByRole(\"status\")`.</Q>
+<Q n={2} q="عايز زر الحذف بتاع row معينة؟">حدد الـ row وبعدها `within(row).getByRole(\"button\", { name: ... })`.</Q>
+<Q n={3} q="عايز backend ترجع error في test واحدة؟">`server.use` بـ handler override؛ setup تعمل reset بعدها.</Q>
+<Q n={4} q="ليه tests دي أقوى من فحص إن fetch اتنادت؟">لأنها تختبر رحلة المستخدم والـ request والنتيجة الظاهرة، مش implementation detail واحدة.</Q>
+</Quiz>

@@ -1,0 +1,140 @@
+---
+title: تجهيز Vitest وMSW مرة واحدة
+short: إعداد المشروع
+order: 2
+label: فصل ٢
+badge: التجهيز · فصل ٢
+en: vitest.config · setupFiles · cleanup · setupServer · handlers
+keywords: jsdom environment · global setup · reset handlers
+goal: تعمل config وsetup وmock server نظاف، بحيث كل test تبدأ من حالة مستقلة.
+part: التجهيز
+color: c2
+---
+
+## التثبيت
+
+```bash
+pnpm add -D vitest jsdom \
+  @testing-library/react @testing-library/dom \
+  @testing-library/user-event @testing-library/jest-dom msw
+```
+
+لو المشروع TypeScript، تأكد إن أنواع React وReact DOM موجودة.
+
+## Config
+
+<File name="vitest.config.ts">
+
+```ts
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    globals: false,
+  },
+});
+```
+
+</File>
+
+`globals: false` يخلي imports صريحة، ويمنع كلمات زي `describe` تظهر بالسحر. عشان كده هنعمل cleanup بإيدنا في setup.
+
+## Handler افتراضية
+
+<File name="src/test/academicYearsMocks.ts">
+
+```ts
+import { http, HttpResponse } from "msw";
+
+export const API_URL = "http://localhost/api/academic-years";
+
+export const academicYearsHandlers = [
+  http.get(API_URL, () => {
+    return HttpResponse.json([
+      { id: "y1", name: "2025 / 2026" },
+      { id: "y2", name: "2026 / 2027" },
+    ]);
+  }),
+
+  http.post(API_URL, async ({ request }) => {
+    const body = (await request.json()) as { name: string };
+    return HttpResponse.json(
+      { id: "y3", name: body.name },
+      { status: 201 },
+    );
+  }),
+];
+```
+
+</File>
+
+استخدمنا absolute URL لأن test شغالة في Node و`fetch` هناك محتاجة URL كاملة. في المشروع الحقيقي خليه config مشتركة مع التطبيق.
+
+## السيرفر والـ setup
+
+<File name="src/test/server.ts">
+
+```ts
+import { setupServer } from "msw/node";
+import { academicYearsHandlers } from "./academicYearsMocks";
+
+export const server = setupServer(...academicYearsHandlers);
+```
+
+</File>
+
+<File name="src/test/setup.ts">
+
+```ts
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { server } from "./server";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+
+afterEach(() => {
+  cleanup();
+  server.resetHandlers();
+  vi.restoreAllMocks();
+});
+
+afterAll(() => server.close());
+```
+
+</File>
+
+<Box type="idea" title="كل سطر cleanup بيحل مشكلة">
+
+- `cleanup`: يشيل React tree من الـ DOM.
+- `resetHandlers`: يمسح MSW overrides بتاعة test واحدة.
+- `restoreAllMocks`: يرجّع spies والمناهج الأصلية.
+- `close`: يقفل interception بعد آخر test.
+
+</Box>
+
+## سكربتات التشغيل
+
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  }
+}
+```
+
+`vitest` مناسب للـ watch محليًا، و`vitest run` للـ CI عشان يخلص ويخرج.
+
+<Checklist id="react-vitest-setup" title="خلّصت الفصل لما" items={["تحط environment jsdom", "تسجل setup.ts في setupFiles", "تستورد jest-dom/vitest مرة واحدة", "تشغّل MSW مع onUnhandledRequest error", "تنضف DOM والhandlers والmocks بعد كل test"]} />
+
+<Quiz>
+<Q n={1} q="ليه import jest-dom موجود في setup مش كل test؟">عشان يمدد `expect` مرة واحدة لكل suite ويقلل التكرار.</Q>
+<Q n={2} q="ليه resetHandlers بعد كل test؟">عشان override لحالة error أو empty ميتسربش للاختبار اللي بعده.</Q>
+<Q n={3} q="أنهي أمر للـ CI؟">`vitest run` لأنه يشغّل مرة ويخرج بدل watch mode.</Q>
+</Quiz>
