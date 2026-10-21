@@ -45,7 +45,7 @@ const links = defineCollection({
   schema: z.object({
     title: z.string(),
     order: z.number(),
-    source: z.enum(["twitter", "linkedin", "article"]),
+    source: z.enum(["twitter", "linkedin", "youtube", "article"]),
     url: z.string().url(),
     cover: z.string().optional(), // مسار صورة جوه public/، زي links/foo.png
   }),
