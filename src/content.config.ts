@@ -39,4 +39,16 @@ const chapters = defineCollection({
   }),
 });
 
-export const collections = { topics, chapters };
+/** لينكات محفوظة: صفحة واحدة، مش موضوع في الرئيسية */
+const links = defineCollection({
+  loader: glob({ pattern: "*.mdx", base: "./src/content/links" }),
+  schema: z.object({
+    title: z.string(),
+    order: z.number(),
+    source: z.enum(["twitter", "linkedin", "article"]),
+    url: z.string().url(),
+    cover: z.string().optional(), // مسار صورة جوه public/، زي links/foo.png
+  }),
+});
+
+export const collections = { topics, chapters, links };

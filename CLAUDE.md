@@ -11,13 +11,14 @@ A static docs site of colorful technical study notes written in **Egyptian Arabi
 ## Layout
 
 ```
-src/content.config.ts          # schemas for `topics` and `chapters` (zod from astro/zod)
+src/content.config.ts          # schemas for `topics`, `chapters`, and `links` (zod from astro/zod)
 src/content/topics/<topic>.mdx # topic cover: frontmatter + intro body (analogy, "قبل ما تبدأ")
 src/content/chapters/<topic>/<slug>.mdx   # one page per chapter → /<topic>/<slug>/
 src/components/*.astro         # MDX components, all exported from components/index.ts
 src/layouts/Base.astro         # html shell, header, theme toggle, copy-button + mobile menu scripts
 src/layouts/Docs.astro         # sidebar (chapters) + main + "في الصفحة دي" TOC
 src/pages/index.astro          # home: topic cards
+src/pages/links.astro          # saved links, opened from the header bookmark button
 src/pages/[topic]/index.astro  # cover + "الخريطة" timeline (components/Timeline.astro, built from chapters' frontmatter) + topic body
 src/pages/[topic]/[chapter].astro  # banner + content + prev/next
 src/styles/global.css          # design tokens (light/dark), prose, boxes, markers, code, quiz…
@@ -35,6 +36,7 @@ public/icons/                  # PWA icons (PNG, rendered from favicon.svg)
 - **New topic:** copy `src/content/topics/monorepo.mdx`. In its frontmatter, `highlight` must be a substring of `title`, because it gets the yellow marker on the cover. Then add chapters under `src/content/chapters/<topic>/`. Nothing else needs registering, because the home page, sidebar, map and pager are all generated.
 - **Chapter frontmatter:** `title, short (sidebar), order, label ("فصل ١"), badge ("الأسبوع ١ · فصل ١"), en, keywords (map line), goal, color (c1–c5 | dark), part?`. `part` groups chapters in the topic page's timeline list (e.g. البداية / التطبيق / بعدها). Without it, they fall under one group named after the topic. `keywords` (split on " · ") become the `#tags` there. Rotate colors c1→c5 across chapters. Use Arabic-Indic digits in labels.
 - **Chapter shape:** `##` sections. These are auto-numbered with colored badges by CSS counters, so don't number them yourself. Mix in boxes, analogies, code, and a 🧪 Lab. End every chapter with `<Checklist>` then `<Quiz>`. A topic ends with a cheat-sheet chapter that uses `<Cheat>`.
+- **Saved links:** not a topic. One file per link in `src/content/links/<slug>.mdx`, listed on `/links/` from the header bookmark button. Ask for context every time, and write `title` and the two-sentence body from that context, not from the page. Frontmatter: `title, order, source (twitter|linkedin|article), url, cover?`. `source` comes from the URL only. `cover` is an optional image path under `public/`, such as `links/foo.png`, shown on top of the card.
 
 ## Writing rules
 

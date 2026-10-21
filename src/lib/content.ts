@@ -2,6 +2,7 @@ import { getCollection, type CollectionEntry } from "astro:content";
 
 export type Chapter = CollectionEntry<"chapters">;
 export type Topic = CollectionEntry<"topics">;
+export type SavedLink = CollectionEntry<"links">;
 
 export const url = (path = "") => {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -25,3 +26,7 @@ export async function getChapters(topic: string) {
 }
 
 export const chapterHref = (c: Chapter) => url(`${c.id}/`);
+
+export async function getLinks() {
+  return (await getCollection("links")).sort((a, b) => a.data.order - b.data.order);
+}

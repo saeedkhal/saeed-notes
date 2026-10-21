@@ -1,0 +1,63 @@
+---
+import { render } from "astro:content";
+import Base from "../layouts/Base.astro";
+import { mdxComponents } from "../components";
+import { getLinks, url } from "../lib/content";
+
+const links = await getLinks();
+const rendered = await Promise.all(
+  links.map(async (link) => ({ link, Content: (await render(link)).Content })),
+);
+const groups = [
+  { source: "twitter", title: "تويتر" },
+  { source: "linkedin", title: "لينكدإن" },
+  { source: "article", title: "مقالات" },
+] as const;
+const accents = ["c1", "c2", "c3", "c4", "c5"];
+const host = (raw: string) => {
+  try {
+    return new URL(raw).host.replace(/^www\./, "");
+  } catch {
+    return raw;
+  }
+};
+---
+<Base title="لينكات مهمة" description="لينكات عايز أرجعلها بعدين، بعنوان ووصف قصير.">
+  <div class="links-page">
+    <header class="hero">
+      <h1>لينكات <mark class="hl y">مهمة</mark></h1>
+      <p>كل كارت لينك واحد. اضغطه عشان يفتح في صفحة جديدة.</p>
+    </header>
+    {rendered.length === 0 && <p class="topics-empty">لسه مفيش لينكات محفوظة.</p>}
+    {groups.map((group) => {
+      const items = rendered.filter((item) => item.link.data.source === group.source);
+      if (items.length === 0) return null;
+      return (
+        <section class="links-group">
+          <h2>{group.title}</h2>
+          <div class="links-list">
+            {items.map(({ link, Content }, i) => (
+              <a
+                class="link-card"
+                href={link.data.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={`--cc: var(--${accents[i % accents.length]})`}
+              >
+                {link.data.cover && <img class="link-cover" src={url(link.data.cover)} alt="" />}
+                <div class="link-body">
+                  <span class="meta">{group.title}</span>
+                  <h3>{link.data.title}</h3>
+                  <div class="link-desc">
+                    <Content components={mdxComponents} />
+                  </div>
+                  <span class="link-host">{host(link.data.url)}</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      );
+    })}
+  </div>
+</Base>

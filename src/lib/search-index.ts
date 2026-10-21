@@ -115,3 +115,7 @@ export function readTopicFile(id: string) {
 export function readChapterFile(id: string) {
   return readContent(`chapters/${id}.mdx`);
 }
+
+export function readLinkFile(id: string) {
+  return readContent(`links/${id}.mdx`);
+}
