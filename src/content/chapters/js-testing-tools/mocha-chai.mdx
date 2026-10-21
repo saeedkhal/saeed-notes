@@ -1,0 +1,111 @@
+---
+title: Mocha وChai — المخرج والحَكَم
+short: Mocha وChai
+order: 2
+label: فصل ٢
+badge: الأساس · فصل ٢
+en: describe · it · hooks · expect · assert · should
+keywords: test runner · assertions · composable
+goal: تفهم ليه Mocha وChai بيتثبتوا مع بعض، وإمتى التركيبة المرنة دي تناسبك.
+part: الـ runners والـ assertions
+color: c2
+---
+
+## Mocha بيعمل إيه؟
+
+Mocha هو **test runner**. يكتشف الاختبارات، يرتّب الـ suites، يشغّل hooks، يتعامل مع async، ويطلع report وexit code.
+
+```bash
+pnpm add -D mocha
+pnpm exec mocha
+```
+
+الكلمات `describe` و`it` و`beforeEach` جزء من واجهة Mocha، لكن Mocha مش محتاج Chai عشان يشتغل؛ تقدر تستخدم `node:assert`.
+
+```js
+import assert from "node:assert/strict";
+
+describe("Array", () => {
+  it("يرجع -1 لو العنصر مش موجود", () => {
+    assert.equal([1, 2, 3].indexOf(9), -1);
+  });
+});
+```
+
+## Chai بيعمل إيه؟
+
+Chai مكتبة **assertions** مستقلة عن الـ runner. بتدّيك تلات styles:
+
+```js
+import { assert, expect, should } from "chai";
+
+assert.equal(2 + 2, 4);
+expect({ ok: true }).to.deep.equal({ ok: true });
+
+should();
+"tea".should.be.a("string");
+```
+
+<Box type="tip" title="اختار style واحدة">
+
+`expect` مقروءة ومش بتعدّل `Object.prototype`، فغالبًا هي الاختيار الأبسط. متخلطش styles في نفس المشروع عشان الاختبارات متبقاش بثلاث لهجات.
+
+</Box>
+
+## التركيبة كاملة
+
+```bash
+pnpm add -D mocha chai
+```
+
+<File name="package.json">
+
+```json
+{
+  "scripts": {
+    "test": "mocha \"test/**/*.test.js\"",
+    "test:watch": "mocha --watch \"test/**/*.test.js\""
+  }
+}
+```
+
+</File>
+
+<File name="test/cart.test.js">
+
+```js
+import { expect } from "chai";
+import { Cart } from "../src/cart.js";
+
+describe("Cart", () => {
+  let cart;
+
+  beforeEach(() => {
+    cart = new Cart();
+  });
+
+  it("يبدأ فاضي", () => {
+    expect(cart.items).to.deep.equal([]);
+  });
+});
+```
+
+</File>
+
+لاحظ `deep.equal`: `equal` لوحدها بتقارن object reference، مش المحتوى.
+
+## إمتى أختارهم؟
+
+اختار Mocha + Chai لما تكون عايز stack مركّبة بإيدك، أو مشروع Node قديم مستقر عليهم، أو محتاج تختار mocking/reporting libraries بحرية.
+
+متبدأش بيهم تلقائيًا في مشروع Vite حديث لو Vitest مغطّي احتياجك بإعداد أقل. المرونة ليها تمن: أنت مسؤول عن جمع runner وassertions وmocks وcoverage وإعداد ESM/TypeScript.
+
+<Hl c="g">Mocha + Chai مش نسخة قديمة من Jest؛ دي فلسفة مختلفة: core صغير وقطع تختارها.</Hl>
+
+<Checklist id="js-testing-mocha-chai" title="خلّصت الفصل لما" items={["تعرف إن Mocha بيشغّل وChai بيقارن", "تستخدم expect مع deep.equal للـ objects", "تعرف إن node:assert بديل ممكن مع Mocha", "تختار التركيبة عشان المرونة، مش لمجرد إن الاتنين مشهورين"]} />
+
+<Quiz>
+<Q n={1} q="حذفت Chai من مشروع Mocha. الاختبارات لازم تقف؟">لأ، لو استبدلت assertions بـ `node:assert` أو مكتبة تانية.</Q>
+<Q n={2} q="ليه expect({a: 1}).to.equal({a: 1}) بتفشل؟">لأنهم object references مختلفين. استخدم `deep.equal` لمقارنة المحتوى.</Q>
+<Q n={3} q="Mocha بيوفّر mocking كامل لوحده؟">لأ. ضيف Sinon أو أداة مناسبة، أو استخدم تصميم يسمح بحقن dependencies بسيطة.</Q>
+</Quiz>

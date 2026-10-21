@@ -1,0 +1,91 @@
+---
+title: الخريطة — كل أداة بتعمل إيه؟
+short: خريطة الأدوات
+order: 1
+label: فصل ١
+badge: البداية · فصل ١
+en: runner · assertions · test doubles · HTTP testing · network mocking
+keywords: runner · assertions · mocks · HTTP
+goal: تصنّف كل أداة حسب دورها، ومتقارنش أداتين بيحلّوا مشكلتين مختلفتين.
+part: الصورة الكبيرة
+color: c1
+---
+
+## الأربع خانات
+
+أي test stack في الموضوع ده بيتكوّن من أدوار. أداة واحدة ممكن تغطي أكتر من دور:
+
+| الدور | السؤال اللي بيجاوبه | الأدوات |
+| --- | --- | --- |
+| Test runner | مين يلاقي ملفات الاختبار ويشغّلها؟ | Mocha، Jest، Vitest |
+| Assertions | النتيجة صح ولا غلط؟ | Chai، أو `expect` جوه Jest/Vitest |
+| Test doubles | أراقب call أو أبدّل dependency إزاي؟ | Sinon، أو `jest`/`vi` |
+| HTTP | أختبر server أو أعترض network؟ | SuperTest، MSW |
+
+<Hl c="b">Jest وVitest بطاريات كاملة. Mocha متعمّد يبقى أصغر وتختار القطع اللي حواليه.</Hl>
+
+## نفس الاختبار، قطع مختلفة
+
+دالة بسيطة:
+
+<File name="price.js">
+
+```js
+export function priceWithTax(price, rate) {
+  return price + price * rate;
+}
+```
+
+</File>
+
+مع Mocha وChai، Mocha يشغّل وChai يقارن:
+
+<File name="price.test.js">
+
+```js
+import { expect } from "chai";
+import { priceWithTax } from "./price.js";
+
+describe("priceWithTax", () => {
+  it("يزوّد الضريبة", () => {
+    expect(priceWithTax(100, 0.14)).to.equal(114);
+  });
+});
+```
+
+</File>
+
+مع Vitest، الاستيراد الواحد جاب الـ runner والـ assertion:
+
+```js
+import { describe, expect, it } from "vitest";
+import { priceWithTax } from "./price.js";
+
+describe("priceWithTax", () => {
+  it("يزوّد الضريبة", () => {
+    expect(priceWithTax(100, 0.14)).toBe(114);
+  });
+});
+```
+
+## Unit ولا integration؟
+
+- **Unit:** اختبر دالة أو class بعزل واضح.
+- **Integration:** خلّي كذا جزء حقيقي يشتغلوا مع بعض؛ مثل route + middleware.
+- **End-to-end:** شغّل النظام من واجهته الخارجية كأنك مستخدم.
+
+اسم الأداة لوحده مش بيحدد النوع. Vitest يقدر يشغّل unit وintegration. SuperTest غالبًا integration للـ HTTP. MSW ممكن يخدم component test أو integration test.
+
+<Box type="warn" title="Mock مش هدف">
+
+الـ mock وسيلة لعزل boundary أو فرض حالة صعبة. لو عملت mock لكل dependency، ممكن تختبر نسخة خيالية من برنامجك وكل tests تبقى خضرا والبرنامج الحقيقي واقع.
+
+</Box>
+
+<Checklist id="js-testing-map" title="خلّصت الفصل لما" items={["تعرف إن Mocha runner وChai assertions", "تعرف إن Jest وVitest بيجمعوا أدوار كتير", "تفرّق بين اختبار server بـ SuperTest واعتراض network بـ MSW", "تستخدم mock عند boundary مش لمجرد إنك تقدر"]} />
+
+<Quiz>
+<Q n={1} q="ينفع تقارن Chai بـ Jest مباشرة؟">مش بدقة. Chai مكتبة assertions، بينما Jest test framework فيه runner وassertions وmocks وحاجات تانية.</Q>
+<Q n={2} q="مين يشغّل test مكتوب بـ Mocha وChai؟">Mocha. Chai بس يحكم إن القيم متوقعة أو لأ.</Q>
+<Q n={3} q="كل test فيه mock يبقى unit test؟">لأ. نوع الاختبار بيتحدد بحدوده والأجزاء الحقيقية اللي شغالة، مش بوجود mock بس.</Q>
+</Quiz>

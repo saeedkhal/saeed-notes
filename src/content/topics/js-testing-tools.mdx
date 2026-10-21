@@ -1,0 +1,31 @@
+---
+title: أدوات اختبار JavaScript من غير لخبطة
+highlight: اختبار JavaScript
+subtitle: Mocha · Chai · Jest · Vitest · Sinon · SuperTest · MSW
+description: "خريطة واضحة لأدوات اختبار JavaScript: مين بيشغّل الاختبارات، مين يقارن النتيجة، مين يعمل mocks، ومين يختبر HTTP من جوه أو يعترض الشبكة من بره."
+emoji: 🧪
+order: 34
+tags: [testing]
+note: شرح بأسلوبي مبني على الـ docs الرسمية (أكتوبر 2026). APIs والإصدارات بتتغير، فراجع الـ docs قبل تثبيت إعدادات مشروع جديد.
+---
+
+الأسماء دي مش سبع بدائل لنفس الحاجة. فيهم **test runner**، و**assertion library**، وأدوات للـ **test doubles**، وأدوات لاختبار الـ HTTP.
+
+<Hl c="y">السؤال الصح مش «أنهي مكتبة أحسن؟»؛ السؤال «أنا ناقصني أنهي دور في الـ test stack؟»</Hl>
+
+<Box type="story" icon="🎬" title="فريق تصوير مش سبع كاميرات">
+
+الـ runner هو المخرج اللي ينادي المشاهد ويعلن النجاح والفشل. الـ assertions هي الشخص اللي يقارن اللقطة بالـ storyboard. الـ mocks ممثلين بدلاء، وSuperTest يختبر باب الاستوديو من جوه، وMSW يعمل كمين للطريق اللي الطلبات ماشية فيه.
+
+لو كل واحد ليه وظيفة، مفيش سبب نقارن SuperTest بـ Vitest كأنهم بديلين.
+
+</Box>
+
+<Box type="idea" title="الخلاصة قبل التفاصيل">
+
+- مشروع Vite جديد: ابدأ غالبًا بـ **Vitest**، وزوّد **MSW** لو عندك طلبات شبكة.
+- مشروع Jest شغال ومستقر: مفيش مكسب تلقائي من النقل.
+- stack مرن ومركّب بإيدك: **Mocha + Chai**، ومعاهم **Sinon** عند الحاجة.
+- API بـ Express أو Node server: **SuperTest** جنب الـ runner، مش مكانه.
+
+</Box>

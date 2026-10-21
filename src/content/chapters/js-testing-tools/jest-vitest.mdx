@@ -1,0 +1,111 @@
+---
+title: Jest وVitest — بطاريات كاملة
+short: Jest ولا Vitest
+order: 3
+label: فصل ٣
+badge: الاختيار · فصل ٣
+en: expect · jest.fn · vi.fn · snapshots · coverage · Vite
+keywords: all-in-one · Vite pipeline · Jest API
+goal: تختار Jest أو Vitest حسب بيئة المشروع، وتعرف إن تشابه الـ API مش معناه تطابق السلوك.
+part: الـ runners والـ assertions
+color: c3
+---
+
+## الاتنين بييجوا بإيه؟
+
+Jest وVitest test frameworks: runner، `expect`، mocks، snapshots، watch mode، coverage، وreporters. مش محتاج تركّب Chai أو Sinon عشان تبدأ.
+
+<Grid2>
+<Card title="Jest" c={2}>
+
+ناضج جدًا وecosystem ضخم. مناسب لمشروع قائم عليه، ومشاريع Node وReact اللي pipeline الاختبار فيها متظبطة بالفعل.
+
+</Card>
+<Card title="Vitest" c={4}>
+
+بيستخدم Vite config والـ transforms والـ aliases والـ plugins. اختيار طبيعي لتطبيق Vite وTypeScript/ESM، وفيه Browser Mode كمان.
+
+</Card>
+</Grid2>
+
+## نفس شكل الاختبار تقريبًا
+
+<File name="math.test.ts">
+
+```ts
+// Jest
+import { describe, expect, it, jest } from "@jest/globals";
+
+const save = jest.fn();
+save("order-1");
+
+expect(save).toHaveBeenCalledWith("order-1");
+```
+
+</File>
+
+```ts
+// Vitest
+import { describe, expect, it, vi } from "vitest";
+
+const save = vi.fn();
+save("order-1");
+
+expect(save).toHaveBeenCalledWith("order-1");
+```
+
+في Vitest الـ globals مقفولة افتراضيًا، فالاستيراد الصريح أوضح. تقدر تفتحها من config، بس متفترضش إنها مفتوحة.
+
+## الفرق العملي
+
+| سؤال | Jest | Vitest |
+| --- | --- | --- |
+| المشروع قائم ومستقر عليه؟ | خليه غالبًا | انقل بس لمكسب واضح |
+| المشروع مبني بـ Vite؟ | ينفع، لكن transform pipeline منفصلة | يشارك Vite config |
+| mock helper | `jest` | `vi` |
+| TypeScript وJSX | يحتاج transform مضبوط | من Vite |
+| coverage | مدمجة بالإعداد المناسب | V8 أو Istanbul |
+| browser حقيقي | استخدم أداة/بيئة مناسبة | Browser Mode متاح |
+
+<Box type="warn" title="Jest-compatible مش identical">
+
+Vitest متوافق مع جزء كبير من Jest API، لكن فيه فروق: `vi.mock` بيتعمله hoist، وبيشتغل مع imports مش `require()`، وملفات `__mocks__` مش بتتفعّل لوحدها من غير `vi.mock()`. راجع migration guide بدل search/replace أعمى.
+
+</Box>
+
+## Modules والـ mocks
+
+```ts
+import { expect, it, vi } from "vitest";
+import { getRate } from "./rates";
+
+vi.mock("./rates", () => ({
+  getRate: vi.fn(() => 0.14),
+}));
+
+it("يستخدم الضريبة المتحكم فيها", () => {
+  expect(getRate()).toBe(0.14);
+});
+```
+
+لو الكود بيستخدم CommonJS `require()` بكثافة، متفترضش إن Vitest هيعمل module mocking بنفس طريقة Jest. دي نقطة قرار حقيقية، مش تفصيلة شكل.
+
+## القرار
+
+<Flow items={[
+  { t: "Vite جديد", s: "Vitest غالبًا", c: 3 },
+  "→",
+  { t: "Jest قائم", s: "متنقلش بلا مكسب", c: 2 },
+  "→",
+  { t: "Legacy require", s: "اختبر التوافق", c: 5 },
+]} />
+
+<Hl c="p">سرعة runner مش أهم من إن test pipeline تفهم نفس aliases وtransforms بتوع التطبيق.</Hl>
+
+<Checklist id="js-testing-jest-vitest" title="خلّصت الفصل لما" items={["تعرف إن الاتنين frameworks كاملة", "تختار Vitest طبيعيًا مع Vite", "متنقلش مشروع Jest مستقر لمجرد الترند", "تراجع فروق module mocking قبل الهجرة"]} />
+
+<Quiz>
+<Q n={1} q="مشروع Vite جديد وTypeScript. البداية الأبسط؟">Vitest غالبًا، لأنه بيشارك Vite config والـ transforms.</Q>
+<Q n={2} q="هل vi مجرد اسم جديد لـ jest وكل السلوك مطابق؟">لأ. الـ API متشابه جدًا لكن فيه فروق في globals وhoisting وmodule mocks وreset behavior.</Q>
+<Q n={3} q="Jest قديم ومبقاش ينفع؟">لأ. هو اختيار ناضج. وجود Vitest مش سبب كفاية لنقل مشروع مستقر.</Q>
+</Quiz>

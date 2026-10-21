@@ -1,0 +1,63 @@
+---
+title: "Cheat Sheet: أدوات الاختبار"
+short: Cheat Sheet
+order: 8
+label: الآخر
+badge: الآخر
+en: Mocha · Chai · Jest · Vitest · Sinon · SuperTest · MSW
+keywords: roles · choose · combinations
+goal: تفتكر دور كل أداة والتركيبات المنطقية في صفحة واحدة.
+part: القرار
+color: dark
+---
+
+## كل اسم في سطر
+
+<Cheat items={[
+  ["Mocha", "Test runner مرن: suites وhooks وasync وreporting. ركّب assertions وmocks بنفسك"],
+  ["Chai", "Assertions فقط: `expect` أو `assert` أو `should`. مش runner"],
+  ["Jest", "Test framework كاملة: runner + expect + mocks + snapshots + coverage"],
+  ["Vitest", "Framework كاملة تشارك Vite config والـ transforms؛ API قريبة من Jest والـ helper اسمه `vi`"],
+  ["Sinon", "Fakes وspies وstubs وtimers. مفيد خصوصًا مع Mocha؛ اعمل `restore`"],
+  ["SuperTest", "يبعت HTTP request للـ Node app بتاعتك ويختبر status وheaders وbody"],
+  ["MSW", "يعترض HTTP/GraphQL/WebSocket عند network boundary في Node أو browser"],
+]} />
+
+## اختار بسرعة
+
+<Cheat items={[
+  ["Vite frontend", "Vitest + Testing Library + MSW"],
+  ["Node API حديثة", "Vitest + SuperTest"],
+  ["Node stack مركّبة", "Mocha + Chai + Sinon + SuperTest"],
+  ["Jest قائم", "خليه، وزوّد MSW أو SuperTest حسب الـ boundary"],
+  ["API بتاعتك", "SuperTest"],
+  ["API خارجية", "MSW"],
+  ["مراقبة call بس", "Spy أو fake"],
+  ["فرض error/return", "Stub أو fake متحكم فيها"],
+]} />
+
+## الغلط المشهور
+
+<Cheat items={[
+  ["Mocha vs Chai", "مش منافسين: الأول يشغّل والتاني يقارن"],
+  ["SuperTest vs MSW", "مش نفس الاتجاه: inbound لسيرفرك مقابل اعتراض outbound network"],
+  ["Sinon فوق Vitest/Jest", "غالبًا تكرار؛ استخدم `vi` أو `jest` إلا لو ناقصك feature محددة"],
+  ["كل حاجة mock", "اختبارات خضرا لبرنامج خيالي؛ اعمل mock للـ boundaries بس"],
+  ["نسيان cleanup", "اعمل restore للـ doubles وreset للـ MSW handlers"],
+  ["Vitest = Jest بالحرف", "راجع migration guide؛ module mocking والglobals مش مطابقين"],
+]} />
+
+<Box type="tip" title="قاعدة تحفظها">
+
+اختار **runner واحد**، و**assertion style واحدة**، واعمل doubles عند الـ boundaries. بعد كده SuperTest أو MSW حسب اتجاه الـ HTTP.
+
+</Box>
+
+<Checklist id="js-testing-cheat" title="خلصت الموضوع لما" items={["تقدر تقول دور كل أداة في جملة", "تفرق inbound HTTP عن outbound network", "تركب stack من غير أدوار مكررة", "تختار بناءً على المشروع مش شهرة الأداة"]} />
+
+<Quiz>
+<Q n={1} q="Mocha + Chai ناقصهم test doubles غنية. تضيف إيه؟">Sinon.</Q>
+<Q n={2} q="Vitest test بيطلب API خارجية. تستخدم إيه؟">MSW لاعتراض الطلب عند الشبكة.</Q>
+<Q n={3} q="عايز تختبر Express route كاملة. تستخدم إيه جنب runner؟">SuperTest.</Q>
+<Q n={4} q="Vite project جديد: Jest ولا Vitest غالبًا؟">Vitest، لأنه يشارك نفس Vite pipeline. القرار يتغير لو عندك قيود أو ecosystem قائم على Jest.</Q>
+</Quiz>

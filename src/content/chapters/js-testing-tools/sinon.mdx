@@ -1,0 +1,114 @@
+---
+title: Sinon — راقب وبدّل السلوك
+short: Sinon
+order: 4
+label: فصل ٤
+badge: الـ doubles · فصل ٤
+en: fake · spy · stub · sandbox · restore
+keywords: observe calls · replace behavior · cleanup
+goal: تفرّق بين fake وspy وstub، وتمنع test من تلويث اللي بعده.
+part: الـ test doubles
+color: c4
+---
+
+## Sinon مش runner
+
+Sinon مكتبة **test doubles**. تركبها غالبًا جنب Mocha + Chai، لكن تقدر تستخدمها مع أي runner. Jest وVitest عندهم بدائل مدمجة (`jest.fn` و`vi.fn`)، فإضافة Sinon ليهم محتاجة سبب واضح.
+
+## Fake وSpy وStub
+
+<Grid2>
+<Card title="Fake" c={1}>
+
+دالة بديلة بسيطة بتحدد سلوكها وبتسجل calls. Sinon بيوصي بالـ fakes للكود الجديد في أغلب الحالات.
+
+```js
+const send = sinon.fake.resolves({ id: 7 });
+```
+
+</Card>
+<Card title="Spy" c={3}>
+
+يراقب دالة حقيقية: اتنادت كام مرة وبأنهي arguments وإيه اللي رجع. لو لفّ method حقيقية، الأصل بيتنفذ.
+
+```js
+const spy = sinon.spy(logger, "info");
+```
+
+</Card>
+</Grid2>
+
+الـ **stub** يستبدل behavior: يرجّع قيمة، يرمي error، أو يتصرف بشكل مختلف كل call. الأصل مش بيتنفذ.
+
+```js
+const stub = sinon.stub(gateway, "charge");
+stub.onFirstCall().rejects(new Error("timeout"));
+stub.onSecondCall().resolves({ ok: true });
+```
+
+## اختبر error path
+
+<File name="checkout.test.js">
+
+```js
+import { expect } from "chai";
+import sinon from "sinon";
+import { checkout } from "../src/checkout.js";
+
+describe("checkout", () => {
+  afterEach(() => sinon.restore());
+
+  it("يرجع رسالة مفهومة لو الدفع وقع", async () => {
+    sinon.stub(gateway, "charge").rejects(new Error("timeout"));
+
+    const result = await checkout(gateway);
+
+    expect(result).to.deep.equal({ ok: false, reason: "payment-unavailable" });
+    sinon.assert.calledOnce(gateway.charge);
+  });
+});
+```
+
+</File>
+
+## الـ sandbox ينضّف وراك
+
+لو عندك doubles كتير، sandbox تجمعهم:
+
+```js
+const sandbox = sinon.createSandbox();
+
+afterEach(() => sandbox.restore());
+
+it("يبعت event", () => {
+  const publish = sandbox.stub(bus, "publish").resolves();
+  // شغّل السلوك
+  sinon.assert.calledWith(publish, "order.created");
+});
+```
+
+<Box type="warn" title="restore مش رفاهية">
+
+لما تلف method على object مشترك وتنسى `restore()`، الاختبار اللي بعده يشوف النسخة المزيفة. النتيجة tests تنجح لوحدها وتقع مع بعض، أو العكس.
+
+</Box>
+
+## إمتى بلاش stub؟
+
+لو تقدر تمرّر dependency كدالة عادية، fake مستقلة أبسط من ترقيع module عالمي:
+
+```js
+const sendEmail = sinon.fake.resolves();
+await registerUser({ email: "a@b.com" }, { sendEmail });
+sinon.assert.calledOnce(sendEmail);
+```
+
+ده كمان يحسن تصميم production: dependency واضحة بدل import مخفي.
+
+<Checklist id="js-testing-sinon" title="خلّصت الفصل لما" items={["تعرف إن spy يراقب والأصل ممكن يشتغل", "تعرف إن stub يستبدل السلوك", "تبدأ بـ fake بسيطة للكود الجديد لما تكفي", "تعمل restore بعد كل test"]} />
+
+<Quiz>
+<Q n={1} q="عايز تعرف logger.info اتنادت، ومحتاج الأصل يشتغل. تستخدم إيه؟">Spy.</Q>
+<Q n={2} q="عايز payment gateway يرمي timeout متحكم فيه. تستخدم إيه؟">Stub أو fake ممرّرة كـ dependency. المهم تمنع الاتصال الحقيقي وتحدد السلوك.</Q>
+<Q n={3} q="ليه sandbox مفيدة؟">بتجمع الـ doubles وبتعمل restore لهم مع بعض، فتمنع تسريب الحالة بين الاختبارات.</Q>
+</Quiz>

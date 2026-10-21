@@ -1,0 +1,96 @@
+---
+title: اختار الـ Stack من غير تكرار
+short: تختار إيه؟
+order: 7
+label: فصل ٧
+badge: القرار · فصل ٧
+en: frontend · backend · legacy · migration · test pyramid
+keywords: recommended stacks · overlap · decision
+goal: تركّب أقل مجموعة أدوات تغطي احتياج مشروعك من غير مكتبتين لنفس الدور.
+part: القرار
+color: c2
+---
+
+## وصفة حسب المشروع
+
+<Grid2>
+<Card title="Frontend بـ Vite" c={1}>
+
+**Vitest + Testing Library + MSW**
+
+- Vitest: runner وassertions وmocks
+- Testing Library: تعامل المستخدم مع الـ UI
+- MSW: responses من الـ API
+
+</Card>
+<Card title="Node API حديثة" c={2}>
+
+**Vitest + SuperTest**
+
+- Vitest: تشغيل واختبارات الوحدات
+- SuperTest: routes والـ middleware
+- test database أو adapters حسب المطلوب
+
+</Card>
+<Card title="Node stack مرنة" c={3}>
+
+**Mocha + Chai + Sinon + SuperTest**
+
+- Mocha يشغّل
+- Chai يقارن
+- Sinon للـ doubles
+- SuperTest للـ HTTP
+
+</Card>
+<Card title="مشروع Jest قائم" c={4}>
+
+**Jest + MSW أو SuperTest**
+
+متضفش Sinon غالبًا؛ Jest عنده mocks. اختار MSW للـ outbound requests وSuperTest للـ inbound API.
+
+</Card>
+</Grid2>
+
+## SuperTest وMSW في نفس backend؟
+
+آه، لأنهم على ناحيتين مختلفتين:
+
+<Flow items={[
+  { t: "SuperTest", s: "يبعت request للـ app", c: 5 },
+  "→",
+  { t: "Your API", s: "route + service", c: 2 },
+  "→",
+  { t: "MSW", s: "يعترض outbound HTTP", c: 3 },
+  "→",
+  { t: "Payment API", s: "مش هنتصل بيها", c: 1 },
+]} />
+
+مثال: تختبر `POST /checkout` بـ SuperTest، والـ route جوه التطبيق تحاول تكلم payment provider. MSW يعترض اتصال الـ provider ويرجع success أو timeout.
+
+## إمتى الأداة تبقى زيادة؟
+
+- Chai مع Jest/Vitest: غالبًا تكرار لأن `expect` موجودة.
+- Sinon مع Jest/Vitest: غالبًا تكرار لأن `jest` و`vi` عندهم spies/mocks/timers.
+- SuperTest لاختبار دالة pure: مستوى HTTP زيادة بلا فايدة.
+- MSW لدالة واخدة callback واضح: fake function أبسط.
+- Jest وVitest سوا في نفس package: migration مؤقتة، مش نهاية مريحة.
+
+<Box type="interview" title="إجابة سؤال المقابلة">
+
+«Mocha وJest وVitest runners، لكن Jest وVitest frameworks أكمل. Chai assertions، وSinon test doubles. SuperTest يختبر Node HTTP app من ناحية الـ inbound request، بينما MSW يعترض outbound network في Node أو browser. باختار أداة واحدة لكل دور إلا لو عندي boundary مختلفة بوضوح.»
+
+</Box>
+
+## متبدأش بالـ mocks
+
+ابدأ باختبار behavior حقيقي. لما تلاقي boundary بطيئة أو غير مستقرة أو مكلفة — database، email، payment، clock — اختار أضيق double يحلها.
+
+<Hl c="y">أحسن stack مش أكتر stack. هي أقل أدوات تديك ثقة في السلوك المهم.</Hl>
+
+<Checklist id="js-testing-choose" title="خلّصت الفصل لما" items={["تختار Vitest طبيعيًا مع Vite", "تركّب SuperTest لاختبار API بتاعتك", "تركّب MSW لاعتراض outbound network", "متضيفش Chai أو Sinon فوق framework كاملة من غير سبب"]} />
+
+<Quiz>
+<Q n={1} q="React على Vite بيجيب user من API. Stack بداية مناسب؟">Vitest + Testing Library + MSW.</Q>
+<Q n={2} q="Express route بتكلم payment API. ينفع SuperTest وMSW مع بعض؟">آه. SuperTest يبعت للـ route، وMSW يعترض الطلب الخارج للـ payment provider.</Q>
+<Q n={3} q="مشروع Jest مستقر. أنقله Vitest فورًا؟">لأ. حدد مكسب قابل للقياس وتكلفة الهجرة وفروق الـ mocks والـ transforms الأول.</Q>
+</Quiz>

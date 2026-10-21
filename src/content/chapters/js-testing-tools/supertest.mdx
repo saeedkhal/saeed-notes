@@ -1,0 +1,108 @@
+---
+title: SuperTest — اختبر الـ API من عند بابه
+short: SuperTest
+order: 5
+label: فصل ٥
+badge: الـ HTTP · فصل ٥
+en: request(app) · status · headers · body · agent
+keywords: Node HTTP server · integration · ephemeral port
+goal: تختبر route حقيقية بالـ middleware والـ serialization من غير ما تدير port بإيدك.
+part: اختبار الـ HTTP
+color: c5
+---
+
+## مش بيقلّد API خارجية
+
+SuperTest بيبعت HTTP request للـ Node app أو server **بتاعك**، وبعدين يؤكد status وheaders وbody. لما تمرّر Express app، يقدر يربطه على port مؤقت، فمش محتاج تشغّل server منفصل.
+
+<Hl c="o">SuperTest يختبر السيرفر اللي أنت كاتبه. MSW يعترض الطلب اللي كودك بيبعته لسيرفر تاني.</Hl>
+
+## افصل app عن listen
+
+<File name="app.js">
+
+```js
+import express from "express";
+
+export const app = express();
+app.use(express.json());
+
+app.post("/users", (req, res) => {
+  res.status(201).json({ id: 7, name: req.body.name });
+});
+```
+
+</File>
+
+<File name="server.js">
+
+```js
+import { app } from "./app.js";
+
+app.listen(3000);
+```
+
+</File>
+
+الفصل ده يخلي test تستورد `app` من غير ما تفتح port ثابت.
+
+## مع Vitest
+
+```bash
+pnpm add -D supertest @types/supertest
+```
+
+<File name="users.test.js">
+
+```js
+import request from "supertest";
+import { describe, expect, it } from "vitest";
+import { app } from "../src/app.js";
+
+describe("POST /users", () => {
+  it("ينشئ مستخدم", async () => {
+    const response = await request(app)
+      .post("/users")
+      .send({ name: "سعيد" })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    expect(response.body).toEqual({ id: 7, name: "سعيد" });
+  });
+});
+```
+
+</File>
+
+SuperTest نفسه framework-agnostic؛ نفس request ينفع جوه Mocha أو Jest.
+
+## إيه اللي الاختبار ده بيثبته؟
+
+بيعدّي على routing وbody parser والـ middleware والـ controller وتحويل response لـ HTTP. ده أقرب لـ integration test، حتى لو قاعدة البيانات fake.
+
+مبيثبتش إن frontend عرف يتعامل مع الرد، ولا إن API خارجية شغالة، ولا إنه E2E كامل بمتصفح.
+
+## Session وcookies
+
+لو السيناريو محتاج يحتفظ بالـ cookies بين requests، استخدم agent:
+
+```js
+const agent = request.agent(app);
+
+await agent.post("/login").send({ email, password }).expect(204);
+await agent.get("/me").expect(200);
+```
+
+<Box type="warn" title="متنساش dependencies الحقيقية">
+
+لو route بتكلم database أو queue حقيقية، الاختبار ممكن يبقى بطيء أو يبوّظ بيانات. استخدم test database مع reset واضح، أو حقن adapter بديل حسب مستوى الثقة المطلوب.
+
+</Box>
+
+<Checklist id="js-testing-supertest" title="خلّصت الفصل لما" items={["تستورد app من غير listen", "تختبر status وheader وbody", "تعرف إن SuperTest مناسب لسيرفر Node بتاعك", "تستخدم agent لو محتاج cookies بين الطلبات"]} />
+
+<Quiz>
+<Q n={1} q="ليه نفصل app.js عن server.js؟">عشان الاختبار يمرّر app لـ SuperTest من غير ما يشغّل port ثابت أو يبدأ process لوحده.</Q>
+<Q n={2} q="اختبار SuperTest للـ route unit test؟">غالبًا integration test، لأنه بيعدّي على طبقات HTTP وmiddleware وrouting مع بعض.</Q>
+<Q n={3} q="SuperTest بديل Vitest؟">لأ. Vitest يشغّل الاختبار؛ SuperTest ينشئ HTTP request ويختبر response.</Q>
+</Quiz>

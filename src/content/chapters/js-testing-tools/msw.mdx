@@ -1,0 +1,115 @@
+---
+title: MSW — اعترض الشبكة بدل ما تغيّر كودك
+short: MSW
+order: 6
+label: فصل ٦
+badge: الـ HTTP · فصل ٦
+en: setupServer · setupWorker · http · HttpResponse · handlers
+keywords: network interception · browser · Node · reusable handlers
+goal: تعمل API mocks على مستوى الشبكة وتعيد استخدام نفس handlers في الاختبار والمتصفح.
+part: اختبار الـ HTTP
+color: c1
+---
+
+## الفكرة
+
+بدل ما تعمل mock لـ `fetch` وتختبر إنك ناديتها، MSW يعترض request حقيقية عند network boundary ويرجع response متحكم فيها. كود التطبيق يفضل بينادي `fetch` عادي.
+
+في المتصفح يستخدم Service Worker. في Node tests يستخدم interceptors من خلال `setupServer`.
+
+## Handler واحدة
+
+<File name="test/handlers.js">
+
+```js
+import { http, HttpResponse } from "msw";
+
+export const handlers = [
+  http.get("https://api.example.com/user", () => {
+    return HttpResponse.json({ id: 7, name: "سعيد" });
+  }),
+];
+```
+
+</File>
+
+## مع Vitest في Node
+
+<File name="test/server.js">
+
+```js
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers.js";
+
+export const server = setupServer(...handlers);
+```
+
+</File>
+
+<File name="test/setup.js">
+
+```js
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./server.js";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+</File>
+
+`onUnhandledRequest: "error"` يمنع test من الخروج للإنترنت بالغلط. و`resetHandlers` يشيل overrides الخاصة بكل test.
+
+## جرّب error path
+
+```js
+import { http, HttpResponse } from "msw";
+
+server.use(
+  http.get("https://api.example.com/user", () => {
+    return HttpResponse.json(
+      { message: "service unavailable" },
+      { status: 503 },
+    );
+  }),
+);
+```
+
+كده تقدر تختبر loading وempty وerror وretry من غير backend شغالة.
+
+## في المتصفح
+
+نفس `handlers` تدخل على:
+
+```js
+import { setupWorker } from "msw/browser";
+import { handlers } from "./handlers.js";
+
+export const worker = setupWorker(...handlers);
+```
+
+وده مفيد للـ local development، demos، وcomponent tests في browser. متشغّلوش في production بالغلط.
+
+## MSW ولا mock fetch؟
+
+| الحالة | الأنسب |
+| --- | --- |
+| دالة صغيرة واخدة `fetcher` كـ argument | fake function بسيطة |
+| component أو service بيعمل HTTP | MSW |
+| عايز نفس mock في Node والمتصفح | MSW |
+| عايز تتأكد من URL وmethod وbody الحقيقيين | MSW |
+
+<Box type="warn" title="MSW مش backend حقيقية">
+
+الـ handler ممكن ترجع contract غلط والاختبار يصدقها. اربطها بـ schema مشتركة، أو ضيف contract/integration tests ضد backend حقيقية في مستوى تاني.
+
+</Box>
+
+<Checklist id="js-testing-msw" title="خلّصت الفصل لما" items={["تعرف إن MSW يعترض network مش import", "تستخدم setupServer في Node وsetupWorker في المتصفح", "تمنع unhandled requests في الاختبارات", "تعمل reset للـ handlers بعد كل test"]} />
+
+<Quiz>
+<Q n={1} q="ليه MSW أقرب لسلوك التطبيق من vi.mock للـ API module؟">لأن التطبيق ينفّذ request عادية، والاعتراض يحصل عند network boundary بدل استبدال module من جوه.</Q>
+<Q n={2} q="server.resetHandlers() بتعمل إيه؟">تشيل overrides اللي اتضافت أثناء test وترجع للـ handlers الأصلية، عشان الاختبارات متأثرش على بعض.</Q>
+<Q n={3} q="MSW تثبت إن backend الحقيقية مطابقة؟">لأ. هي mock للـ network؛ محتاج contract أو integration tests إضافية للثقة في backend الحقيقية.</Q>
+</Quiz>
