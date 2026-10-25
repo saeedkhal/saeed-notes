@@ -1,0 +1,117 @@
+---
+title: حمّل الصفحة قبل الضغطة
+short: Preload
+order: 7
+label: فصل ٧
+badge: الداتا · فصل ٧
+en: defaultPreload · intent · viewport · render · preloadDelay
+keywords: hover · viewport · render · كاش اللودر
+goal: تخلّي اللينك يجهّز الراوت والداتا قبل الضغطة، من غير ما ده يبقى تنقّل.
+part: الداتا
+color: c2
+---
+
+الـ <En>loader</En> بيشتغل لما المستخدم يفتح الصفحة. <En>preload</En> يشغّله قبل كده، والصفحة لسه مفتوحة. لما يضغط، الداتا تكون في الكاش.
+
+الافتراض `false`. من غير ما تطلبه، اللينكات متجهّزش حاجة.
+
+<Hl c="y">التحميل المسبق تجهيز. مش تنقّل. الصفحة الحالية متتغيّرش.</Hl>
+
+## تلات طرق
+
+| القيمة | امتى |
+| --- | --- |
+| `intent` | الماوس يعدّي على اللينك، أو ياخد فوكس، أو لمسة |
+| `viewport` | اللينك يظهر في الشاشة |
+| `render` | اللينك يترسم في الصفحة، حتى لو مش ظاهر |
+
+`intent` أنسب لقائمة بوستات. `render` على قائمة طويلة يجهّز كل الصفحات مرة واحدة.
+
+## على الراوتر كله
+
+<File name="src/main.tsx">
+
+```tsx
+const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+});
+```
+
+</File>
+
+كده كل `<Link>` يجهّز وجهته. لينك واحد يقدر يغيّر القرار، أو يقفله.
+
+<File name="src/routes/posts/index.tsx">
+
+```tsx
+<Link
+  to="/posts/$postId"
+  params={{ postId: post.id }}
+  preload="intent"
+>
+  {post.title}
+</Link>
+
+<Link to="/about" preload={false}>
+  عن الموقع
+</Link>
+```
+
+</File>
+
+## المهلة
+
+التمرير والفوكس ودخول الشاشة يستنوا **٥٠ مللي ثانية**. لو الماوس ساب اللينك قبلها، التجهيز يتلغى. اللمسة متستنّاش.
+
+تغيّر المهلة من الراوتر بـ `defaultPreloadDelay`، أو من لينك واحد بـ `preloadDelay`.
+
+<File name="src/main.tsx">
+
+```tsx
+const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+  defaultPreloadDelay: 100,
+});
+```
+
+</File>
+
+## الكاش مش الصفحة
+
+نتيجة اللودر الناجحة بتفضل في الذاكرة. الطازة افتراضيًا **٣٠ ثانية** (`defaultPreloadStaleTime`). اللي متستخدمش يتشال بعد **٥ دقايق** (`defaultPreloadGcTime`). نفس المفتاحين موجودين على الراوت: `preloadStaleTime` و `preloadGcTime`.
+
+الضغطة بعد كده تنقّل جديد. لو نتيجة اللودر لسه طازة، التنقّل يستخدمها بدل ما يطلب تاني.
+
+<Box type="tip" title="علم preload جوه اللودر">
+
+الدالة بتستقبل `preload`. بيبقى `true` في التجهيز، و `false` في التنقّل الحقيقي. استخدمه لو التجهيز محتاج طلب أخف. متستخدمهوش عشان تغيّر شكل الصفحة.
+
+</Box>
+
+<File name="src/routes/posts/$postId.tsx">
+
+```tsx
+export const Route = createFileRoute("/posts/$postId")({
+  loader: async ({ params, preload }) => {
+    const res = await fetch(`/api/posts/${params.postId}`, {
+      priority: preload ? "low" : "high",
+    });
+    if (!res.ok) throw new Error("Post not found");
+    return res.json();
+  },
+});
+```
+
+</File>
+
+لو عايز كاش أدق من النافذة دي، حط جلب الداتا في TanStack Query. الراوتر يجهّز الراوت، والكويري تدير الطازة.
+
+<Checklist id="router-preload" title="خلّصت الفصل لما" items={["تعرف إن الافتراض false", "تفرّق intent و viewport و render", "تحط defaultPreload على createRouter أو preload على لينك", "تعرف إن التجهيز مش تنقّل، ونتيجته كاش مؤقت"]} />
+
+<Quiz>
+<Q n={1} q="حطيت لينكات ومن غير defaultPreload. هيتجهّزوا؟">لأ. الافتراض false.</Q>
+<Q n={2} q="الماوس عدّى على اللينك وسابه قبل ٥٠ مللي ثانية. الطلب هيكمّل؟">لأ. التجهيز بتاع التمرير يتلغى لو الماوس ساب اللينك.</Q>
+<Q n={3} q="preload غيّر الصفحة المفتوحة؟">لأ. بيجهّز الوجهة. التنقّل يحصل لما المستخدم يضغط.</Q>
+</Quiz>
