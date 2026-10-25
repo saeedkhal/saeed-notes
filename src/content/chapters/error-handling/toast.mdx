@@ -1,0 +1,128 @@
+---
+title: توست الباك من إعداد الكويري
+short: توست الباك
+order: 2
+label: فصل ٢
+badge: التوست · فصل ٢
+en: QueryCache · MutationCache · onError · throw
+keywords: إعداد واحد · ارمي الخطأ · متكررش التوست
+goal: تخلّي أي فشل من السيرفر يطلع toast من QueryClient، بشرط إن الطلب يرمي Error.
+part: التوست
+color: c2
+---
+
+الزرار مش هو اللي يفتح التوست. الإعداد العام هو اللي يسمع كل فشل.
+
+في TanStack Query v5 السماع على الكاش، مش على كل `useQuery` لوحده.
+
+<File name="src/app/query-client.ts">
+
+```ts
+import axios from "axios";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
+import { showErrorToast } from "@/shared/ui/toast";
+
+function isAuthError(error: unknown) {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
+
+function toastMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "message" in data &&
+      typeof data.message === "string"
+    ) {
+      return data.message;
+    }
+  }
+  return error instanceof Error ? error.message : "حصل خطأ";
+}
+
+export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error) => {
+      if (isAuthError(error)) return;
+      showErrorToast(toastMessage(error));
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      if (isAuthError(error)) return;
+      showErrorToast(toastMessage(error));
+    },
+  }),
+});
+```
+
+</File>
+
+`QueryCache` للقراءة: القوائم والتفاصيل. `MutationCache` للكتابة: إنشاء، تعديل، مسح. الاتنين ورا نفس التوست.
+
+`showErrorToast` دالة عندك. المكتبة اللي ترسم التوست، زي Sonner أو غيرها، تتستبدل جواها. الإعداد مش محتاج يعرف شكل الزرار.
+
+<Box type="warn" title="Axios بيرفض لو الحالة مش نجاح">
+
+`axios` ما بيرجعش body الخطأ كنجاح. الحالة من `400` وطالع بترفض الـ promise، و TanStack Query تشوف فشل. لو مسكت الرفض وسكتّه من غير ما ترميه تاني، التوست مش هيظهر.
+
+</Box>
+
+<File name="src/shared/api/client.ts">
+
+```ts
+import axios from "axios";
+
+export const api = axios.create({
+  baseURL: "/api",
+});
+```
+
+</File>
+
+بعد كده `useQuery` و `useMutation` يفضلوا عاديين. متكتبش `onError` في كل واحد عشان التوست. الإعداد خلّص الشغل.
+
+<File name="src/features/create-order/model/use-create-order.ts">
+
+```ts
+import { useMutation } from "@tanstack/react-query";
+import { api } from "@/shared/api/client";
+
+export function useCreateOrder() {
+  return useMutation({
+    mutationFn: (input: { productId: string }) =>
+      api.post("/orders", input).then((res) => res.data),
+  });
+}
+```
+
+</File>
+
+لو السيرفر رفض برقم غير `401`، الـ promise تترفض و `MutationCache` يفتح التوست. الصفحة تقدر تعطّل الزرار بـ `isPending`، من غير ما ترسم الرسالة تاني. `401` يعدّي من هنا من غير توست، لأن Axios هيحوّل على صفحة الدخول.
+
+<Hl c="o">إعادة الجلب في الخلفية كمان بتمر على نفس onError. فشل صامت في الكاش هيطلع توست.</Hl>
+
+لو شاشة معيّنة بتعرض الغلط لوحدها، علّم الاستعلام عشان الإعداد يعدّي.
+
+<File name="src/app/query-client.ts">
+
+```ts
+queryCache: new QueryCache({
+  onError: (error, query) => {
+    if (query.meta?.skipToast) return;
+    showErrorToast(error instanceof Error ? error.message : "حصل خطأ");
+  },
+}),
+```
+
+</File>
+
+وعلى الاستعلام: `meta: { skipToast: true }`. للكتابة، الوسيط الرابع في `MutationCache` هو الـ mutation، و `mutation.meta` نفس الفكرة.
+
+<Checklist id="error-handling-toast" title="خلّصت الفصل لما" items={["تستخدم Axios instance والرفض يوصل للكاش", "تحط onError على QueryCache و MutationCache", "تسكت التوست على 401", "تسكت التوست بـ meta لما الشاشة بتعرض الغلط لوحدها"]} />
+
+<Quiz>
+<Q n={1} q="Axios رجّع 500. محتاج ترمي بإيدك عشان التوست؟">لأ. Axios بيرفض لوحده، والإعداد يفتح التوست. 401 بس هو اللي متسكوت.</Q>
+<Q n={2} q="أكتب onError في كل useMutation عشان التوست؟">لأ. مرة واحدة على MutationCache.</Q>
+</Quiz>

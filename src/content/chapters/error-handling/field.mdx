@@ -1,0 +1,90 @@
+---
+title: خطأ الحقل فوق الـ input
+short: خطأ الحقل
+order: 3
+label: فصل ٣
+badge: الحقل · فصل ٣
+en: client validation · field error · before mutate
+keywords: عمر سالب · فوق الخانة · متستناش السيرفر
+goal: تعرض رسالة التحقق فوق الحقل الغلط، وتمنع الإرسال قبل ما TanStack Query يشوفها.
+part: الحقل
+color: c3
+---
+
+العمر السالب مش خطأ سيرفر. المستخدم لسه قدام الفورم، والخانة قدامه.
+
+<File name="src/features/profile/ui/age-field.tsx">
+
+```tsx
+import { useState } from "react";
+
+export function AgeField() {
+  const [age, setAge] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function onChange(value: string) {
+    setAge(value);
+    if (value === "") {
+      setError(null);
+      return;
+    }
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      setError("العمر ما ينفعش يكون بالسالب");
+      return;
+    }
+    setError(null);
+  }
+
+  return (
+    <label>
+      العمر
+      {error ? <p role="alert">{error}</p> : null}
+      <input
+        value={age}
+        inputMode="numeric"
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+```
+
+</File>
+
+النص فوق الـ input، مش تحته في حتة بعيدة، ومش في ركن الشاشة. `role="alert"` عشان قارئ الشاشة يسمعه. `aria-invalid` يربط الخانة إنها غلط.
+
+## متبعتش الفورم
+
+لو في رسالة على الحقل، الإرسال يقف هنا. `mutate` ما يتنداش.
+
+<File name="src/features/profile/ui/profile-form.tsx">
+
+```tsx
+function onSubmit(age: string, fieldError: string | null) {
+  if (fieldError || age === "") return;
+  mutation.mutate({ age: Number(age) });
+}
+```
+
+</File>
+
+<Hl c="p">غلط الخانة يفضل في حالة الفورم. لو رميته جوه mutationFn، الكاش هيحسبه فشل سيرفر ويفتح التوست.</Hl>
+
+كده المستخدم يشوف «العمر ما ينفعش يكون بالسالب» مرتين: مرة فوق الخانة ومرة في القاعة.
+
+التحقق ده لحاجة المتصفح يقدر يحكم عليها: فاضي، سالب، مش رقم، أقصر من المطلوب. قاعدة الرصيد والصلاحية والسعر الحقيقي للسيرفر، ودي ترجع للفصل السابق.
+
+<Box type="tip" title="السيرفر رجّع غلط خانة">
+
+لو الرد `400` وفيه اسم الحقل ورسالة، حط الرسالة فوق الـ input ده وعلّم الـ mutation بـ `meta.skipToast`. المستخدم يقدر يصلح الخانة. التوست للغلط اللي مالوش خانة، زي سقوط السيرفر.
+
+</Box>
+
+<Checklist id="error-handling-field" title="خلّصت الفصل لما" items={["تحط رسالة العمر السالب فوق الـ input", "تمنع mutate طول ما الرسالة ظاهرة", "متخليش mutationFn يرمي غلط التحقق"]} />
+
+<Quiz>
+<Q n={1} q="العمر -5. TanStack Query هو اللي يعرض الرسالة؟">لأ. الفورم يعرضها فوق الحقل، والإرسال ما يوصلش للمكتبة.</Q>
+<Q n={2} q="رميت خطأ التحقق من جوه mutationFn. إيه اللي هيحصل؟">MutationCache هيشوف فشل ويفتح التوست، مع إن الغلط لسه بتاعة الخانة.</Q>
+</Quiz>

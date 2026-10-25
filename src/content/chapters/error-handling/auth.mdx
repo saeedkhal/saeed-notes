@@ -1,0 +1,67 @@
+---
+title: خطأ الدخول يحوّل على تسجيل الدخول
+short: صفحة الدخول
+order: 4
+label: فصل ٤
+badge: الدخول · فصل ٤
+en: axios interceptor · 401 · router.navigate · login
+keywords: 401 · interceptor · متفتحش توست · متلفش على الدخول
+goal: تخلّي Axios يحوّل على صفحة الدخول لما الرد يكون 401، من غير toast.
+part: الدخول
+color: c4
+---
+
+`401` يعني الجلسة خلصت أو التوكن مرفوض. المستخدم مش هيصلح ده من الخانة، ومش محتاج توست يقول «غير مصرّح». محتاج يروح يسجّل دخوله.
+
+المكان Axios instance، مش جوه كل `useQuery`. أي طلب يعدّي من الـ instance يتفحص رده.
+
+<File name="src/shared/api/client.ts">
+
+```ts
+import axios from "axios";
+import { router } from "@/app/router";
+
+export const api = axios.create({
+  baseURL: "/api",
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!axios.isAxiosError(error)) return Promise.reject(error);
+
+    const status = error.response?.status;
+    const url = error.config?.url ?? "";
+
+    if (status === 401 && !url.includes("/login")) {
+      router.navigate({ to: "/login" });
+    }
+
+    return Promise.reject(error);
+  },
+);
+```
+
+</File>
+
+`router` هو نفس راوتر التطبيق. `navigate` يغيّر العنوان لـ `/login` من غير ما كل شاشة تعرف.
+
+الرفض يكمل بعد التحويل. TanStack Query لسه شايفة إن الطلب فشل، عشان الزرار يبطل التحميل. التوست ساكت على `401`، زي ما إعداد الكاش عمل.
+
+<Box type="warn" title="طلب الدخول نفسه">
+
+لو صفحة تسجيل الدخول بتطلب `/login` والرد `401` لأن الباسورد غلط، التحويل تاني يلف. الشرط `!url.includes("/login")` يمنع كده. غلط الباسورد في الفورم رسالة فوق الحقول، مش رجوع لنفس الصفحة.
+
+</Box>
+
+<Hl c="b">401 مش توست. التحويل هو الرد.</Hl>
+
+سجّل الـ interceptor على الـ instance الواحد اللي الكويري بتستخدمه. instance تاني من غير الـ interceptor هيكمّل الطلب ويفتح توست بدل ما يحوّل.
+
+<Checklist id="error-handling-auth" title="خلّصت الفصل لما" items={["تحط interceptor على Axios instance", "تحوّل 401 بـ router.navigate إلى /login", "متحوّلش لو الطلب أصلاً على الدخول", "تسيب التوست ساكت على 401"]} />
+
+<Quiz>
+<Q n={1} q="كل useQuery يفحص 401 لوحده؟">لأ. مرة واحدة في interceptor الـ instance.</Q>
+<Q n={2} q="بعد التحويل، ليه الـ promise تترفض؟">عشان TanStack Query تقفل حالة التحميل. التوست مش هيظهر.</Q>
+<Q n={3} q="باسورد غلط على طلب /login. نحوّل تاني؟">لأ. ده غلط فورم، والتحويل هنا يلف على نفس الصفحة.</Q>
+</Quiz>
