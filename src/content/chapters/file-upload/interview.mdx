@@ -1,0 +1,93 @@
+---
+title: الإجابة في الإنترفيو، وأسئلة المتابعة
+short: إجابة الإنترفيو
+order: 5
+label: فصل ٥
+badge: الإنترفيو · فصل ٥
+en: interview structure · multipart upload · resumable · CDN · background processing · events
+keywords: structure · multipart · CDN · events
+goal: ترتّب الإجابة في ٥ دقايق كلام، وتكون جاهز لأسئلة المتابعة اللي الـ interviewer بيحب يسألها.
+part: الإنترفيو
+color: c5
+---
+
+## رتّب كلامك كده
+
+<Flow items={[{"t": "١ اسأل", "c": 1, "s": "حجم الملفات؟ عدد المستخدمين؟ مين يشوف إيه؟"}, "→", {"t": "٢ الحل البسيط", "c": 2, "s": "disk ومشاكله"}, "→", {"t": "٣ object storage", "c": 3, "s": "stateless + bottleneck"}, "→", {"t": "٤ pre-signed", "c": 4, "s": "direct upload/download"}, "→", {"t": "٥ الأمان", "c": 5, "s": "expiry + authz + verify + size"}]} />
+
+<Box type="interview" title="جملة البداية">
+
+"هبدأ بأبسط حل وأقول هيقع فين، وبعدين أطوّره: الأول السيرفر يحفظ على الديسك، وبعدين object storage، وفي الآخر الـ client يرفع مباشرة بـ pre-signed URLs. وهختم بالأمان."
+
+الجملة دي بتقول للـ interviewer إنك فاهم الـ trade-offs، مش حافظ الإجابة النهائية.
+
+</Box>
+
+## أسئلة المتابعة
+
+<Grid2>
+<Card title="🎬 ملف ٥ جيجا؟" c={1}>
+
+**Multipart upload**: الملف يتقسم أجزاء (مثلًا ١٠ ميجا)، كل جزء له pre-signed URL، وبيترفعوا بالتوازي. جزء فشل؟ تعيده هو بس. وفي الآخر `CompleteMultipartUpload`.
+
+</Card>
+<Card title="📶 النت قطع في النص؟" c={2}>
+
+**Resumable**: احفظ الأجزاء اللي خلصت (مع الـ multipart)، وكمّل من عندها. أو بروتوكول جاهز زي tus.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="🌍 التنزيل بطيء بعيد عن الـ region؟" c={3}>
+
+**CDN** (CloudFront مثلًا) قدام الـ bucket بـ signed URLs أو signed cookies خاصة بيه، فالملف يتخدّم من أقرب مكان.
+
+</Card>
+<Card title="🖼️ thumbnail وفحص فيروسات؟" c={4}>
+
+**Background job**: S3 يبعت event لما ملف يتحط، يروح لـ queue، و worker يعمل الـ processing ويحدّث الحالة في الـ DB. الـ request مايستناش.
+
+</Card>
+</Grid2>
+
+<Diagram
+  title="الـ processing بعد الرفع"
+  height={270}
+  mheight={460}
+  nodes={[
+    { id: "s3", t: "S3", s: "ObjectCreated", c: 3, x: 88, y: 50, mx: 50, my: 6 },
+    { id: "queue", t: "Queue", s: "SQS مثلًا", c: 5, x: 62, y: 50, mx: 50, my: 36 },
+    { id: "worker", t: "Worker", s: "thumbnail · scan", c: 4, x: 36, y: 50, mx: 50, my: 66 },
+    { id: "db", t: "Database", s: "status = ready", c: 2, x: 10, y: 50, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "s3", to: "queue", t: "event", c: 3 },
+    { from: "queue", to: "worker", t: "رسالة", c: 5 },
+    { from: "worker", to: "db", t: "حدّث الحالة", c: 4 },
+  ]}
+/>
+
+<Box type="tip" title="لو الـ interviewer سأل: ليه مش تعمل complete بالـ event بس؟">
+
+ممكن، وده أأمن في حاجة: الـ event جاي من S3 مش من الـ client. بس الـ events ممكن تتأخر أو تتكرر، فالـ worker لازم يبقى **idempotent**. كتير من الأنظمة بتعمل الاتنين: `complete` من الـ client عشان الـ UI يرد بسرعة، والـ event عشان الـ processing.
+
+</Box>
+
+## أرقام تقولها بثقة
+
+| النقطة | رقم معقول |
+| --- | --- |
+| عمر الـ pre-signed URL | ٥–١٥ دقيقة |
+| حجم الجزء في multipart | ٥–١٠٠ ميجا (S3 بيشترط ٥ ميجا على الأقل لكل جزء ما عدا الأخير) |
+| إمتى multipart | فوق ١٠٠ ميجا تقريبًا |
+| مسح الـ uploads المعلّقة | lifecycle rule بعد يوم |
+
+راجع حدود S3 الحالية في الـ docs قبل ما تعتمد على رقم بالظبط.
+
+<Checklist id="upload-interview" title="خلّصت الفصل لما" items={["تبدأ بأسئلة توضيح قبل الرسم", "تمشي بالمراحل التلاتة وكل واحدة بتصلّح اللي قبلها", "تجاوب على الملفات الكبيرة بـ multipart و resumable", "تذكر CDN للتنزيل و background job للـ processing", "تقول أرقام معقولة للـ expiry وحجم الأجزاء"]} />
+
+<Quiz>
+<Q n={1} q="ليه تبدأ بالحل البسيط بدل الـ pre-signed على طول؟">عشان توضّح إنك فاهم ليه الحل النهائي أحسن، مش حافظه.</Q>
+<Q n={2} q="ملف ٣ جيجا على نت ضعيف. تعمل إيه؟">multipart upload بـ pre-signed URL لكل جزء، مع إعادة الأجزاء اللي فشلت بس.</Q>
+</Quiz>

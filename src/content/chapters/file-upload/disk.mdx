@@ -1,0 +1,110 @@
+---
+title: "المرحلة ١: السيرفر يحفظ على الديسك"
+short: "١: الديسك"
+order: 1
+label: فصل ١
+badge: المراحل · فصل ١
+en: naive upload · local disk · file path in DB · load balancer · stateful server
+keywords: disk · load balancer · stateful
+goal: تعرف أول حل بيجي في الدماغ، وإمتى يكون كفاية، والـ ٣ مشاكل اللي بتظهر أول ما السيستم يكبر.
+part: المراحل
+color: c1
+---
+
+## الحل اللي بييجي في دماغك الأول
+
+المستخدم يرفع الملف للسيرفر، والسيرفر يحفظه على الديسك ويكتب المسار في الـ database. ولما حد يطلبه، السيرفر يقراه من الديسك ويرجّعه.
+
+<Diagram
+  title="المرحلة ١: كله عند السيرفر"
+  height={280}
+  mheight={430}
+  nodes={[
+    { id: "client", t: "Client", s: "المتصفح أو الموبايل", c: 1, x: 86, y: 50, mx: 50, my: 8 },
+    { id: "server", t: "Server", s: "Express مثلًا", c: 4, x: 50, y: 50, mx: 50, my: 50 },
+    { id: "disk", t: "Disk", s: "/uploads على السيرفر", c: 2, x: 14, y: 20, mx: 22, my: 92 },
+    { id: "db", t: "Database", s: "path بس", c: 3, x: 14, y: 80, mx: 78, my: 92 },
+  ]}
+  edges={[
+    { from: "client", to: "server", t: "POST الملف", c: 1, bend: 22, mbend: 28 },
+    { from: "server", to: "client", t: "يقرا ويرجّع", c: 4, bend: 22, mbend: 28 },
+    { from: "server", to: "disk", t: "يحفظ الملف", c: 2 },
+    { from: "server", to: "db", t: "يحفظ المسار", c: 3 },
+  ]}
+/>
+
+<File name="upload.ts">
+
+```ts
+import express from "express";
+import multer from "multer";
+
+const upload = multer({ dest: "uploads/", limits: { fileSize: 10 * 1024 * 1024 } });
+const app = express();
+
+app.post("/files", requireAuth, upload.single("file"), async (req, res) => {
+  const file = await db.file.create({
+    data: { ownerId: req.user.id, path: req.file!.path, name: req.file!.originalname },
+  });
+  res.status(201).json({ id: file.id });
+});
+```
+
+</File>
+
+<Box type="tip" title="ده مش غلط">
+
+لمشروع صغير أو internal tool بسيرفر واحد، الحل ده **كفاية جدًا**. قوله في الإنترفيو كنقطة بداية، بس متقفش عنده. الـ interviewer عايز يشوفك بتفكر هيقع فين.
+
+</Box>
+
+## المشكلة الأولى: سيرفرين ورا load balancer
+
+السيستم كبر، وبقى عندك سيرفرين ورا load balancer:
+
+<Diagram
+  title="الملف عند A، والطلب راح لـ B"
+  height={290}
+  mheight={450}
+  nodes={[
+    { id: "client", t: "Client", c: 1, x: 88, y: 50, mx: 50, my: 7 },
+    { id: "lb", t: "Load Balancer", c: 5, x: 50, y: 50, mx: 50, my: 38 },
+    { id: "a", t: "Server A", s: "الملف هنا ✓", c: 3, x: 18, y: 18, mx: 22, my: 90 },
+    { id: "b", t: "Server B", s: "مش لاقيه ✗", c: 2, x: 18, y: 82, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "client", to: "lb", t: "رفع وبعدين تنزيل", c: 1 },
+    { from: "lb", to: "a", t: "الرفع", c: 3 },
+    { from: "lb", to: "b", t: "التنزيل: 404", c: 2, dash: true },
+  ]}
+/>
+
+الملف اتحفظ على ديسك A، والطلب اللي بعده راح لـ B. بالنسبة لـ B الملف مش موجود. السيرفر بقى **stateful**: شايل حاجة لازم الطلبات اللي بعد كده ترجعله هو بالذات.
+
+## المشكلة التانية والتالتة
+
+<Grid2>
+<Card title="🏋️ السيرفر شايل حاجات مش شغله" c={4}>
+
+بيستقبل الـ upload، ويخدّم الـ download، ويدير المساحة، بدل ما يركز في الـ business logic. ملف ٥٠٠ ميجا بيمسك connection و memory طول ما هو بيعدّي.
+
+</Card>
+<Card title="💥 الملفات ممكن تضيع" c={2}>
+
+السيرفر وقع، أو اتبدّل في deployment (container جديد)، والديسك راح معاه. ومفيش نسخ احتياطي إلا لو عملته بإيدك.
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="sticky sessions مش حل">
+
+ممكن تقول "خلّي الـ load balancer يبعت كل مستخدم لنفس السيرفر". ده بيأجل المشكلة بس: مستخدم تاني عايز يشوف الملف هيروح لسيرفر تاني، والسيرفر لو وقع الملفات راحت برضه.
+
+</Box>
+
+<Checklist id="upload-disk" title="خلّصت الفصل لما" items={["ترسم الحل الأول: server + disk + path في الـ DB", "تعرف إمتى الحل ده كفاية", "تشرح مشكلة السيرفرين ورا الـ load balancer", "تفرّق stateful عن stateless", "تعرف ليه sticky sessions مش حل"]} />
+
+<Quiz>
+<Q n={1} q="ليه السيرفر بقى stateful هنا؟">لأن الملف محفوظ على ديسكه هو، فالطلبات الجاية لازم ترجعله بالذات.</Q>
+<Q n={2} q="إمتى الحل ده مقبول؟">مشروع صغير أو internal tool على سيرفر واحد، ومعاه backup للديسك.</Q>
+</Quiz>

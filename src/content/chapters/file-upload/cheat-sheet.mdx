@@ -1,0 +1,55 @@
+---
+title: "Cheat Sheet: File Upload في صفحة"
+short: Cheat Sheet
+order: 6
+label: الآخر
+badge: الآخر
+en: One-page recall for file upload design
+keywords: cheatsheet · presigned · security
+goal: تراجع التصميم كله قبل الإنترفيو في دقيقتين.
+part: بعدها
+color: dark
+---
+
+<Cheat items={[
+  ["المرحلة ١: السيرفر يحفظ على الديسك", "كفاية لـ internal tool. بيقع مع load balancer، وبيتقل، وبيضيّع ملفات"],
+  ["السيرفرين مش شايفين نفس الملفات", "object storage: السيرفرات stateless"],
+  ["المرحلة ٢: السيرفر يرفع لـ S3", "الملف بيعدّي مرتين، فالسيرفر bottleneck"],
+  ["المرحلة ٣: pre-signed PUT و GET", "السيرفر يتحقق ويوقّع، والـ client يكلّم S3 مباشرة"],
+  ["403 SignatureDoesNotMatch", "الـ Content-Type مش زي اللي اتوقّع، أو CORS"],
+  ["الـ URL اتسرّب", "عمر قصير: ٥–١٠ دقايق"],
+  ["مين يتأكد إن الملف بتاع المستخدم؟", "السيرفر قبل التوقيع. التوقيع مش بيحمي من IDOR"],
+  ["الـ client قال رفعت", "HeadObject قبل ما تسجّل الـ metadata"],
+  ["عايز max size", "pre-signed POST بـ content-length-range"],
+  ["اسم الملف", "key متولّد (UUID)، والاسم الأصلي في الـ DB"],
+  ["الـ bucket", "private دايمًا"],
+  ["thumbnails وفحص فيروسات", "S3 event → queue → worker"],
+  ["ملف كبير جدًا", "multipart upload، وجزء لكل pre-signed URL"],
+  ["uploads متعلّقة", "lifecycle rule يمسحها"],
+]} />
+
+<Diagram
+  title="التصميم النهائي"
+  height={320}
+  mheight={520}
+  nodes={[
+    { id: "client", t: "Client", c: 1, x: 88, y: 50, mx: 50, my: 6 },
+    { id: "server", t: "API", s: "authz + sign + metadata", c: 4, x: 52, y: 16, mx: 24, my: 42 },
+    { id: "s3", t: "S3 (private)", c: 3, x: 52, y: 84, mx: 76, my: 42 },
+    { id: "db", t: "DB", s: "key · owner · size", c: 2, x: 14, y: 16, mx: 24, my: 82 },
+    { id: "worker", t: "Worker", s: "processing", c: 5, x: 14, y: 84, mx: 76, my: 82 },
+  ]}
+  edges={[
+    { from: "client", to: "server", t: "عايز لينك / خلصت", c: 1 },
+    { from: "client", to: "s3", t: "رفع وتنزيل مباشر", c: 3 },
+    { from: "server", to: "db", t: "metadata", c: 4 },
+    { from: "s3", to: "worker", t: "event", c: 5 },
+  ]}
+/>
+
+<Checklist id="upload-cheat" title="خلّصت المذكرة لما" items={["تشرح المراحل التلاتة ومشكلة كل واحدة", "ترسم الـ pre-signed flow من الذاكرة", "تقول الغلطة الأمنية والنقطتين المميزين", "تجاوب على ملف كبير و processing و CDN"]} />
+
+<Quiz>
+<Q n={1} q="لخّص المرحلة التالتة في جملة.">السيرفر يدّي إذن مؤقت متوقّع، والملف يروح من الـ client للـ storage مباشرة.</Q>
+<Q n={2} q="النقطتين اللي بيميّزوك؟">اتأكد إن الملف موجود في الـ storage قبل الـ metadata، واستخدم pre-signed POST لو عايز حد للحجم.</Q>
+</Quiz>

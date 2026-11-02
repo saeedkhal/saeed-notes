@@ -1,0 +1,87 @@
+---
+title: "المرحلة ٢: Object Storage بس عن طريق السيرفر"
+short: "٢: Object Storage"
+order: 2
+label: فصل ٢
+badge: المراحل · فصل ٢
+en: S3 · Azure Blob · object key · stateless servers · proxy upload · bandwidth bottleneck
+keywords: S3 · stateless · bottleneck
+goal: تنقل الملفات لـ object storage فالسيرفرات تبقى stateless، وتشوف ليه السيرفر لسه bottleneck.
+part: المراحل
+color: c2
+---
+
+## نطلّع الملفات بره السيرفر
+
+بدل الديسك، السيرفر يرفع الملف على **object storage** زي Amazon S3 أو Azure Blob Storage أو Google Cloud Storage. دي خدمات متخصصة في الملفات: إنت ترفع، وهي تهتم بالمساحة والنسخ (replication) والتوافر.
+
+<Diagram
+  title="المرحلة ٢: الملف بيعدّي على السيرفر في الرايح والجاي"
+  height={290}
+  mheight={450}
+  nodes={[
+    { id: "client", t: "Client", c: 1, x: 88, y: 50, mx: 50, my: 7 },
+    { id: "server", t: "Server", s: "stateless دلوقتي", c: 4, x: 52, y: 50, mx: 50, my: 45 },
+    { id: "s3", t: "S3", s: "object storage", c: 3, x: 14, y: 22, mx: 22, my: 90 },
+    { id: "db", t: "Database", s: "key + metadata", c: 2, x: 14, y: 80, mx: 78, my: 90 },
+  ]}
+  edges={[
+    { from: "client", to: "server", t: "الملف كله", c: 1, bend: 22, mbend: 28 },
+    { from: "server", to: "client", t: "الملف كله تاني", c: 4, bend: 22, mbend: 28 },
+    { from: "server", to: "s3", t: "PutObject", c: 3, bend: 16, mbend: 20 },
+    { from: "s3", to: "server", t: "GetObject", c: 3, dash: true, bend: 16, mbend: 20 },
+    { from: "server", to: "db", t: "key", c: 2 },
+  ]}
+/>
+
+<File name="upload.ts">
+
+```ts
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { randomUUID } from "node:crypto";
+
+const s3 = new S3Client({ region: process.env.AWS_REGION });
+
+app.post("/files", requireAuth, upload.single("file"), async (req, res) => {
+  const key = `users/${req.user.id}/${randomUUID()}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: process.env.BUCKET,
+    Key: key,
+    Body: fs.createReadStream(req.file!.path),
+    ContentType: req.file!.mimetype,
+  }));
+  const file = await db.file.create({ data: { ownerId: req.user.id, key, name: req.file!.originalname } });
+  res.status(201).json({ id: file.id });
+});
+```
+
+</File>
+
+## إيه اللي اتصلّح
+
+<Chips items={["الملف مش مربوط بسيرفر معيّن", "السيرفرات stateless: أي سيرفر يقدر يخدّم أي طلب", "المساحة scalable ومش محدودة بديسك", "deployment جديد مش بيضيّع ملفات"]} />
+
+## بس استنى… الملف لسه بيعدّي من السيرفر
+
+في الـ upload: من الـ client للسيرفر، ومن السيرفر لـ S3. وفي الـ download: نفس الحكاية بالعكس. يعني كل بايت بيعدّي **مرتين**، والسيرفر بيدفع التمن:
+
+| المورد | بيروح فين |
+| --- | --- |
+| Bandwidth | كل ملف بيدخل ويخرج من السيرفر |
+| Memory | buffers للملفات، ولو مش بتعمل stream ممكن الملف كله يتحمّل |
+| CPU و connections | connection مفتوح طول ما ملف ٢ جيجا بيترفع على نت بطيء |
+
+<Hl c="o">السيرفر لسه هو الـ bottleneck</Hl>، حتى لو الـ storage بقى scalable. ١٠٠٠ مستخدم بيرفعوا فيديوهات في نفس الوقت = السيرفرات كلها مشغولة بنقل بايتات، مش بالـ business logic.
+
+<Box type="story" icon="🧳" title="البواب الشيّال">
+
+المخزن بقى مركزي وكبير، بس البواب لسه شايل كل كرتونة بإيده من باب العمارة لحد المخزن. كل ما الزباين تزيد، محتاج بوابين أكتر، مش عشان شغل البواب، عشان الشيل.
+
+</Box>
+
+<Checklist id="upload-storage" title="خلّصت الفصل لما" items={["تشرح ليه object storage بيخلّي السيرفرات stateless", "تخزّن key مش path في الـ database", "تشرح ليه السيرفر لسه bottleneck", "تسمّي الموارد اللي بتضيع: bandwidth و memory و connections"]} />
+
+<Quiz>
+<Q n={1} q="إيه اللي اتحل في المرحلة دي؟">الملفات بقت مش مربوطة بسيرفر، والسيرفرات بقت stateless، والمساحة scalable.</Q>
+<Q n={2} q="إيه اللي لسه مش متحل؟">الملف بيعدّي على السيرفر في الرايح والجاي، فالسيرفر bottleneck.</Q>
+</Quiz>

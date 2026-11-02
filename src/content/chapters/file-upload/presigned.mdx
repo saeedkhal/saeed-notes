@@ -1,0 +1,155 @@
+---
+title: "المرحلة ٣: Pre-signed URLs — الـ client يكلّم الـ storage مباشرة"
+short: "٣: Pre-signed URLs"
+order: 3
+label: فصل ٣
+badge: المراحل · فصل ٣
+en: pre-signed PUT · pre-signed GET · direct upload · complete step · metadata
+keywords: pre-signed · direct upload · metadata
+goal: تخلّي السيرفر يدّي إذن بس، والملف نفسه يروح من الـ client للـ storage على طول في الرفع والتنزيل.
+part: المراحل
+color: c3
+---
+
+## الفكرة
+
+السيرفر **مبيلمسش الملف**. هو بيعمل حاجة واحدة: يتأكد إن المستخدم ده مسموحله، ويولّد **URL مؤقت متوقّع** (pre-signed URL). الـ client يرفع أو ينزّل بيه من S3 مباشرة.
+
+<Diagram
+  title="الرفع بـ pre-signed PUT"
+  height={340}
+  mheight={560}
+  nodes={[
+    { id: "client", t: "Client", c: 1, x: 86, y: 50, mx: 50, my: 6 },
+    { id: "server", t: "Server", s: "صلاحيات + توقيع", c: 4, x: 50, y: 15, mx: 24, my: 40 },
+    { id: "s3", t: "S3", s: "private bucket", c: 3, x: 50, y: 85, mx: 76, my: 70 },
+    { id: "db", t: "Database", s: "metadata", c: 2, x: 12, y: 15, mx: 22, my: 94 },
+  ]}
+  edges={[
+    { from: "client", to: "server", t: "١ عايز أرفع", c: 1, bend: 18, mbend: 26 },
+    { from: "server", to: "client", t: "٢ لينك صالح ٥ دقايق", c: 4, bend: 18, mbend: 26 },
+    { from: "client", to: "s3", t: "٣ الملف مباشرة بـ PUT", c: 3 },
+    { from: "server", to: "s3", t: "٥ موجود فعلًا؟", c: 3, dash: true },
+    { from: "server", to: "db", t: "٦ احفظ metadata", c: 2 },
+  ]}
+/>
+
+الخطوة ٤ (مش في الرسمة): الـ client يقول للسيرفر "خلصت". والسيرفر **ميصدقش** على طول: يتأكد من S3 إن الملف موجود فعلًا (٥) قبل ما يكتب الـ metadata (٦). هنرجعلها في فصل الأمان.
+
+## السيرفر: يولّد URL للرفع
+
+<File name="uploads.ts">
+
+```ts
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { randomUUID } from "node:crypto";
+
+const s3 = new S3Client({ region: process.env.AWS_REGION });
+const ALLOWED = new Set(["image/png", "image/jpeg", "application/pdf"]);
+
+app.post("/uploads", requireAuth, async (req, res) => {
+  const { contentType, folderId } = req.body;
+  if (!ALLOWED.has(contentType)) return res.status(400).json({ error: "type not allowed" });
+  if (!(await canUploadTo(req.user.id, folderId))) return res.sendStatus(403);
+
+  // اسم بنولّده إحنا، مش اسم الملف بتاع المستخدم
+  const key = `uploads/${req.user.id}/${randomUUID()}`;
+  const url = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.BUCKET, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }, // ٥ دقايق
+  );
+
+  await db.upload.create({ data: { key, ownerId: req.user.id, folderId, status: "pending" } });
+  res.json({ url, key });
+});
+```
+
+</File>
+
+## الـ client: يرفع مباشرة
+
+<File name="uploadFile.ts">
+
+```ts
+export async function uploadFile(file: File, folderId: string) {
+  const { url, key } = await api.post("/uploads", { contentType: file.type, folderId });
+
+  const put = await fetch(url, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": file.type }, // لازم نفس اللي اتوقّع، وإلا S3 يرفض
+  });
+  if (!put.ok) throw new Error(`upload failed: ${put.status}`);
+
+  // نقول للسيرفر خلصنا، وهو يتأكد بنفسه
+  return api.post(`/uploads/${encodeURIComponent(key)}/complete`, { name: file.name });
+}
+```
+
+</File>
+
+<Box type="warn" title="الـ Content-Type جزء من التوقيع">
+
+لو السيرفر حط `ContentType` في الـ command، الـ client **لازم** يبعت نفس الـ header بالظبط، وإلا S3 يرد `403 SignatureDoesNotMatch`. أشهر error في أول مرة تجرّب. وكمان الـ bucket محتاج **CORS** يسمح بـ `PUT` من الدومين بتاعك.
+
+</Box>
+
+## التنزيل: pre-signed GET
+
+نفس الفكرة بالعكس: السيرفر يتأكد من الصلاحية، ويرجّع URL مؤقت، والمتصفح ينزّل من S3 على طول.
+
+<File name="downloads.ts">
+
+```ts
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+
+app.get("/files/:id/download", requireAuth, async (req, res) => {
+  const file = await db.file.findFirst({ where: { id: req.params.id, ownerId: req.user.id } });
+  if (!file) return res.sendStatus(404);
+
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({
+      Bucket: process.env.BUCKET,
+      Key: file.key,
+      // الاسم اللي يظهر للمستخدم وهو بينزّل، مش الـ key
+      ResponseContentDisposition: `attachment; filename="${encodeURIComponent(file.name)}"`,
+    }),
+    { expiresIn: 300 },
+  );
+  res.redirect(302, url);
+});
+```
+
+</File>
+
+## إيه اللي اتحل
+
+<Grid2>
+<Card title="✅ السيرفر خفيف" c={3}>
+
+السيرفر بيرجّع JSON صغير بس. الـ bandwidth والـ connections الطويلة بقوا على S3، وهو معمول للشغل ده.
+
+</Card>
+<Card title="✅ scale لوحده" c={5}>
+
+١٠٠٠ مستخدم بيرفعوا في نفس الوقت؟ السيرفرات بتولّد ١٠٠٠ توقيع في ميلي ثواني، والباقي على S3.
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🎫" title="كارت الدخول">
+
+البواب مبقاش شيّال. الزبون بيوريه البطاقة، البواب يكتب له كارت عليه: "يدخل مخزن رقم ٧، يحط طرد واحد، صالح لحد الساعة ٣:٠٥". الزبون يدخل بنفسه، والحارس على باب المخزن بيقرا الكارت ويتأكد إنه سليم ومنتهاش.
+
+</Box>
+
+<Checklist id="upload-presigned" title="خلّصت الفصل لما" items={["ترسم الـ flow بالترتيب: طلب، URL، PUT مباشر، complete، تحقّق، metadata", "تولّد pre-signed PUT بـ getSignedUrl و expiresIn", "تعرف إن Content-Type جزء من التوقيع، وإن الـ bucket محتاج CORS", "تعمل pre-signed GET للتنزيل بعد فحص الصلاحية", "تشرح ليه السيرفر مبقاش bottleneck"]} />
+
+<Quiz>
+<Q n={1} q="السيرفر بيلمس الملف في المرحلة دي؟">لأ. بيتحقق ويوقّع ويسجّل metadata بس.</Q>
+<Q n={2} q="جالك 403 SignatureDoesNotMatch وإنت بترفع. أول حاجة تشيّك عليها؟">الـ Content-Type اللي الـ client باعته مختلف عن اللي اتوقّع.</Q>
+<Q n={3} q="ليه الـ key بيتولّد بـ randomUUID؟">عشان المستخدم ميتحكمش في المسار، ومفيش ملفين بنفس الاسم يكتبوا على بعض.</Q>
+</Quiz>

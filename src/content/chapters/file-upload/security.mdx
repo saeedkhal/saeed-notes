@@ -1,0 +1,155 @@
+---
+title: الغلطة الأمنية والنقطتين اللي بيميّزوك
+short: الأمان
+order: 4
+label: فصل ٤
+badge: الأمان · فصل ٤
+en: URL as a bearer key · short expiry · authorize before signing · HeadObject verification · pre-signed POST size limit
+keywords: expiry · authorization · HeadObject · content-length-range
+goal: تتعامل مع الـ pre-signed URL كمفتاح، وتعرف إيه اللي التوقيع بيحميه وإيه اللي لازم إنت تحميه، وتحدّد حجم الملف.
+part: الأمان
+color: c4
+---
+
+## الـ pre-signed URL مفتاح، مش لينك
+
+<Hl c="p">أي حد معاه الـ URL يقدر يستخدمه طول ما هو صالح</Hl>. مفيش login، ومفيش cookie. اللينك نفسه هو الإذن. يعني لو:
+
+<Chips items={["اتكتب في logs السيرفر أو الـ proxy", "اتبعت بالغلط في شات", "اتنسخ من الـ Network tab", "اتحفظ في history المتصفح"]} />
+
+…حد تاني يقدر يرفع أو ينزّل بيه. عشان كده **العمر لازم يبقى قصير**: ٥ لـ ١٠ دقايق كفاية يبدأ فيهم الـ client الرفع أو التنزيل.
+
+<Box type="story" icon="🔑" title="مفتاح الشقة المستأجرة">
+
+إنك تدّي السبّاك مفتاح ينفع لحد العصر حاجة، وإنك تدّيه نسخة من مفتاحك تفضل معاه للأبد حاجة تانية خالص. الـ pre-signed URL اللي عمره أسبوع هو النسخة اللي بتفضل معاه.
+
+</Box>
+
+## الأمان بيبدأ قبل التوقيع
+
+التوقيع بيثبت إن **السيرفر بتاعك** اللي ادّى الإذن. مش بيسأل إذا كان الإذن ده صح. السؤال ده شغلك إنت قبل ما توقّع:
+
+<Diagram
+  title="مين بيتحقق من إيه"
+  height={300}
+  mheight={500}
+  nodes={[
+    { id: "req", t: "طلب URL", s: "user + file + folder", c: 1, x: 88, y: 50, mx: 50, my: 6 },
+    { id: "server", t: "السيرفر", s: "قبل ما يوقّع", c: 4, x: 52, y: 18, mx: 50, my: 34 },
+    { id: "s3", t: "S3", s: "وقت الاستخدام", c: 3, x: 52, y: 82, mx: 50, my: 66 },
+    { id: "ok", t: "الطلب يعدّي", c: 5, x: 12, y: 50, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "req", to: "server", t: "الملف ده بتاعه؟ مسموح يرفع هنا؟", c: 4 },
+    { from: "server", to: "s3", t: "لينك موقّع", c: 4 },
+    { from: "s3", to: "ok", t: "التوقيع + المدة + العملية + الـ key", c: 3 },
+  ]}
+/>
+
+| مين | بيتحقق من إيه |
+| --- | --- |
+| **السيرفر** (قبل التوقيع) | المستخدم ده يملك الملف؟ مسموحله يرفع في الـ folder ده؟ نوع الملف مسموح؟ |
+| **S3** (وقت الاستخدام) | التوقيع سليم، والمدة مخلصتش، والعملية هي اللي اتوقّعت (URL الـ GET مينفعش PUT)، والـ key زي ما هو (لو غيّرت اسم الملف في اللينك التوقيع بيبوظ) |
+
+<Box type="warn" title="لو نسيت فحص السيرفر">
+
+السيرفر بيولّد GET URL لأي `fileId` من غير ما يتأكد إنه بتاع المستخدم؟ التوقيع هيبقى سليم و S3 هيوافق، والمستخدم نزّل ملف غيره. ده **IDOR** كلاسيكي، والتوقيع مش هيحميك منه.
+
+</Box>
+
+## النقطة الأولى: متصدقش الـ client لما يقول "رفعت"
+
+الـ client ممكن ينادي `/complete` من غير ما يرفع حاجة، أو يرفع ملف أكبر أو بنوع غير اللي قاله. اتأكد من S3 نفسه:
+
+<File name="complete.ts">
+
+```ts
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+
+app.post("/uploads/:key/complete", requireAuth, async (req, res) => {
+  const upload = await db.upload.findFirst({
+    where: { key: req.params.key, ownerId: req.user.id, status: "pending" },
+  });
+  if (!upload) return res.sendStatus(404);
+
+  let head;
+  try {
+    head = await s3.send(new HeadObjectCommand({ Bucket: process.env.BUCKET, Key: upload.key }));
+  } catch {
+    return res.status(409).json({ error: "file not found in storage" });
+  }
+  if ((head.ContentLength ?? 0) > MAX_BYTES) return res.status(413).json({ error: "too large" });
+
+  const file = await db.file.create({
+    data: {
+      key: upload.key,
+      ownerId: req.user.id,
+      name: req.body.name,
+      size: head.ContentLength,
+      contentType: head.ContentType,
+    },
+  });
+  await db.upload.update({ where: { key: upload.key }, data: { status: "done" } });
+  res.status(201).json({ id: file.id });
+});
+```
+
+</File>
+
+الـ size والـ content type جايين من **S3** مش من الـ body اللي الـ client باعته.
+
+## النقطة التانية: pre-signed PUT مش بيحدد الحجم
+
+الـ pre-signed PUT في S3 مفيهوش حد أقصى للحجم: أي حد معاه اللينك يقدر يرفع ملف ٥ جيجا. لو عايز max size، استخدم **pre-signed POST** بـ policy فيها `content-length-range`:
+
+<File name="presignedPost.ts">
+
+```ts
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
+
+const { url, fields } = await createPresignedPost(s3, {
+  Bucket: process.env.BUCKET!,
+  Key: key,
+  Conditions: [
+    ["content-length-range", 1, 10 * 1024 * 1024], // من ١ بايت لـ ١٠ ميجا
+    ["eq", "$Content-Type", contentType],
+  ],
+  Fields: { "Content-Type": contentType },
+  Expires: 300,
+});
+```
+
+</File>
+
+<File name="client.ts">
+
+```ts
+const form = new FormData();
+Object.entries(fields).forEach(([k, v]) => form.append(k, v));
+form.append("file", file); // لازم يبقى آخر حاجة في الفورم
+await fetch(url, { method: "POST", body: form });
+```
+
+</File>
+
+لو الملف أكبر من الحد، S3 هو اللي يرفضه، قبل ما يتخزن.
+
+## إعدادات الـ production
+
+<Cheat items={[
+  ["الـ bucket", "private. مفيش public read، وكل وصول بـ pre-signed URL"],
+  ["اسم الملف", "key بتولّده إنت (UUID)، والاسم الأصلي في الـ DB بس"],
+  ["عمر الـ URL", "٥ لـ ١٠ دقايق"],
+  ["الحجم", "pre-signed POST بـ content-length-range، وفحص HeadObject في complete"],
+  ["النوع", "allow-list للـ content types، وفحص الملف نفسه في background job"],
+  ["الـ processing", "thumbnails وفحص فيروسات وتحويل فيديو في background job، مش في الـ request"],
+  ["الملفات اللي اترفعت ومحدش عمل complete", "lifecycle rule يمسح uploads/ بعد يوم"],
+]} />
+
+<Checklist id="upload-security" title="خلّصت الفصل لما" items={["تشرح ليه الـ pre-signed URL مفتاح ولازم عمره قصير", "تفرّق اللي السيرفر بيتحقق منه عن اللي S3 بيتحقق منه", "تتأكد بـ HeadObject قبل ما تسجّل الـ metadata", "تحدّد الحجم بـ pre-signed POST و content-length-range", "تخلّي الـ bucket private والـ keys متولّدة"]} />
+
+<Quiz>
+<Q n={1} q="URL موقّع للـ GET، حد حاول يعمل بيه PUT. هيحصل إيه؟">S3 يرفض. العملية جزء من التوقيع.</Q>
+<Q n={2} q="ليه الـ size بيتاخد من HeadObject مش من الـ client؟">عشان الـ client ممكن يكدب. S3 هو مصدر الحقيقة.</Q>
+<Q n={3} q="عايز تمنع ملفات أكبر من ١٠ ميجا. pre-signed PUT ينفع؟">لأ لوحده. استخدم pre-signed POST بـ content-length-range.</Q>
+</Quiz>
