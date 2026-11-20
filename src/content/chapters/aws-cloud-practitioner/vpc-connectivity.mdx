@@ -1,82 +1,155 @@
 ---
 title: اتصال وحماية VPC في Production
-short: اتصال وحماية VPC
+short: VPC Security وConnectivity
 order: 23
 label: فصل ٢٣
 badge: Networking · فصل ٢٣
-en: Internet Gateway · NAT Gateway · Security Group · NACL · VPC endpoint
-keywords: IGW · NAT Gateway · SG · NACL · endpoints
-goal: تتبع egress وinbound وتختار controls تقلل التعرض والتكلفة.
+en: security group · network ACL · stateful · stateless · VPC Flow Logs · VPC peering · Transit Gateway · VPC endpoints · PrivateLink
+keywords: SG · NACL · peering · Transit Gateway · endpoints
+goal: تفرّق Security Groups عن NACLs، وتوصّل VPCs ببعض (peering ضد Transit Gateway)، وتوصل لخدمات AWS من private subnet من غير إنترنت بالـ VPC endpoints.
 part: Networking
 color: c3
 ---
 
-## المثال الأول: App خاصة تقرأ S3
+## 🧠 افهم: تلات أسئلة بعد ما الشبكة اتبنت
 
-`80` ECS task في private subnets تقرأ `5 TB/day` من S3 وتحتاج كمان package updates من الإنترنت.
+شبكة دُكّان اتعملت في الفصل اللي فات. دلوقتي في تلات أسئلة:
 
-١. S3 traffic تستخدم `Gateway VPC endpoint` بدل NAT.
-٢. internet egress العام يمر من NAT Gateway في public subnet ثم IGW.
-٣. app Security Group تسمح الاتصالات المطلوبة فقط.
-٤. endpoint policy وIAM يحددوا buckets/actions؛ وجود endpoint لا يمنح صلاحية تلقائيًا.
+1. **مين يكلم مين جوه الشبكة؟** السيرفر يكلم الـ database على port `5432` بس، ومحدش تاني.
+2. **إزاي الـ VPC دي تكلم VPC تانية؟** فريق الشحن عنده VPC لوحده في حساب تاني.
+3. **السيرفرات في الـ private subnet محتاجة توصل لـ S3**، من غير ما تطلع على الإنترنت وتدفع NAT.
 
-<Flow items={[
-  { t: "Private app", s: "تبدأ الاتصال", c: 3 }, "→",
-  { t: "S3 endpoint", s: "S3 traffic", c: 2 }, "+",
-  { t: "NAT → IGW", s: "internet egress", c: 4 },
-]} />
+<Hl c="y">Security Group = firewall على الـ resource (stateful). NACL = firewall على الـ subnet (stateless). Peering وTransit Gateway بيوصلوا VPCs. والـ VPC endpoints بتوصلك لخدمات AWS من جوه الشبكة.</Hl>
 
-## IGW وNAT
+<Box type="story" icon="🛂" title="أمن الكومباوند">
 
-`Internet Gateway` target للـ internet routing، مش firewall. public resource تحتاج route وpublic address وقواعد سماح.
+- **NACL** = **البوابة على مدخل العمارة**: بتفحص كل حد داخل **وكل حد خارج** لوحده، ومش فاكرة مين دخل. ممكن تقول «ممنوع فلان» صراحة.
+- **Security Group** = **البواب على باب الشقة**: عنده ليستة المسموحلهم بس. ولو سمح لحد يدخل، بيفتكره وبيسيبه يخرج من غير ما يسأل.
+- **VPC endpoint** = **ممر داخلي** من العمارة لمكتب البريد (S3) من غير ما تطلع الشارع خالص.
 
-Public NAT Gateway تسمح لمورد خاص يبدأ IPv4 connection للخارج ويستقبل الرد المرتبط، لكنها لا تتيح inbound عام يبدأ من الإنترنت. لها تكلفة بالساعة ومعالجة data، وتصميم multi-AZ يحتاج مراعاة resilience ومسار cross-AZ والتكلفة.
+</Box>
 
-## Security Group ضد NACL
+## 👀 تخيّل: طبقتين firewall وممر خاص
+
+<Diagram
+  title="الطلب بيعدّي على NACL الأول، وبعدين Security Group"
+  height={340}
+  mheight={580}
+  nodes={[
+    { id: "alb", t: "ALB", s: "sg-alb", c: 1, x: 90, y: 30, mx: 50, my: 5 },
+    { id: "nacl", t: "NACL", s: "على الـ subnet", c: 2, x: 64, y: 30, mx: 50, my: 28 },
+    { id: "sg", t: "Security Group", s: "sg-app: 80 من sg-alb", c: 3, x: 38, y: 30, mx: 50, my: 50 },
+    { id: "ec2", t: "EC2", s: "private subnet", c: 4, x: 12, y: 30, mx: 50, my: 72 },
+    { id: "s3", t: "S3", s: "عبر gateway endpoint", c: 5, x: 12, y: 88, mx: 50, my: 96 },
+  ]}
+  edges={[
+    { from: "alb", to: "nacl", t: "HTTP", c: 1 },
+    { from: "nacl", to: "sg", t: "rule ✓", c: 2 },
+    { from: "sg", to: "ec2", t: "allow ✓", c: 3 },
+    { from: "ec2", to: "s3", t: "من غير إنترنت", c: 5 },
+  ]}
+/>
+
+## 🔍 من جوه: كل أداة بتعمل إيه
+
+### Security Group ضد NACL
+
+| | Security Group | Network ACL |
+| --- | --- | --- |
+| بيتحط على | الـ ENI (الـ instance، RDS، ALB…) | الـ subnet |
+| State | **stateful**: الرد مسموح أوتوماتيك | **stateless**: لازم تسمح بالرد صراحة |
+| القواعد | allow بس | allow **و** deny |
+| الترتيب | كل القواعد بتتقيّم مع بعض | بالترتيب بالرقم، أول match بيكسب |
+| الافتراضي | inbound ممنوع، outbound مسموح | الـ default NACL بيسمح بكل حاجة |
+| أشهر استخدام | الحماية الأساسية لكل resource | طبقة إضافية: block لـ IP معين |
+
+<Box type="tip" title="Security Group يشاور على Security Group">
+
+بدل ما تكتب IPs، تقدر تقول «اسمح بـ port `5432` من **sg-app**». أي سيرفر جديد بـ sg-app هيتسمح له أوتوماتيك، حتى لو Auto Scaling طلّعه بـ IP جديد.
+
+</Box>
+
+### توصيل VPCs ببعض
 
 <Grid2>
-<Card title="Security Group" c={3}>
+<Card title="VPC Peering" c={1}>
 
-على ENI/resource، allow rules فقط، وstateful: الرد على اتصال مسموح يمر تلقائيًا. استخدم SG references بين app وdatabase بدل CIDRs واسعة لما يناسب.
+وصلة مباشرة بين VPCين (حتى في حسابات أو Regions مختلفة). **مش transitive**: لو A متوصلة بـ B وB بـ C، الـ A مش هتوصل لـ C. مناسب لعدد قليل من الـ VPCs.
 
 </Card>
-<Card title="Network ACL" c={4}>
+<Card title="AWS Transit Gateway" c={2}>
 
-على subnet، allow وdeny، وstateless. rules تُقيّم بالرقم وأول match تكسب؛ لازم تسمح return traffic والـ ephemeral ports حسب المسار.
+**hub مركزي**: كل VPC (وكل VPN وDirect Connect) بيتوصل بيه مرة، وهو بيوجّه بينهم. مناسب لما الـ VPCs تكتر، بدل ما تعمل peering لكل اتنين.
 
 </Card>
 </Grid2>
 
-## Incident timeline
+### VPC endpoints
 
-- `16:00`: تغيير NACL يسمح inbound `443` لكنه يمنع ephemeral return ports.
-- `16:02`: health checks تبدأ تفشل رغم إن SG صحيحة.
-- `16:05`: الفريق يقارن flow logs والقواعد ويكتشف إن NACL stateless.
-- `16:08`: rollback يرجع الخدمة.
+| النوع | لإيه | التكلفة |
+| --- | --- | --- |
+| **Gateway endpoint** | S3 وDynamoDB بس | مجاني |
+| **Interface endpoint** (AWS **PrivateLink**) | معظم خدمات AWS (SQS، Secrets Manager…) وخدمات شركات تانية | بالساعة + بالـ GB |
 
-الدرس: route تحدد الطريق، SG/NACL تحدد السماح، وDNS/TLS/application health طبقات أخرى. اختبر كل طبقة بدل افتراض إن "الشبكة مفتوحة".
+الفايدة: الترافيك مبيطلعش على الإنترنت، ومش محتاج NAT للخدمات دي.
 
-## Endpoints
+### VPC Flow Logs
 
-- Gateway endpoints لـ S3 وDynamoDB، ولا تعتمد على PrivateLink.
-- Interface endpoints تنشئ private ENIs وتستخدم AWS PrivateLink لخدمات مدعومة.
+بتسجّل **مين كلم مين** على مستوى الشبكة (IPs، ports، accepted ولا rejected)، وتبعتها لـ CloudWatch Logs أو S3. مفيدة جدًا لما تسأل «ليه الاتصال ده مش شغال؟» أو للتحقيق الأمني. **مش بتسجل محتوى الطلبات.**
 
-Gateway endpoints لـ S3 وDynamoDB لا تحمل رسمًا بحد ذاتها حسب الوضع الحالي في أكتوبر 2026، بينما interface endpoints لها تكلفة؛ راجع pricing والـ Region والـ service قبل التصميم.
+## 🛠️ طبّق: اقفل database دُكّان صح
 
-<Box type="warn" title="Endpoint لا يلغي IAM">
+⚠️ Security Groups مجانية. Flow Logs بتتحاسب على حجم الـ logs، فشغّلها دقايق وامسحها.
 
-لازم identity policy وresource policy وendpoint policy يتوافقوا. Private path مش معناه authorized request.
+1. **اعمل ٣ Security Groups** في الـ VPC بتاعة دُكّان:
+
+```bash
+aws ec2 create-security-group --group-name sg-alb --description "ALB" --vpc-id vpc-xxxx
+aws ec2 create-security-group --group-name sg-app --description "App servers" --vpc-id vpc-xxxx
+aws ec2 create-security-group --group-name sg-db  --description "Database" --vpc-id vpc-xxxx
+```
+
+2. **اكتب القواعد** (استبدل الـ IDs):
+
+```bash
+# الإنترنت → ALB على 443
+aws ec2 authorize-security-group-ingress --group-id sg-ALB --protocol tcp --port 443 --cidr 0.0.0.0/0
+# ALB → app على 80 (بالـ Security Group مش بالـ IP)
+aws ec2 authorize-security-group-ingress --group-id sg-APP --protocol tcp --port 80 --source-group sg-ALB
+# app → database على 5432 بس
+aws ec2 authorize-security-group-ingress --group-id sg-DB --protocol tcp --port 5432 --source-group sg-APP
+```
+
+3. **اقرا السلسلة:** الإنترنت ← ALB ← app ← db. كل حلقة بتسمح بالحلقة اللي قبلها بس. **المتوقع:** لو حد وصل للـ ALB، مش هيقدر يكلم الـ database مباشرة.
+4. **(اختياري) Flow Logs:** `VPC` ← اختار `dukkan` ← `Flow logs` ← `Create` ← destination: CloudWatch Logs ← filter `REJECT`. جرّب اتصال ممنوع وشوف السطر بيظهر.
+
+🧹 **تنضيف:** امسح الـ Flow log والـ log group، وامسح الـ Security Groups لو مش هتكمل.
+
+## ⚖️ قارن: مين بيحل أنهي مشكلة؟
+
+| المشكلة | الحل |
+| --- | --- |
+| السماح لترافيك معين يوصل لـ instance | **Security Group** |
+| منع IP معين على مستوى subnet كاملة | **NACL** (deny rule) |
+| VPCين محتاجين يكلموا بعض | **VPC peering** |
+| ٢٠ VPC + data center محتاجين يتوصلوا | **Transit Gateway** |
+| private subnet توصل لـ S3 من غير إنترنت ومجانًا | **Gateway endpoint** |
+| private subnet توصل لـ SQS أو خدمة SaaS بشكل خاص | **Interface endpoint / PrivateLink** |
+| عايز تشوف الاتصالات المرفوضة | **VPC Flow Logs** |
+
+<Box type="interview" title="الفرق الأشهر في الامتحان">
+
+**stateful** ← Security Group. **stateless** ← NACL.
+**instance level** ← Security Group. **subnet level** ← NACL.
+**deny rules** ← NACL بس.
 
 </Box>
 
-## 🧪 تمرين: قلل NAT bill
-
-App تنقل `12 TB/month` إلى S3 عبر NAT، وتعمل `2 TB/month` internet egress. ارسم المسار الحالي والجديد مع S3 Gateway endpoint. اكتب SG وNACL assumptions، ثم افترض فشل NAT في AZ-A وحدد أثره على tasks بكل AZ.
-
-<Checklist id="aws-cp-23" title="خلّصت الفصل لما" items={["تشرح IGW كطريق مش تصريح", "تعرف NAT للـ egress وتكلفتها", "تقول SG stateful وallow فقط", "تقول NACL stateless وallow/deny", "تميّز Gateway endpoint من Interface endpoint"]} />
+<Checklist id="aws-cp-23" title="خلّصت الفصل لما" items={["تفرّق Security Group عن NACL في الـ state والمستوى والقواعد", "تكتب سلسلة Security Groups بتشاور على بعض", "تفرّق VPC peering عن Transit Gateway وتعرف إن peering مش transitive", "تفرّق gateway endpoint عن interface endpoint", "تعرف Flow Logs بتسجل إيه ومبتسجلش إيه"]} />
 
 <Quiz>
-<Q n={1} q="Inbound مسموح في SG؛ هل محتاج outbound rule للرد؟">لأ للرد المرتبط، لأن SG stateful.</Q>
-<Q n={2} q="SG سليمة لكن NACL منعت ephemeral return ports؛ النتيجة؟">الاتصال ممكن يفشل لأن NACL stateless وتحتاج قواعد للاتجاهين.</Q>
-<Q n={3} q="Private app تقرأ S3 بكثافة؛ إزاي تقلل NAT؟">Gateway VPC endpoint لـ S3 مع IAM وendpoint/bucket policies مناسبة.</Q>
+<Q n={1} q="firewall على مستوى الـ subnet، stateless، وبيدعم deny. ده إيه؟">**Network ACL**.</Q>
+<Q n={2} q="عندك ٣٠ VPC وdata center وعايزهم يتوصلوا من مكان مركزي. أنهي خدمة؟">**AWS Transit Gateway**.</Q>
+<Q n={3} q="سيرفرات في private subnet محتاجة توصل لـ S3 من غير NAT ولا إنترنت. الحل؟">**VPC gateway endpoint** لـ S3.</Q>
+<Q n={4} q="عايز تحقق ليه اتصال بين سيرفرين بيترفض. أنهي أداة؟">**VPC Flow Logs**.</Q>
 </Quiz>

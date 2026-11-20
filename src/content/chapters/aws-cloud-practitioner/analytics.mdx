@@ -4,55 +4,161 @@ short: Analytics
 order: 33
 label: فصل ٣٣
 badge: Data وAI والهجرة · فصل ٣٣
-en: Athena · Glue · EMR · Kinesis · Redshift · QuickSight · OpenSearch
-keywords: SQL على S3 · تجهيز · Big Data · Streaming · Warehouse · Dashboard · Search
-goal: تميّز خدمات التحليل من كلمة المشكلة بدل ما تحفظ قايمة أسماء.
+en: data lake · Amazon Athena · AWS Glue · Amazon EMR · Amazon Kinesis · Amazon Data Firehose · Amazon Redshift · Amazon QuickSight · Amazon OpenSearch Service · AWS Lake Formation
+keywords: ingest · store · catalog · query · visualize · stream
+goal: تمشي مع الداتا في رحلتها (تجميع، تخزين، تجهيز، سؤال، عرض)، وتعرف كل خدمة analytics بتقعد في أنهي مرحلة.
 part: Data وAI والهجرة
 color: c3
 ---
 
-## Media platform: من click لتقرير
+## 🧠 افهم: عم حسن عايز يفهم الأرقام
 
-المنصة تستقبل 40,000 event/sec، وتحتاج fraud alert خلال 5 ثواني، تقرير revenue يومي، وsearch في logs.
+بعد سنة، عم حسن سأل أسئلة:
 
-1. التطبيقات تبعت events إلى `Kinesis Data Streams`.
-2. consumers يعالجوا stream؛ `Firehose` يوصل نسخة لـ S3.
-3. `Glue Crawler` يكتشف schema ويحفظها في Data Catalog.
-4. `Athena` يعمل ad-hoc SQL على ملفات S3.
-5. ETL ينظف الداتا ويحمل curated tables إلى `Redshift`.
-6. `QuickSight` يعرض dashboard للإدارة.
-7. `OpenSearch` يفهرس logs للبحث شبه اللحظي.
+- «أكتر ١٠ منتجات اتباعت في رمضان؟»
+- «الزباين بيسيبوا السلة في أنهي خطوة؟»
+- «عايز شاشة على الموبايل فيها المبيعات **لحظة بلحظة**.»
 
-لو analyst عمل Athena scan على 10 TB CSV كل query، الحل يشتغل لكن التكلفة عالية. تحويل لـ Parquet وتقسيم partitions ممكن يقلل scan بشكل كبير.
+داتا دُكّان متفرقة: طلبات في Aurora، clicks الموقع في logs، ملفات من المخزن CSV. ومش هينفع تعمل تقارير تقيلة على database الـ production (هتبطّأ الزباين).
 
-## كل خدمة بتحل إيه؟
+الحل: نجمع الداتا في مكان للتحليل (غالبًا **S3 كـ data lake**)، نجهّزها، ونسألها بأداة مناسبة، ونعرضها في dashboard.
 
-- `Athena`: serverless SQL على S3 ومصادر مدعومة؛ ممتاز للـ ad-hoc، والدفع غالبًا حسب scan.
-- `Glue`: catalog وcrawlers وETL/data integration.
-- `EMR`: Spark وHive وFlink وأدوات Big Data بتحكم أوسع؛ managed clusters أو serverless حسب workload.
-- `Kinesis`: ingest ومعالجة streaming؛ Streams للـ consumers، Firehose للتوصيل المُدار.
-- `Redshift`: data warehouse لتقارير SQL متكررة ومعقدة على بيانات كبيرة.
-- `QuickSight`: BI وvisualization؛ مش storage ولا ETL.
-- `OpenSearch`: full-text search وlog/clickstream analytics؛ مش warehouse عام.
+<Hl c="o">الداتا بتمشي في خط: تتجمع (Kinesis) ← تتخزن (S3) ← تتجهّز وتتفهرس (Glue) ← تتسأل (Athena أو Redshift أو EMR) ← تتعرض (QuickSight).</Hl>
 
-## اختيارات وفشل متوقع
+<Box type="story" icon="🌾" title="من الغيط للسوبر ماركت">
 
-Fraud خلال 5 ثواني يفشل لو pipeline batch كل ساعة؛ اختار streaming. تقرير board ثابت على joins كبيرة قد يبقى أنسب في Redshift من scan خام متكرر في Athena. فريق محتاج Spark libraries وتحكم في jobs يميل لـ EMR؛ ETL مُدار أبسط يميل لـ Glue.
-
-<Box type="warn" title="اسم QuickSight">
-
-في صفحات AWS الحديثة ممكن تقابل `Amazon Quick` ضمن تجربة أوسع، بينما CLF-C02 ومواد كتير تستخدم `Amazon QuickSight`. راجع دليل الامتحان والـ docs في أكتوبر ٢٠٢٦.
+- **Kinesis** = العربيات اللي بتنقل الخضار من الغيط **أول بأول**.
+- **S3 data lake** = **المخزن الكبير** اللي كل حاجة بتتحط فيه زي ما هي.
+- **Glue** = **عمال الفرز والتغليف**، وكمان **الدفتر** اللي مكتوب فيه كل صنف فين.
+- **Athena** = إنك تسأل المخزن سؤال وتاخد الإجابة من غير ما تنقل حاجة.
+- **Redshift** = **سوبر ماركت** منظّم ومرتب للأسئلة الكتير والسريعة.
+- **QuickSight** = **اللافتة** اللي على الباب فيها العروض والأرقام.
 
 </Box>
 
-## 🧪 Lab ورقي
+## 👀 تخيّل: خط داتا دُكّان
 
-ارسم flow لـ 2 TB/day من events. اكتب latency المطلوبة، retention، query frequency، وتكلفة scan؛ بعدين اختار stream وcatalog وquery وwarehouse وdashboard.
+<Diagram
+  title="من الـ click للـ dashboard"
+  height={360}
+  mheight={620}
+  nodes={[
+    { id: "src", t: "الموقع + Aurora", s: "clicks + طلبات", c: 1, x: 92, y: 50, mx: 50, my: 4 },
+    { id: "kin", t: "Kinesis / Firehose", s: "streaming", c: 2, x: 72, y: 50, mx: 50, my: 22 },
+    { id: "s3", t: "S3 data lake", s: "raw + clean", c: 3, x: 52, y: 50, mx: 50, my: 40 },
+    { id: "glue", t: "Glue", s: "ETL + Data Catalog", c: 4, x: 52, y: 12, mx: 18, my: 58 },
+    { id: "ath", t: "Athena", s: "SQL على S3", c: 5, x: 28, y: 30, mx: 50, my: 70 },
+    { id: "rs", t: "Redshift", s: "warehouse", c: 5, x: 28, y: 80, mx: 82, my: 58 },
+    { id: "qs", t: "QuickSight", s: "dashboards", c: 1, x: 6, y: 55, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "src", to: "kin", c: 1 },
+    { from: "kin", to: "s3", t: "batch كل دقيقة", c: 2 },
+    { from: "glue", to: "s3", t: "يفهرس ويجهّز", c: 4, dash: true },
+    { from: "s3", to: "ath", c: 3 },
+    { from: "s3", to: "rs", c: 3 },
+    { from: "ath", to: "qs", c: 5 },
+    { from: "rs", to: "qs", c: 5 },
+  ]}
+/>
 
-<Checklist id="aws-cp-33" title="خلّصت الفصل لما" items={["تفرّق بين data at rest والـ streaming", "تختار Athena وGlue وEMR من نوع المهمة", "تفرق بين Redshift وQuickSight وOpenSearch"]} />
+## 🔍 من جوه: كل خدمة ومرحلتها
+
+### التجميع (ingest)
+
+- **Amazon Kinesis Data Streams:** stream لحظي (clicks، IoT). إنت بتكتب consumers بيقروا منه في real time.
+- **Amazon Data Firehose:** أبسط: بياخد الـ stream ويوصّله لـ S3 أو Redshift أو OpenSearch، وممكن يحوّل الصيغة، **من غير consumers تكتبها**.
+- **Amazon MSK:** Apache Kafka مُدار، لو الفريق بيستخدم Kafka.
+
+### التخزين والفهرسة
+
+- **S3** هو الـ data lake: رخيص وبيشيل أي حجم وأي صيغة.
+- **AWS Glue:** **ETL serverless** (يقرا، ينضّف، يحوّل)، و**Glue Data Catalog** (فهرس بأسماء الجداول والأعمدة وأماكنها في S3)، و**crawlers** بتكتشف الـ schema لوحدها.
+- **AWS Lake Formation:** يبني data lake ويحط **صلاحيات دقيقة** (مين يشوف أنهي عمود).
+
+### السؤال والمعالجة
+
+- **Amazon Athena:** **SQL على ملفات S3 مباشرة**، serverless، بتدفع على الداتا اللي اتعملها scan. مثالي للأسئلة المتقطعة.
+- **Amazon Redshift:** **data warehouse** للأسئلة الكتير والتقيلة على داتا منظمة (petabytes)، والـ BI. فيه **Redshift Serverless**.
+- **Amazon EMR:** Spark وHadoop وغيرهم مُدارين، لمعالجة big data بأدوات open source.
+- **Amazon OpenSearch Service:** بحث نصي وتحليل logs.
+
+### العرض
+
+- **Amazon QuickSight:** dashboards وتقارير BI تفاعلية (وفيه قدرات AI لأسئلة بالكلام، راجع الـ docs للاسم الحالي).
+
+## 🛠️ طبّق: اسأل ملف مبيعات بـ SQL من غير database
+
+⚠️ Athena بتتحاسب على الداتا اللي بتتعملها scan (ملف صغير = شبه صفر). نتايج الـ queries بتتحفظ في S3.
+
+1. **اعمل ملف** `sales.csv`:
+
+<File name="sales.csv">
+
+```text
+order_id,product,qty,price,city
+1001,عيش بلدي,10,5,القاهرة
+1002,جبنة رومي,1,120,الجيزة
+1003,عيش بلدي,4,5,القاهرة
+1004,زيت,2,95,إسكندرية
+```
+
+</File>
+
+2. **ارفعه لـ S3** في فولدر لوحده:
+
+```bash
+aws s3 cp sales.csv s3://dukkan-lake-<رقم>/sales/sales.csv
+```
+
+3. **افتح Athena** ← اختار مكان للنتايج (bucket/فولدر `athena-results/`) ← واكتب:
+
+```sql
+CREATE EXTERNAL TABLE sales (
+  order_id int, product string, qty int, price double, city string
+)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+LOCATION 's3://dukkan-lake-<رقم>/sales/'
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+SELECT product, SUM(qty * price) AS revenue
+FROM sales
+GROUP BY product
+ORDER BY revenue DESC;
+```
+
+**المتوقع:** جدول بالإيراد لكل منتج، والـ query بتقولك **Data scanned** قد إيه، وده اللي بتدفع عليه. لاحظ إن **مفيش database اتعملت**: الداتا لسه ملف في S3.
+
+4. **فكّر:** لو الملفات بقت ١٠٠٠ ملف وبتتضاف كل يوم، مين يكتشف الأعمدة ويحدّث الجدول لوحده؟ (Glue crawler).
+
+🧹 **تنضيف:** `DROP TABLE sales;` وامسح الـ bucket.
+
+## ⚖️ قارن: الخدمات اللي بتتلخبط
+
+| السؤال | الخدمة |
+| --- | --- |
+| SQL على ملفات في S3 من غير سيرفرات | **Athena** |
+| data warehouse للـ BI والأسئلة التقيلة المتكررة | **Redshift** |
+| تجهيز وتحويل الداتا (ETL) وفهرستها | **Glue** |
+| Spark/Hadoop للـ big data | **EMR** |
+| داتا لحظية محتاج تعالجها بنفسك | **Kinesis Data Streams** |
+| داتا لحظية عايز توصلها لـ S3/Redshift وخلاص | **Data Firehose** |
+| Kafka مُدار | **MSK** |
+| بحث نصي وlogs | **OpenSearch Service** |
+| dashboards | **QuickSight** |
+| صلاحيات دقيقة على data lake | **Lake Formation** |
+
+| | Athena | Redshift |
+| --- | --- | --- |
+| الداتا فين | في S3 زي ما هي | محمّلة في الـ warehouse (وتقدر تقرا من S3 كمان) |
+| مناسب لـ | أسئلة متقطعة واستكشاف | dashboards وأسئلة كتير ومتكررة |
+| الدفع | على الـ scan | على السعة أو الاستخدام (Serverless) |
+
+<Checklist id="aws-cp-33" title="خلّصت الفصل لما" items={["ترتب مراحل الداتا: ingest وstore وprepare وquery وvisualize", "تفرّق Athena عن Redshift", "تعرف Glue بيعمل ETL وData Catalog", "تفرّق Kinesis Data Streams عن Data Firehose", "تعمل query بـ Athena على CSV في S3"]} />
 
 <Quiz>
-<Q n={1} q="Logs في S3 وSQL سريع من غير cluster؟">Athena، مع تحسين format وpartitioning.</Q>
-<Q n={2} q="Crawler يكتشف schema ويحطه في catalog؟">AWS Glue.</Q>
-<Q n={3} q="Dashboard فوق Redshift؟">QuickSight؛ OpenSearch للبحث والـ logs.</Q>
+<Q n={1} q="عايز تعمل SQL على logs متخزنة في S3 من غير ما تحمّلها أو تعمل سيرفرات. أنهي خدمة؟">**Amazon Athena**.</Q>
+<Q n={2} q="عايز dashboards تفاعلية لمديري الشركة. أنهي خدمة؟">**Amazon QuickSight**.</Q>
+<Q n={3} q="محتاج ETL serverless يجهّز الداتا ويعمل catalog للجداول. أنهي خدمة؟">**AWS Glue**.</Q>
+<Q n={4} q="clicks الموقع لحظيًا عايز توصلها لـ S3 من غير ما تكتب consumers. أنهي خدمة؟">**Amazon Data Firehose**.</Q>
 </Quiz>

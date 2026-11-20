@@ -4,72 +4,163 @@ short: SQS وSNS
 order: 26
 label: فصل ٢٦
 badge: ربط الأنظمة · فصل ٢٦
-en: Amazon SQS · Amazon SNS · decoupling · DLQ · fanout
-keywords: queue · pub/sub · DLQ · fanout
-goal: تصمم buffering وfanout وتتعامل مع duplicate وbacklog وفشل المستهلك.
+en: decoupling · Amazon SQS · standard · FIFO · visibility timeout · dead-letter queue · Amazon SNS · topics · fan-out · Amazon MQ
+keywords: queue · topic · fan-out · decoupling · DLQ
+goal: تفهم ليه بنفصل الأنظمة عن بعض، وتفرّق الـ queue (رسالة لمستهلك واحد يسحبها) عن الـ topic (رسالة بتتبعت لكل المشتركين)، وتبني fan-out لطلب دُكّان.
 part: ربط الأنظمة
 color: c1
 ---
 
-## المثال الأول: Order confirmed
+## 🧠 افهم: الطلب مستني كل حاجة تخلص
 
-Checkout يستقبل `1,000 order/s`. إرسال email يأخذ `800 ms`، analytics أحيانًا تتوقف `20 دقيقة`، والمستخدم لازم يستلم response خلال `300 ms`.
+لما زبون يضغط «اطلب» في دُكّان، الكود بيعمل بالترتيب:
 
-١. checkout يحفظ order أولًا، ثم ينشر `OrderConfirmed`.
-٢. SNS تعمل fanout إلى SQS queue للإيميل، queue للمخزون، وqueue للتحليلات.
-٣. كل consumer يشتغل بسرعته؛ تعطل analytics لا يوقف checkout أو email.
-٤. كل consumer يستخدم `orderId` كـ idempotency key لأن التسليم قد يتكرر.
+1. يحفظ الطلب.
+2. يبعت إيميل تأكيد.
+3. يبلّغ المخزن.
+4. يبعت SMS للمندوب.
 
-<Flow items={[
-  { t: "Order service", s: "durable write", c: 1 }, "→",
-  { t: "SNS Topic", s: "fanout", c: 2 }, "→",
-  { t: "3 SQS queues", s: "independent pace", c: 3 }, "→",
-  { t: "DLQs", s: "investigate", c: 5 },
-]} />
+لو خدمة الإيميل بطيئة ٨ ثواني، **الزبون مستني ٨ ثواني**. ولو خدمة الـ SMS وقعت، **الطلب كله فشل**، رغم إن الطلب نفسه اتحفظ تمام. ده اسمه **tight coupling**: كل جزء مربوط بالتاني.
 
-## SQS: Buffer وضغط متحكم فيه
+الحل: الكود يحفظ الطلب ويرمي **رسالة**: «في طلب جديد رقم 1001»، ويرد على الزبون فورًا. وكل خدمة تانية تاخد الرسالة وتشتغل على مهلها. ده **decoupling**.
 
-Standard queues قابلة للتوسع وتسليمها at-least-once، فالترتيب والتكرار لازم يدخلوا التصميم. FIFO تضيف ordering وdeduplication semantics ضمن حدودها، لكنها مش اختيار تلقائي لكل نظام.
+<Hl c="b">SQS = طابور: الرسالة بتستنى لحد ما مستهلك يسحبها ويخلصها. SNS = ميكروفون: الرسالة بتتبعت فورًا لكل المشتركين. ومع بعض = fan-out.</Hl>
 
-`visibility timeout` يخفي message أثناء المعالجة. لو worker يحتاج `90 ثانية` والـ timeout `30 ثانية`، message ممكن تظهر لworker تاني قبل انتهاء الأول. اضبطه على زمن المعالجة أو جدده، مع idempotency دائمًا.
+<Box type="story" icon="🧾" title="المطعم والمطبخ">
 
-لو يدخل `1,000 msg/s` والعمال يخلصوا `700 msg/s`، backlog يزيد `300 msg/s`؛ بعد `20 دقيقة` يبقى `360,000` message. Queue تمنع السقوط الفوري لكنها لا تخلق capacity.
-
-## SNS: Fanout
-
-SNS publish/subscribe تدفع نسخة لكل subscription مطابقة: SQS أو Lambda أو HTTP/S أو email وغيرها. استخدم filter policies بحذر لتقليل traffic غير المطلوب، لكن راقب إن event schema والتصفية متوافقين.
-
-<Grid2>
-<Card title="SQS" c={1}>
-
-واحد من pool المستهلكين يعالج message، مع buffering وpolling وretention.
-
-</Card>
-<Card title="SNS" c={2}>
-
-نسخة لكل subscriber مستقل. لا تعتمد عليها وحدها كـ work queue لكل فريق لو محتاج buffering وعزل.
-
-</Card>
-</Grid2>
-
-## DLQ مش نهاية ناجحة
-
-بعد `5` محاولات، message تالفة تدخل DLQ. alarm لازم يفتح incident، الفريق يصلح schema/consumer، يختبر message، ثم يعمل redrive بمعدل لا يعيد إسقاط النظام. حذف DLQ من غير تحقيق يخفي data loss.
-
-<Box type="warn" title="Dual write ممكن يضيّع event">
-
-لو التطبيق حفظ order ثم وقع قبل publish، الداتا موجودة والحدث ضاع. أنماط زي transactional outbox تعالج الفجوة؛ مجرد إضافة queue لا تجعل النشر atomic مع database.
+- **SQS** زي **حامل الأوردرات** في المطبخ: الجرسون بيعلّق الورقة ويرجع للزباين. الطباخ بياخد ورقة لما يفضى. لو الطباخ تعبان، الأوراق مستنية مش بتضيع. ولو جه طباخ تاني، بيسحبوا من نفس الحامل.
+- **SNS** زي **ميكروفون المطعم**: «أوردر ترابيزة ٥ جاهز!». كل اللي بيسمع (الجرسون، الكاشير، المدير) بيعرف في نفس اللحظة. بس لو حد مش موجود، مش هيسمع.
 
 </Box>
 
-## 🧪 تمرين: احسب backlog
+## 👀 تخيّل: fan-out لطلب دُكّان
 
-Video pipeline تستقبل `500 job/min`، وكل worker يعالج `20 job/min` وعندك `15 worker`. احسب نمو backlog في ساعة، واقترح scaling. أضف poison message، visibility timeout، DLQ alarm، وidempotency key يمنع إخراج الفيديو مرتين.
+<Diagram
+  title="رسالة واحدة → كذا طابور → كل خدمة بسرعتها"
+  height={380}
+  mheight={620}
+  nodes={[
+    { id: "api", t: "Checkout API", s: "يحفظ ويرد فورًا", c: 1, x: 90, y: 50, mx: 50, my: 4 },
+    { id: "sns", t: "SNS topic", s: "order-created", c: 2, x: 64, y: 50, mx: 50, my: 24 },
+    { id: "q1", t: "emails", s: "SQS", c: 3, x: 38, y: 12, mx: 17, my: 52 },
+    { id: "q2", t: "stock", s: "SQS", c: 3, x: 38, y: 50, mx: 50, my: 52 },
+    { id: "q3", t: "courier", s: "SQS", c: 3, x: 38, y: 88, mx: 83, my: 52 },
+    { id: "w1", t: "Lambda إيميل", c: 4, x: 10, y: 12, mx: 18, my: 85 },
+    { id: "w2", t: "خدمة المخزن", c: 4, x: 10, y: 50, mx: 50, my: 85 },
+    { id: "dlq", t: "DLQ", s: "رسايل فشلت", c: 5, x: 10, y: 88, mx: 82, my: 85 },
+  ]}
+  edges={[
+    { from: "api", to: "sns", t: "publish", c: 1 },
+    { from: "sns", to: "q1", c: 2 },
+    { from: "sns", to: "q2", c: 2 },
+    { from: "sns", to: "q3", c: 2 },
+    { from: "q1", to: "w1", t: "poll", c: 3 },
+    { from: "q2", to: "w2", t: "poll", c: 3 },
+    { from: "q3", to: "dlq", t: "بعد ٥ محاولات", c: 5, dash: true },
+  ]}
+/>
 
-<Checklist id="aws-cp-26" title="خلّصت الفصل لما" items={["تشرح decoupling بمسار order", "تختار SQS للـ buffering", "تختار SNS للـ fanout", "تحسب backlog وتضبط visibility timeout", "تعامل DLQ كـ incident وتمنع duplicates"]} />
+1. الـ API بيحفظ الطلب ويعمل **publish** لرسالة واحدة على **SNS topic**.
+2. الـ topic بيبعت نسخة لكل **SQS queue** مشتركة فيه.
+3. كل خدمة بتسحب من الطابور بتاعها **بسرعتها**. لو خدمة المخزن واقفة ساعة، رسايلها مستنية في الطابور.
+4. رسالة فشلت ٥ مرات؟ بتتنقل لـ **dead-letter queue** عشان حد يبص عليها، بدل ما تفضل تلف.
+
+## 🔍 من جوه: SQS وSNS بالتفصيل
+
+### Amazon SQS
+
+| | Standard | FIFO |
+| --- | --- | --- |
+| الترتيب | best-effort، ممكن يختلف | **بالظبط بالترتيب** (جوه message group) |
+| التكرار | **at-least-once**: ممكن الرسالة توصل مرتين | **exactly-once processing** |
+| الـ throughput | تقريبًا مفيش حد | أقل (وفي high-throughput mode) |
+| مثال | إيميلات، تصغير صور | خصم من رصيد، خطوات لازم بالترتيب |
+
+مفاهيم مهمة:
+
+- **Polling:** المستهلك هو اللي **بيسحب** الرسايل. (Long polling بيقلل الطلبات الفاضية.)
+- **Visibility timeout:** لما مستهلك ياخد رسالة، بتستخبى عن الباقيين فترة. لو خلص يمسحها. لو وقع قبل ما يخلص، بتظهر تاني لحد تاني.
+- **Retention:** الرسالة بتستنى لحد **١٤ يوم** (الافتراضي ٤ أيام).
+- **Dead-letter queue (DLQ):** طابور للرسايل اللي فشلت أكتر من عدد معين.
+- علشان Standard ممكن يكرر، خلّي المستهلك **idempotent**: لو عالج نفس الطلب مرتين، النتيجة متتكررش.
+
+### Amazon SNS
+
+- **Pub/sub:** بتعمل **publish** على **topic**، وكل **subscribers** بيستلموا (**push**).
+- أنواع المشتركين: SQS، Lambda، HTTP/S، email، SMS، mobile push.
+- **Message filtering:** كل مشترك ياخد الرسايل اللي تهمه بس (مثلًا طلبات القاهرة بس).
+- الرسالة **مش بتتخزن** لو المشترك مش متاح (SNS بيعمل retries، بس هو مش طابور). عشان كده بنحط SQS ورا SNS.
+
+### Amazon MQ
+
+broker مُدار لـ **ActiveMQ** و**RabbitMQ**. مناسب لو عندك تطبيقات قديمة بتستخدم protocols زي AMQP أو MQTT أو JMS ومش عايز تغيّر الكود. لتطبيقات جديدة على AWS، SQS/SNS غالبًا أبسط.
+
+## 🛠️ طبّق: fan-out لطلبات دُكّان
+
+⚠️ SQS وSNS ليهم Free Tier شهري كبير. التجربة دي هتستهلك كام request.
+
+1. **اعمل topic وqueue:**
+
+```bash
+aws sns create-topic --name dukkan-order-created
+aws sqs create-queue --queue-name dukkan-emails
+```
+
+2. **اشترك الـ queue في الـ topic:** أسهل من الـ console: افتح الـ queue ← `Subscribe to Amazon SNS topic` ← اختار الـ topic. (الـ console بيظبط الـ queue policy اللي بتسمح لـ SNS يكتب.)
+3. **اعمل publish:**
+
+```bash
+aws sns publish --topic-arn arn:aws:sns:eu-central-1:<ACCOUNT_ID>:dukkan-order-created \
+  --message '{"orderId":"1001","total":350}'
+```
+
+4. **اسحب من الطابور:**
+
+```bash
+aws sqs receive-message --queue-url <QUEUE_URL> --wait-time-seconds 10
+```
+
+**المتوقع:** الرسالة ظاهرة (جوه envelope بتاع SNS). لاحظ الـ `ReceiptHandle`.
+
+5. **جرّب الـ visibility timeout:** شغّل `receive-message` تاني فورًا. مش هتلاقيها (مستخبية). استنى ٣٠ ثانية وجرب: هتظهر تاني، لأنك مسحتهاش. امسحها:
+
+```bash
+aws sqs delete-message --queue-url <QUEUE_URL> --receipt-handle <RECEIPT_HANDLE>
+```
+
+6. **(اختياري)** اعمل queue تانية `dukkan-warehouse` واشتركها. اعمل publish واحد ولاحظ إن الرسالة وصلت للطابورين.
+
+🧹 **تنضيف:**
+
+```bash
+aws sqs delete-queue --queue-url <QUEUE_URL>
+aws sns delete-topic --topic-arn <TOPIC_ARN>
+```
+
+## ⚖️ قارن: SQS ولا SNS ولا MQ؟
+
+| | SQS | SNS | Amazon MQ |
+| --- | --- | --- | --- |
+| النموذج | queue (طابور) | pub/sub (topic) | message broker |
+| الرسالة بتروح لـ | **مستهلك واحد** يعالجها | **كل** المشتركين | حسب الإعداد |
+| مين بيتحرك | المستهلك **بيسحب** (pull) | SNS **بيزق** (push) | الاتنين |
+| بيخزن الرسايل؟ | **أيوه**، لحد ١٤ يوم | لأ | أيوه |
+| مناسب لـ | buffering، توزيع شغل، decoupling | إشعارات، fan-out | نقل تطبيقات بـ AMQP/MQTT/JMS |
+
+<Box type="interview" title="الكلمات المفتاحية">
+
+«decouple»، «buffer»، «queue»، «process asynchronously» ← **SQS**.
+«notify multiple subscribers»، «pub/sub»، «fan-out»، «SMS/email notifications» ← **SNS**.
+«existing app uses RabbitMQ / ActiveMQ / AMQP / MQTT» ← **Amazon MQ**.
+«order matters»، «no duplicates» ← **SQS FIFO**.
+
+</Box>
+
+<Checklist id="aws-cp-26" title="خلّصت الفصل لما" items={["تشرح coupling وdecoupling بموقف الطلب", "تفرّق queue عن topic بتشبيه المطبخ", "تفرّق SQS Standard عن FIFO", "تشرح visibility timeout وDLQ", "تبني fan-out بـ SNS + SQS"]} />
 
 <Quiz>
-<Q n={1} q="يدخل 1,000 msg/s ويتعالج 700؛ إيه اللي يحصل؟">الـ backlog يزيد 300 message كل ثانية لحد ما تزود capacity أو يقل الحمل.</Q>
-<Q n={2} q="ثلاث خدمات لازم كل واحدة تستلم نفس الحدث باستقلال؛ التصميم؟">SNS fanout إلى SQS queue منفصلة لكل خدمة.</Q>
-<Q n={3} q="Message دخلت DLQ؛ هل اتصلحت؟">لأ؛ اتعزلت. لازم تحقيق وإصلاح واختبار ثم redrive آمن.</Q>
+<Q n={1} q="عايز رسالة واحدة توصل لـ ٣ خدمات مختلفة وكل واحدة تشتغل بسرعتها من غير ما تضيع رسايل. التصميم؟">**SNS topic** وتحته **٣ SQS queues** (fan-out).</Q>
+<Q n={2} q="معاملات مالية لازم تتعالج بالترتيب ومن غير تكرار. أنهي queue؟">**SQS FIFO**.</Q>
+<Q n={3} q="رسالة بتفشل في المعالجة كل مرة وبتسد الطابور. الحل؟">**Dead-letter queue** بعد عدد محاولات.</Q>
+<Q n={4} q="تطبيق قديم بيستخدم RabbitMQ وعايز ينقل لخدمة مُدارة من غير تغيير الكود. أنهي خدمة؟">**Amazon MQ**.</Q>
 </Quiz>

@@ -1,75 +1,145 @@
 ---
 title: اختار حارس الأمان الصح
-short: خدمات الأمان
+short: Security Services
 order: 31
 label: فصل ٣١
 badge: التشغيل والحوكمة · فصل ٣١
-en: AWS WAF · Shield · GuardDuty · Inspector · Macie · Security Hub · Detective
-keywords: web attacks · DDoS · threats · vulnerabilities · sensitive data
-goal: تربط كل تهديد بخدمة الأمان المناسبة من غير خلط بين المنع والكشف والتحقيق.
+en: AWS WAF · AWS Shield · Amazon GuardDuty · Amazon Inspector · Amazon Macie · AWS Security Hub · Amazon Detective · AWS Firewall Manager · AWS Network Firewall
+keywords: prevent · detect · scan · aggregate · investigate
+goal: تقسّم خدمات الأمان لأدوار (يمنع، يكشف تهديد، يفحص ثغرات، يلاقي داتا حساسة، يجمّع، يحقق)، وتختار الحارس الصح لكل موقف.
 part: التشغيل والحوكمة
 color: c1
 ---
 
-## Incident على e-commerce
+## 🧠 افهم: ليلة هجوم على دُكّان
 
-الساعة 18:00 بدأ campaign، والـ traffic الطبيعي 8,000 request/min. الساعة 18:07 وصل 90,000 request/min، ومعاه SQL injection patterns وcredential abuse.
+ليلة ٢٧ رمضان، في نفس الساعة حصل كذا حاجة:
 
-1. `Shield` امتص جزء من volumetric DDoS على الخدمات المدعومة.
-2. `AWS WAF` منع requests اللي طابقت managed وcustom rules، وعمل rate limiting.
-3. `GuardDuty` أصدر finding عن credentials بتستخدم من location غير معتاد.
-4. `Inspector` كان مبلّغ قبلها إن container image فيها critical CVE.
-5. `Security Hub` جمع findings ورتبها حسب severity.
-6. المحلل استخدم `Detective` يربط principal والـ IP والـ activity في التحقيق.
+- سيل طلبات وهمية بيحاول يوقّع الموقع.
+- حد بيجرب SQL injection في خانة البحث.
+- access key قديمة لموظف ساب الشغل بتعمل calls غريبة من بلد تانية.
+- container image فيها مكتبة قديمة بثغرة معروفة.
+- ملف CSV فيه أرقام تليفونات الزباين اتحط في bucket بالغلط.
 
-الـ incident اتوقف، لكن النجاح مش معناه إن خدمة واحدة عملت كل حاجة: prevention عند edge غير threat detection غير vulnerability management.
+مفيش خدمة واحدة بتشوف كل ده. كل خدمة **حارس متخصص** في نوع معين.
 
-## WAF ولا Shield؟
+<Hl c="p">WAF وShield بيمنعوا عند الباب. GuardDuty بيكشف سلوك مريب. Inspector بيفحص ثغرات. Macie بيلاقي داتا حساسة في S3. Security Hub بيجمّع كل ده في مكان واحد. Detective بيساعدك تحقق.</Hl>
 
-`AWS WAF` يفحص HTTP/S requests ويطبق rules على IPs وpaths وheaders وأنماط زي SQL injection وXSS. `AWS Shield` يركز على DDoS؛ Shield Standard تلقائي، وShield Advanced اشتراك بقدرات ودعم أوسع.
+<Box type="story" icon="🏦" title="أمن البنك">
 
-لو 100,000 request شرعية من campaign، WAF rule سيئة ممكن تمنع عملاء حقيقيين. ابدأ بـ count mode، راقب false positives، وبعدها فعّل block. Shield مش بديل لقواعد التطبيق.
+- **Shield** = الحواجز قدام البنك اللي بتمنع الزحمة تقتحم الباب (DDoS).
+- **WAF** = الأمن على الباب بيفتش الشنط ويمنع اللي معاه حاجة ممنوعة (طلبات خبيثة).
+- **GuardDuty** = كاميرات بتحلل السلوك: «الموظف ده بيفتح الخزنة الساعة ٣ الفجر من فرع غريب».
+- **Inspector** = مهندس بيلف يفحص الأقفال والشبابيك: «القفل ده موديل قديم فيه عيب».
+- **Macie** = مراجع بيدوّر على أوراق سرية متسابة في أماكن غلط.
+- **Security Hub** = غرفة التحكم اللي فيها كل التقارير.
+- **Detective** = المحقق اللي بيربط الخيوط بعد الحادثة.
 
-## GuardDuty ولا Inspector؟
+</Box>
 
-`GuardDuty` يسأل: "هل فيه behavior أو signals تدل على threat دلوقتي؟" ويحلل مصادر مدعومة على مستوى accounts وworkloads وdata.
+## 👀 تخيّل: من المنع للتحقيق
 
-`Inspector` يسأل: "هل workload مدعوم فيه CVE أو exposure؟" ويفحص EC2 وcontainer images وLambda حسب التغطية الحالية.
+<Flow items={[
+  { t: "يمنع", s: "Shield · WAF · Network Firewall", c: 1 },
+  "→",
+  { t: "يكشف ويفحص", s: "GuardDuty · Inspector · Macie", c: 2 },
+  "→",
+  { t: "يجمّع", s: "Security Hub", c: 3 },
+  "→",
+  { t: "يحقق", s: "Detective", c: 4 },
+  "→",
+  { t: "يصلح", s: "إنت + automation", c: 5 },
+]} />
 
-Image vulnerable من غير exploitation = Inspector finding. Access key بتعمل calls مشبوهة = GuardDuty finding. ممكن الاتنين يظهروا في نفس incident.
+<Diagram
+  title="كل حارس في مكانه"
+  height={360}
+  mheight={600}
+  nodes={[
+    { id: "att", t: "المهاجم", s: "bots + SQLi", c: 5, x: 92, y: 30, mx: 50, my: 4 },
+    { id: "edge", t: "Shield + WAF", s: "على CloudFront/ALB", c: 1, x: 66, y: 30, mx: 50, my: 24 },
+    { id: "app", t: "التطبيق", s: "containers + S3", c: 3, x: 40, y: 30, mx: 50, my: 46 },
+    { id: "insp", t: "Inspector", s: "ثغرات", c: 2, x: 12, y: 10, mx: 18, my: 68 },
+    { id: "gd", t: "GuardDuty", s: "سلوك مريب", c: 2, x: 12, y: 45, mx: 50, my: 68 },
+    { id: "macie", t: "Macie", s: "PII في S3", c: 2, x: 12, y: 80, mx: 82, my: 68 },
+    { id: "hub", t: "Security Hub", s: "مكان واحد", c: 4, x: 50, y: 85, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "att", to: "edge", c: 5 },
+    { from: "edge", to: "app", t: "النظيف بس", c: 1 },
+    { from: "insp", to: "app", dash: true, c: 2 },
+    { from: "gd", to: "app", dash: true, c: 2 },
+    { from: "macie", to: "app", dash: true, c: 2 },
+    { from: "gd", to: "hub", t: "findings", c: 4 },
+  ]}
+/>
 
-## Macie: الداتا الحساسة في S3
+## 🔍 من جوه: كل حارس بيعمل إيه بالظبط
 
-Media platform اكتشفت إن export فيه 2 مليون customer records اتحط في S3 prefix واسع الصلاحيات. `Macie` يستخدم pattern matching وML لاكتشاف وتصنيف sensitive data في S3 ويساعد يكشف access risks.
+### المنع
 
-Macie مش antivirus لكل storage، والـ scanning الواسع له تكلفة. ابدأ بالـ buckets الأعلى خطورة وحدد sampling أو jobs حسب المتطلبات.
+- **AWS Shield Standard:** حماية DDoS على طبقة الشبكة (Layer 3/4) **تلقائية ومجانية** لكل العملاء.
+- **AWS Shield Advanced:** اشتراك مدفوع: حماية أوسع، فريق AWS للاستجابة (SRT) وقت الهجوم، وحماية من زيادة الفاتورة بسبب الهجوم.
+- **AWS WAF:** firewall للـ **HTTP/HTTPS** (Layer 7) على CloudFront وALB وAPI Gateway وغيرها. قواعد ضد SQL injection وXSS، **rate limiting**، منع IPs أو دول، وmanaged rules جاهزة.
+- **AWS Network Firewall:** firewall مُدار على مستوى الـ **VPC** لفحص الترافيك.
+- **AWS Firewall Manager:** يطبّق قواعد WAF وShield وSecurity Groups على **كل الحسابات** في الـ Organization من مكان واحد.
 
-## Security Hub وDetective
+### الكشف والفحص
 
-`Security Hub CSPM` يجمع findings ويفحص security posture ضد controls مدعومة. `Detective` يساعد يحقق في العلاقات والسياق.
+- **Amazon GuardDuty:** **threat detection**. بيحلل CloudTrail وVPC Flow Logs وDNS logs وغيرها بالـ ML، ويطلع findings زي «credentials بتستخدم من IP مشبوه» أو «instance بتكلم سيرفر تعدين». **مبيمنعش لوحده.**
+- **Amazon Inspector:** **vulnerability scanning** أوتوماتيك لـ EC2 وcontainer images في ECR وLambda: CVEs معروفة، ومنافذ مفتوحة على الشبكة.
+- **Amazon Macie:** بيدوّر على **داتا حساسة (PII)** في **S3** (أرقام كروت، تليفونات، أسماء)، وبيكشف الـ buckets المكشوفة.
 
-<Flow items={[{t:"WAF / Shield",s:"حماية edge",c:1},"→",{t:"GuardDuty / Inspector / Macie",s:"findings",c:2},"→",{t:"Security Hub",s:"تجميع وأولوية",c:3},"→",{t:"Detective",s:"تحقيق",c:5}]} />
+### التجميع والتحقيق
 
-Security Hub مش detector بديل، وDetective مش firewall. Remediation ممكن يبقى يدوي أو automation محسوبة؛ auto-isolation السريع يقلل الضرر لكنه ممكن يوقف production بالغلط.
+- **AWS Security Hub:** بيجمّع findings من GuardDuty وInspector وMacie وغيرهم، ويفحص الحساب ضد معايير (زي CIS وAWS Foundational Security Best Practices)، ويديك score. (الجزء ده اسمه حاليًا **Security Hub CSPM**، راجع الـ docs للتسميات الحالية.)
+- **Amazon Detective:** بعد ما finding يظهر، بيربط الداتا (مين، منين، إمتى، عمل إيه قبل وبعد) عشان تفهم القصة كاملة.
 
-## قرار سريع
+## 🛠️ طبّق: شغّل الحراس على حساب دُكّان
 
-- malicious web pattern → WAF.
-- DDoS volume → Shield.
-- suspicious activity → GuardDuty.
-- vulnerable software → Inspector.
-- sensitive S3 data → Macie.
-- central findings/posture → Security Hub.
-- investigate relationships → Detective.
+⚠️ GuardDuty وInspector وMacie وSecurity Hub كلهم ليهم **فترة تجربة مجانية** (غالبًا ٣٠ يوم) وبعدها بيتحاسبوا. فعّلهم للتجربة، وعطّلهم بعدها لو مش هتكمل.
 
-## 🧪 Lab ورقي
+1. **فعّل GuardDuty:** `GuardDuty` ← `Get started` ← `Enable`.
+2. **ولّد findings تجريبية** عشان تشوف شكلها من غير هجوم حقيقي:
 
-اكتب incident timeline فيه DDoS وCVE وstolen key وPII في S3. حدد لكل مرحلة: prevent، detect، aggregate، investigate، remediate، وإيه false positive المحتمل.
+```bash
+DETECTOR=$(aws guardduty list-detectors --query 'DetectorIds[0]' --output text)
+aws guardduty create-sample-findings --detector-id $DETECTOR
+```
 
-<Checklist id="aws-cp-31" title="خلّصت الفصل لما" items={["تفرق WAF عن Shield", "تفرق GuardDuty عن Inspector", "تربط Macie ببيانات S3 الحساسة", "تشرح Security Hub كتجميع وposture", "تشرح Detective كتحقيق مش منع"]} />
+**المتوقع:** في صفحة `Findings` هتلاقي عشرات الأمثلة بـ `[SAMPLE]`. افتح واحد زي `UnauthorizedAccess:IAMUser/...` واقرا الـ severity والـ resource والتفاصيل.
+
+3. **فعّل Security Hub** وشوف الـ findings دي ظهرت هناك كمان، ومعاها الـ **security score** للحساب ضد المعايير.
+4. **صنّف ليلة الهجوم:** ارجع لقايمة الخمس حاجات في أول الفصل واكتب لكل واحدة الحارس.
+
+| الحادثة | الحارس |
+| --- | --- |
+| سيل طلبات DDoS | Shield (Standard تلقائي، Advanced لحماية أكبر) |
+| SQL injection | WAF |
+| access key بتعمل calls غريبة | GuardDuty، وبعدها Detective للتحقيق |
+| مكتبة بثغرة في الـ image | Inspector |
+| CSV فيه تليفونات في S3 | Macie |
+
+🧹 **تنضيف:** عطّل (Disable) GuardDuty وSecurity Hub من الإعدادات لو كانت تجربة.
+
+## ⚖️ قارن: الأزواج اللي بتتلخبط
+
+| بيتلخبطوا | الفرق |
+| --- | --- |
+| WAF ↔ Shield | WAF = طلبات **HTTP خبيثة** (Layer 7، قواعد). Shield = **DDoS** (حجم) |
+| WAF ↔ Security Group | WAF بيفهم **محتوى** الطلب. SG بيفهم **IP وport** بس |
+| GuardDuty ↔ Inspector | GuardDuty = **سلوك** مريب بيحصل. Inspector = **ثغرة** موجودة في الـ software |
+| GuardDuty ↔ Macie | GuardDuty = تهديدات على الحساب والموارد. Macie = **داتا حساسة في S3** |
+| Security Hub ↔ GuardDuty | GuardDuty **بيكتشف**. Security Hub **بيجمّع** من كذا مصدر |
+| Detective ↔ GuardDuty | GuardDuty بيقول «في حاجة». Detective بيساعدك **تحقق** في القصة |
+| Shield Standard ↔ Advanced | Standard مجاني وتلقائي. Advanced مدفوع، حماية أكبر وفريق استجابة |
+
+<Checklist id="aws-cp-31" title="خلّصت الفصل لما" items={["تقسّم الخدمات لـ: يمنع، يكشف، يفحص، يجمّع، يحقق", "تفرّق WAF عن Shield وStandard عن Advanced", "تفرّق GuardDuty عن Inspector عن Macie", "تعرف Security Hub بيجمّع وDetective بيحقق", "تعرف Firewall Manager بيطبق القواعد على كل الحسابات"]} />
 
 <Quiz>
-<Q n={1} q="عايز تمنع pattern لـ SQL injection في HTTP request؛ تختار إيه؟">AWS WAF.</Q>
-<Q n={2} q="عايز تعرف container image فيها CVE معروفة؛ تختار إيه؟">Amazon Inspector.</Q>
-<Q n={3} q="عندك findings كتير وعايز لوحة مركزية وبعدها تحقق؛ تستخدم إيه؟">Security Hub للتجميع وAmazon Detective للتحقيق.</Q>
+<Q n={1} q="عايز تمنع SQL injection وتعمل rate limiting على الـ API. أنهي خدمة؟">**AWS WAF**.</Q>
+<Q n={2} q="عايز تكتشف لو EC2 بتكلم سيرفرات معروفة بالتعدين أو credentials بتستخدم من مكان غريب. أنهي خدمة؟">**Amazon GuardDuty**.</Q>
+<Q n={3} q="عايز تعرف لو في أرقام كروت أو بيانات شخصية في S3 buckets. أنهي خدمة؟">**Amazon Macie**.</Q>
+<Q n={4} q="عايز فحص مستمر لثغرات معروفة في EC2 وcontainer images. أنهي خدمة؟">**Amazon Inspector**.</Q>
+<Q n={5} q="حماية DDoS أساسية بدون أي تكلفة إضافية؟">**AWS Shield Standard**، مفعّل تلقائي.</Q>
 </Quiz>

@@ -4,52 +4,137 @@ short: Cost Tools
 order: 38
 label: فصل ٣٨
 badge: التكلفة والامتحان · فصل ٣٨
-en: Pricing Calculator · Cost Explorer · Budgets · Data Exports · CUR 2.0 · cost allocation tags · consolidated billing
-keywords: قبل البناء · بعد الصرف · تنبيه · تفاصيل · Tags · Organizations
-goal: تختار أداة التكلفة حسب الزمن ومستوى التفاصيل، وتفهم التجميع من غير خلطه بدمج الحسابات.
+en: AWS Pricing Calculator · Cost Explorer · AWS Budgets · Cost Anomaly Detection · Data Exports · CUR 2.0 · cost allocation tags · consolidated billing · Compute Optimizer · Cost Optimization Hub
+keywords: قبل البناء · بعد الصرف · تنبيه · تفاصيل · Tags · توصيات
+goal: ترتب أدوات التكلفة على خط الزمن (قبل البناء، وأثناء الصرف، وبعده)، وتعرف كل أداة بتجاوب على أنهي سؤال.
 part: التكلفة والامتحان
 color: c3
 ---
 
-## فاتورة زادت 38% في أسبوع
+## 🧠 افهم: أربع أسئلة عن الفلوس
 
-FinOps team عنده budget شهري `$80,000`، والforecast بقى `$104,000`.
+عم حسن بيسأل عن الفلوس في أوقات مختلفة:
 
-1. قبل المشروع، `Pricing Calculator` كان مقدر architecture بـ `$72,000` حسب assumptions.
-2. `AWS Budgets` بعت forecast alert عند 90%.
-3. `Cost Explorer` قارن الأسبوعين وبيّن زيادة data transfer وNAT processing.
-4. activated tags فصلت `Project=Video` عن باقي التكلفة.
-5. `Data Exports` مع `CUR 2.0` كشف line items والaccounts والusage بالتفصيل.
-6. الفريق أصلح cross-AZ path؛ اليوم التالي التكلفة اليومية نزلت، لكن الفاتورة السابقة ما اختفتش.
+1. **قبل ما نبني:** «الفرع الجديد هيكلّف كام في الشهر؟»
+2. **وإحنا بنصرف:** «نبّهني لو الشهر ده هيعدّي الميزانية.»
+3. **بعد ما صرفنا:** «الفلوس راحت فين؟ وليه الشهر ده أعلى ٤٠٪؟»
+4. **عشان نوفّر:** «في سيرفرات أكبر من اللازم؟ نشتري Savings Plan بكام؟»
 
-## قبل وبعد وعلى مستوى التفاصيل
+كل سؤال ليه أداة. ولو استخدمت الأداة الغلط، هتاخد إجابة لسؤال تاني.
 
-`Pricing Calculator` estimate قبل التنفيذ، مش فاتورة مضمونة. `Cost Explorer` يحلل historical cost/usage ويعمل forecast. `Budgets` ينبه على cost أو usage أو commitment metrics مدعومة.
+<Hl c="o">Pricing Calculator = قبل. Budgets وAnomaly Detection = أثناء (تنبيه). Cost Explorer وBills وCUR = بعد (تحليل). Compute Optimizer وTrusted Advisor = توصيات توفير.</Hl>
 
-Budget مش hard cap، وbilling data مش لحظية؛ ممكن تصرف بين القياس والتنبيه. Budget Actions موجودة لحالات محددة لكن لازم permissions وimpact محسوبين.
+<Box type="story" icon="🧾" title="ميزانية البيت">
 
-## CUR 2.0 والـ tags
+- **Pricing Calculator** = إنك تحسب مصاريف **الشقة الجديدة** على ورقة قبل ما تمضي العقد.
+- **Budgets** = إنك تقول لمراتك «لو الصرف عدّى ٥٠٠٠ ابعتيلي رسالة».
+- **Anomaly Detection** = البنك يبعتلك «في عملية غريبة على الكارت، مش زي عادتك».
+- **Cost Explorer** = **كشف الحساب** آخر الشهر برسوم بيانية: الأكل كام، المواصلات كام.
+- **CUR** = **كل إيصال** لوحده في ملف Excel.
+- **Compute Optimizer** = حد يبصلك على البيت ويقولك «التكييف ده أكبر من الأوضة، هات أصغر».
 
-`AWS Data Exports` هو المسار الحالي الموصى به لتصدير billing data إلى S3، ومنها `CUR 2.0` لتحليل line items بـ Athena أو QuickSight. في أكتوبر ٢٠٢٦ توجد standardized cost/rate columns اختيارية؛ `Legacy CUR` ما زال يظهر في مواد قديمة.
+</Box>
 
-Tag زي `CostCenter=Payments` لازم يتفعّل كـ cost allocation tag. البيانات القديمة مش بتتراجع بالكامل، ومش كل resource يدعم tags بنفس الشكل.
+## 👀 تخيّل: الأدوات على خط الزمن
 
-## Organizations
+<Flow items={[
+  { t: "قبل", s: "Pricing Calculator", c: 1 },
+  "→",
+  { t: "أثناء", s: "Budgets · Anomaly Detection", c: 2 },
+  "→",
+  { t: "بعد", s: "Bills · Cost Explorer · CUR", c: 3 },
+  "→",
+  { t: "وفّر", s: "Compute Optimizer · Trusted Advisor · Cost Optimization Hub", c: 4 },
+]} />
 
-Consolidated billing يجمع فواتير member accounts وقد يشارك بعض volume/commitment benefits حسب قواعد AWS. الحسابات تفضل boundaries مستقلة؛ billing موحد لا يمنح IAM access.
+<Diagram
+  title="تحقيق: الفاتورة زادت ٤٠٪"
+  height={320}
+  mheight={540}
+  nodes={[
+    { id: "anom", t: "Anomaly Detection", s: "صرف غريب على EC2", c: 2, x: 90, y: 50, mx: 50, my: 5 },
+    { id: "ce", t: "Cost Explorer", s: "group by: service, tag", c: 3, x: 62, y: 50, mx: 50, my: 32 },
+    { id: "tag", t: "Tag Project=promo", s: "بيئة نسيوها", c: 5, x: 35, y: 20, mx: 25, my: 65 },
+    { id: "co", t: "Compute Optimizer", s: "m5.4xlarge ← m5.large", c: 4, x: 35, y: 82, mx: 75, my: 65 },
+    { id: "fix", t: "الحل", s: "امسح + صغّر", c: 1, x: 8, y: 50, mx: 50, my: 94 },
+  ]}
+  edges={[
+    { from: "anom", to: "ce", t: "حقق", c: 2 },
+    { from: "ce", to: "tag", t: "مين؟", c: 3 },
+    { from: "ce", to: "co", t: "ليه كبير؟", c: 3 },
+    { from: "tag", to: "fix", c: 5 },
+    { from: "co", to: "fix", c: 4 },
+  ]}
+/>
 
-## Tradeoff عملي
+## 🔍 من جوه: كل أداة
 
-تفاصيل CUR أدق لكن محتاجة pipeline وتحليل. Cost Explorer أسرع للتحقيق اليومي. Calculator يعتمد على جودة assumptions؛ لازم تضيف growth وrequests وtransfer وsupport والضرائب المناسبة.
+### قبل: AWS Pricing Calculator
 
-## 🧪 Lab ورقي
+موقع مجاني بتحط فيه الخدمات والمواصفات والاستخدام المتوقع، ويطلّعلك **تقدير** شهري وسنوي تقدر تشاركه. **التقدير بيعتمد على افتراضاتك**: لو نسيت الـ data transfer أو الـ NAT، الرقم هيبقى أقل من الحقيقة.
 
-اعمل 10 line items فيها Service وAccount وProject وUsage وCost. جاوب: مين سبب الزيادة؟ alert كان إمتى؟ وإيه assumption غلط في estimate؟
+### أثناء: التنبيهات
 
-<Checklist id="aws-cp-38" title="خلّصت الفصل لما" items={["تفرق Calculator عن Explorer", "تعرف إن Budget alert مش hard cap", "تشرح CUR 2.0 كبيانات تفصيلية", "تفعّل cost allocation tags", "تفهم consolidated billing من غير خلط IAM"]} />
+- **AWS Budgets:** تنبيه لما الـ cost أو الـ usage أو تغطية الـ Savings Plans/RI يعدّي حد (actual أو forecasted). **مش بيوقف الصرف** (فصل ١٠).
+- **AWS Cost Anomaly Detection:** ML بيتعلم نمط صرفك وينبّهك على أي حاجة غريبة، من غير ما تحدد رقم.
+
+### بعد: التحليل
+
+- **Bills:** الفاتورة الرسمية لكل خدمة وRegion.
+- **AWS Cost Explorer:** رسوم بيانية للصرف لحد ١٣ شهر لورا، **group by** خدمة أو حساب أو tag، و**forecast** لقدام، و**توصيات** Savings Plans وRI من استخدامك.
+- **AWS Data Exports (CUR 2.0):** **كل line item** بالتفصيل في ملفات على S3، تحللها بـ Athena أو QuickSight. أدق حاجة، بس محتاجة شغل.
+- **Cost allocation tags:** لازم **تفعّلها** في Billing عشان تظهر في التقارير، ومبتشتغلش بأثر رجعي كامل.
+- **Consolidated billing** (Organizations): فاتورة واحدة لكل الحسابات، واستخدامهم بيتجمع للخصومات. **مبيدّيش صلاحيات** على الحسابات.
+
+### التوفير: التوصيات
+
+- **AWS Compute Optimizer:** بيحلل الـ metrics ويقول الـ EC2 أو Lambda أو EBS أو ECS **أكبر أو أصغر** من اللازم (rightsizing).
+- **AWS Trusted Advisor:** فحوصات منها cost optimization (instances مش مستخدمة، EBS مش متركّب…).
+- **Cost Optimization Hub:** بيجمع توصيات التوفير من كذا مصدر في مكان واحد ويرتبها بالتوفير المتوقع.
+
+## 🛠️ طبّق: قدّر، نبّه، حلّل
+
+⚠️ Pricing Calculator وCost Explorer (من الـ console) مجانيين. Cost Anomaly Detection مجاني. Budgets أول كام واحدة مجانية.
+
+1. **قدّر فرع دُكّان الجديد:** افتح `calculator.aws` ← `Create estimate` ← ضيف:
+   - Amazon EC2: ٢ instances `t3.small` ٢٤/٧.
+   - Amazon RDS for PostgreSQL: `db.t4g.micro` Single-AZ، 20 GB.
+   - Amazon S3: 50 GB Standard.
+   - **متنساش** data transfer out: 100 GB/شهر.
+   **المتوقع:** رقم شهري ولينك تشاركه. جرّب تغيّر RDS لـ Multi-AZ وشوف الرقم اتضاعف تقريبًا. ده تمن الـ availability.
+2. **فعّل Anomaly Detection:** `Billing and Cost Management` ← `Cost Anomaly Detection` ← اعمل monitor على `AWS services` بتنبيه إيميل.
+3. **حلّل في Cost Explorer:** `Cost Explorer` ← آخر ٣ شهور ← `Group by: Service`. بعدين `Group by: Tag` (لو فعّلت `Project`). **المتوقع:** تعرف أغلى ٣ خدمات.
+4. **شوف التوصيات:** في Cost Explorer ← `Savings Plans` ← `Recommendations`. (لو الحساب جديد ممكن متلاقيش توصيات لسه.)
+
+🧹 مفيش موارد مدفوعة اتعملت. امسح الـ monitor لو مش عايزه.
+
+## ⚖️ قارن: أداة لكل سؤال
+
+| السؤال | الأداة |
+| --- | --- |
+| «هيكلّف كام؟» قبل البناء | **Pricing Calculator** |
+| «نبّهني لو عدّينا $X» | **Budgets** |
+| «نبّهني لو في صرف غريب» من غير رقم | **Cost Anomaly Detection** |
+| «الفلوس راحت فين؟» برسوم وforecast | **Cost Explorer** |
+| «عايز كل سطر بالتفصيل في S3» | **Data Exports / CUR 2.0** |
+| «كل فريق صرف كام؟» | **Cost allocation tags** + Cost Explorer |
+| «فاتورة واحدة لـ ٢٠ حساب» | **Consolidated billing** (Organizations) |
+| «السيرفر ده أكبر من اللازم؟» | **Compute Optimizer** |
+| «فحوصات عامة للتكلفة والأمان والأداء» | **Trusted Advisor** |
+
+| بيتلخبطوا | الفرق |
+| --- | --- |
+| Pricing Calculator ↔ Cost Explorer | Calculator = **تقدير قبل**. Explorer = **تحليل بعد** + forecast |
+| Budgets ↔ Cost Explorer | Budgets = **تنبيه** على حد. Explorer = **تحليل** ورسوم |
+| Cost Explorer ↔ CUR | Explorer = رسوم سريعة. CUR = **أدق تفاصيل** للتحليل الكبير |
+| Compute Optimizer ↔ Trusted Advisor | Optimizer = **rightsizing** بالتفصيل من الـ metrics. TA = فحوصات **عامة** في كذا مجال |
+
+<Checklist id="aws-cp-38" title="خلّصت الفصل لما" items={["ترتب أدوات التكلفة على قبل وأثناء وبعد وتوفير", "تعمل estimate بـ Pricing Calculator ومتنساش data transfer", "تفرّق Budgets عن Cost Anomaly Detection", "تفرّق Cost Explorer عن CUR 2.0", "تعرف Compute Optimizer بيعمل rightsizing"]} />
 
 <Quiz>
-<Q n={1} q="Architecture على الورق وعايز estimate؟">Pricing Calculator.</Q>
-<Q n={2} q="كل line item في S3؟">Data Exports مع CUR 2.0.</Q>
-<Q n={3} q="Tag ظهر بأثر رجعي كامل؟">لأ؛ لازم تفعيله والتاريخ مش كامل بأثر رجعي.</Q>
+<Q n={1} q="architecture لسه على الورق وعايز تقدير شهري. أنهي أداة؟">**AWS Pricing Calculator**.</Q>
+<Q n={2} q="عايز تعرف أنهي خدمة سببت زيادة الفاتورة الشهر ده برسوم بيانية. أنهي أداة؟">**AWS Cost Explorer**.</Q>
+<Q n={3} q="عايز توصيات تصغير instances بناءً على استخدامها الفعلي. أنهي خدمة؟">**AWS Compute Optimizer**.</Q>
+<Q n={4} q="عايز تنبيه لو حصل صرف غريب مش زي العادة، من غير ما تحدد رقم. أنهي خدمة؟">**AWS Cost Anomaly Detection**.</Q>
+<Q n={5} q="أكتر تقرير تفصيلي لكل line item في الفاتورة؟">**AWS Data Exports** بـ **CUR 2.0**.</Q>
 </Quiz>

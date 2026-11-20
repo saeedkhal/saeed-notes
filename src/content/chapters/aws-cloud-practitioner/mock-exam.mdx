@@ -5,125 +5,75 @@ order: 42
 label: اختبار
 badge: التكلفة والامتحان · اختبار
 en: CLF-C02 mock · 30 original questions · explained answers
-keywords: Cloud · Security · Services · Billing · Practice
-goal: تقيس فهمك بسيناريوهات أصلية قريبة من توزيع المجالات، وتتعلم من تفسير الإجابة.
+keywords: Cloud · Security · Services · Billing · تدريب
+goal: تقيس فهمك بـ ٣٠ موقف أصلي بنفس توزيع مجالات الامتحان، وكل إجابة معاها ليه الاختيارات التانية غلط.
 part: التكلفة والامتحان
 color: dark
 ---
 
-## قبل ما تبدأ
+## 🧠 قبل ما تبدأ
 
-الأسئلة أصلية للتعلّم، مش certification dump. التوزيع قريب من CLF-C02: ٧ Cloud Concepts، ٩ Security، ١٠ Technology، و٤ Billing/Support. خصص ٣٥ دقيقة، وجاوب قبل قراءة الشرح.
+- الأسئلة **أصلية للتعلم**، مش من امتحانات حقيقية.
+- التوزيع قريب من CLF-C02: **٧** Cloud Concepts، **٩** Security، **١٠** Technology، **٤** Billing.
+- اديله **٣٥ دقيقة**. اكتب إجابتك على ورقة **قبل** ما تفتح الشرح.
+- كل شرح بيقولك **الكلمة اللي بتحسم** و**ليه البديل القريب غلط**. ده أهم من الإجابة نفسها.
+
+<Hl c="y">النتيجة: ٢٥ أو أكتر = جاهز. ٢٠ لـ ٢٤ = راجع الفصول اللي غلطت فيها. أقل من ٢٠ = ارجع للـ Cheat Sheet والـ ⚖️ قارن في كل فصل.</Hl>
 
 ## Cloud Concepts — ٧ أسئلة
 
-<Quiz>
-<Q n={1} q="SaaS بيستقبل registrations وقت campaign فقط، وعايز يزود السعة وقت الزحمة ويقللها بعدها. أنهي فائدة cloud أوضح؟">
-`Elasticity`: السعة تتوافق مع الطلب بدل شراء peak capacity طول السنة. High availability تركز على استمرار الخدمة وقت الفشل، مش تغير الحجم.
-</Q>
-<Q n={2} q="شركة اشترت servers مقدمًا لخمس سنين وعايزة الدفع حسب الاستخدام. التحول المالي الأشهر؟">
-من `CapEx` إلى نموذج أقرب لـ `OpEx` وpay-as-you-go. ده لا يمنع commitments اختيارية لما الحمل يبقى ثابت.
-</Q>
-<Q n={3} q="تطبيق لازم يفضل شغال لو data center واحد داخل Region وقع. أبسط مبدأ؟">
-وزّع المكونات على أكتر من `Availability Zone`. ده يقلل اعتماد workload على failure domain واحدة.
-</Q>
-<Q n={4} q="مين مسؤول عن patching لنظام التشغيل على EC2؟">
-العميل يدير guest OS والـ applications؛ AWS تدير البنية المادية والـ hypervisor.
-</Q>
-<Q n={5} q="Product team عايز يقلل تجربة فكرة من شهور لأيام. أنهي قيمة cloud؟">
-`Agility`: توفير موارد بسرعة والتجربة من غير دورة شراء hardware طويلة.
-</Q>
-<Q n={6} q="اختيار managed database بدل database على EC2 غيّر إيه؟">
-AWS أخذت مهام تشغيل engine والبنية المحددة، لكن العميل لسه مسؤول عن data وaccess والإعدادات تحت تحكمه.
-</Q>
-<Q n={7} q="مراجعة workload عبر الأمن والموثوقية والتكلفة والاستدامة؟">
-`AWS Well-Architected Framework` وركائزه الست؛ guidance للمراجعة مش migration tool.
-</Q>
+<Quiz title="☁️ Cloud Concepts">
+<Q n={1} q="متجر online بيستقبل ٥ أضعاف الطلبات في الجمعة البيضا بس، وعايز يدفع على السعة الزيادة في اليومين دول بس. أنهي ميزة cloud؟">**Elasticity**. الكلمة الحاسمة: السعة **بتزيد وتقل** مع الطلب. High availability غلط هنا لأنها عن الاستمرار وقت الفشل مش عن الحجم.</Q>
+<Q n={2} q="شركة بتحسب: بدل ما تدفع ٢ مليون مقدمًا على data center، هتدفع شهري. ده بيوصف أنهي ميزة؟">**Trade fixed expense for variable expense** (CapEx ← OpEx). «Economies of scale» قريبة بس دي عن إن سعر AWS أرخص بسبب حجمها.</Q>
+<Q n={3} q="تطبيق لازم يكمل لو data center واحد وقع، بأقل تعقيد. التصميم؟">انشر على **أكتر من Availability Zone** في نفس الـ Region. Multi-Region يحميك من وقوع منطقة كاملة، وده أغلى وأعقد من المطلوب.</Q>
+<Q n={4} q="مدير قال «مش مسموح نخسر أكتر من ١٠ دقايق طلبات». ده تعريف إيه؟">**RPO = 10 دقايق**. الـ RTO هو وقت رجوع الخدمة، مش كمية الداتا.</Q>
+<Q n={5} q="فريق عايز مراجعة لـ workload ضد أفضل ممارسات AWS في الأمان والاعتمادية والتكلفة. أنهي أداة؟">**AWS Well-Architected Tool**. الـ CAF غلط هنا لأنه عن جاهزية **الشركة** للتحول، مش عن workload.</Q>
+<Q n={6} q="شركة سابت mail server بتاعها واشتركت في خدمة إيميل SaaS. أنهي استراتيجية هجرة؟">**Repurchase**. Rehost كانت هتبقى لو نقلوا نفس الـ mail server لـ EC2.</Q>
+<Q n={7} q="أنهي CAF perspective بيهتم بإن الإدارة توافق على الميزانية وتتحكم في المخاطر؟">**Governance**. Business أقرب لربط الـ cloud بأهداف الشركة، وPeople للتدريب والأدوار.</Q>
+</Quiz>
 
 ## Security and Compliance — ٩ أسئلة
 
-<Q n={8} q="EC2 محتاجة تقرأ S3 من غير access keys ثابتة؟">
-اربط `IAM role` بالـ instance بأقل صلاحية؛ temporary credentials أفضل من long-term keys.
-</Q>
-<Q n={9} q="منع member accounts من Regions معينة حتى لو admin محلي سمح؟">
-`SCP` كـ guardrail؛ تحدد أقصى صلاحية ولا تمنح permission بنفسها.
-</Q>
-<Q n={10} q="مين حذف security group الساعة ٣؟">
-`CloudTrail` لسجل API والهوية والوقت؛ CloudWatch مش سجل API audit الأساسي.
-</Q>
-<Q n={11} q="محاولات SQL injection في HTTP requests؟">
-`AWS WAF` بقواعد أمام خدمة مدعومة. Shield يركز على DDoS.
-</Q>
-<Q n={12} q="اكتشاف سلوك مشبوه في accounts وworkloads؟">
-`GuardDuty`. Inspector للثغرات، وMacie للبيانات الحساسة في S3.
-</Q>
-<Q n={13} q="تخزين database password وعمل rotation؟">
-`Secrets Manager`. KMS يدير encryption keys؛ الدورين متكاملين ومختلفين.
-</Q>
-<Q n={14} q="Auditor طلب تقرير compliance صادر عن AWS؟">
-`Artifact`. التقرير لا يثبت تلقائيًا إن إعداد workload نفسه compliant.
-</Q>
-<Q n={15} q="اكتشاف بيانات شخصية حساسة داخل S3؟">
-`Macie`، مع تحديد نطاق الفحص ومراجعة التكلفة.
-</Q>
-<Q n={16} q="الإجراء الأصح لحساب root؟">
-MFA، منع الاستخدام اليومي، عدم إنشاء root access keys، وتأمين recovery.
-</Q>
+<Quiz title="🔐 Security">
+<Q n={8} q="في Amazon RDS، مين مسؤول عن patching الـ database engine؟">**AWS**، في maintenance window بيختارها العميل. في EC2 لو ركّبت الـ database بنفسك، الـ patching عليك.</Q>
+<Q n={9} q="تطبيق على EC2 محتاج يكتب في DynamoDB. أأمن طريقة؟">**IAM role** على الـ instance بصلاحية `PutItem` على الجدول ده بس. Access keys في ملف على السيرفر ممكن تتسرب ومش بتتجدد لوحدها.</Q>
+<Q n={10} q="أول حاجة لازم تتعمل بعد فتح حساب AWS جديد؟">**MFA على الـ root user**، وعمل هوية تانية للشغل اليومي. Root access keys **متتعملش أصلًا**.</Q>
+<Q n={11} q="user عنده Allow على `s3:DeleteObject` من group، وDeny على نفس الـ action من policy تانية. النتيجة؟">**ممنوع**. الـ explicit Deny بيكسب أي Allow.</Q>
+<Q n={12} q="عايز تعرف مين مسح S3 bucket امبارح الساعة ٣. أنهي خدمة؟">**AWS CloudTrail**. CloudWatch عن الأداء والـ metrics، وConfig عن حالة الإعدادات، مش مين عمل الـ API call.</Q>
+<Q n={13} q="موقع بيتعرض لمحاولات SQL injection كتير. أنهي خدمة تمنعها؟">**AWS WAF**. Shield للـ DDoS، وSecurity Groups مش بتفهم محتوى الـ HTTP request.</Q>
+<Q n={14} q="عايز تكتشف لو في access key بتستخدم من مكان غريب أو instance بتكلم سيرفر تعدين. أنهي خدمة؟">**Amazon GuardDuty**. Inspector بيدور على **ثغرات** في الـ software، مش على **سلوك**.</Q>
+<Q n={15} q="البنك طلب تقرير PCI DSS بتاع AWS. منين؟">**AWS Artifact**. ده تقرير عن AWS نفسها، مش عن تطبيقك.</Q>
+<Q n={16} q="عايز باسورد الـ database يتغير كل ٣٠ يوم أوتوماتيك والتطبيق يقراه وقت التشغيل. أنهي خدمة؟">**AWS Secrets Manager**. Parameter Store يخزن، بس مفيهوش rotation أوتوماتيك مدمج. KMS بيدير **مفاتيح** مش باسوردات.</Q>
+</Quiz>
 
 ## Cloud Technology and Services — ١٠ أسئلة
 
-<Q n={17} q="CSV في S3 وSQL سريع من غير cluster؟">
-`Athena`. Parquet وpartitioning يقللوا scan والتكلفة.
-</Q>
-<Q n={18} q="معالجة صورة عند رفعها، والمهمة قصيرة وstateless؟">
-`Lambda`؛ event-driven من غير server، مع مراجعة limits الفعلية.
-</Q>
-<Q n={19} q="Linux servers متعددة محتاجة نفس file system في أكتر من AZ؟">
-`EFS`. EBS block وS3 object، فمش نفس access pattern.
-</Q>
-<Q n={20} q="Relational database محتاجة failover داخل Region، والقراءة مش bottleneck؟">
-`RDS Multi-AZ`. Read replica أساسها read scaling.
-</Q>
-<Q n={21} q="Orders service تفصل نفسها عن worker وتحتفظ بالرسائل؟">
-`SQS` للـ buffering والdecoupling؛ صمّم retries وidempotency.
-</Q>
-<Q n={22} q="Content عالمي من edge مع تقليل origin latency؟">
-`CloudFront`. Route 53 DNS، مش CDN cache.
-</Q>
-<Q n={23} q="Oracle إلى Aurora PostgreSQL مع استمرار تغييرات المصدر؟">
-`DMS` للـ data وCDC، و`DMS Schema Conversion` للـ schema، مع manual fixes واختبارات.
-</Q>
-<Q n={24} q="Chatbot generative AI من foundation models مُدارة؟">
-`Bedrock`. SageMaker AI للتحكم الأعمق في بناء وتدريب ML.
-</Q>
-<Q n={25} q="Partner يرسل SFTP كل ليلة من غير تغيير برنامجه؟">
-`Transfer Family` إلى S3 أو EFS؛ DataSync للـ managed bulk file/object workflows.
-</Q>
-<Q n={26} q="Metrics وlogs وalarm لما CPU يعدي threshold؟">
-`CloudWatch`. CloudTrail للـ API audit وConfig للـ configuration history.
-</Q>
+<Quiz title="🧩 Technology">
+<Q n={17} q="كود بيشتغل كل ما فاتورة PDF تترفع على S3، وبياخد ١٠ ثواني، ومش عايزين سيرفرات. أنهي خدمة؟">**AWS Lambda** مع S3 event. EC2 هيفضل شغال ويتحاسب وهو فاضي.</Q>
+<Q n={18} q="فريق عايز يشغّل containers ومش عايز يدير أي EC2 instances. أنهي خيار؟">**AWS Fargate** (مع ECS أو EKS). ECR بيخزن الـ images بس، مش بيشغّلها.</Q>
+<Q n={19} q="١٠ سيرفرات Linux في AZين محتاجين يقروا ويكتبوا نفس الملفات. أنهي خدمة؟">**Amazon EFS**. EBS بيتركّب في instance واحدة وفي AZ واحدة.</Q>
+<Q n={20} q="backups لازم تتحفظ ٧ سنين، ونادرًا جدًا ما بتتطلب، والاسترجاع في ١٢ ساعة مقبول. أرخص اختيار؟">**S3 Glacier Deep Archive**. Standard-IA أغلى وهو للداتا اللي محتاجها فورًا.</Q>
+<Q n={21} q="تطبيق gaming محتاج database serverless بـ latency مللي ثواني مهما زاد عدد اللاعبين. أنهي خدمة؟">**Amazon DynamoDB**. RDS ممتاز للـ relational والـ joins، بس الكلمات «serverless» و«any scale» و«key-value» بتشاور على DynamoDB.</Q>
+<Q n={22} q="تقارير المبيعات التقيلة بتبطّأ database الـ production. أبسط حل في RDS؟">**Read replica** للتقارير. Multi-AZ غلط هنا لأن الـ standby (في الشكل الكلاسيكي) للـ failover مش للقراية.</Q>
+<Q n={23} q="سيرفرات في private subnet محتاجة تنزّل تحديثات من الإنترنت من غير ما حد يوصلها من برّه. أنهي مكوّن؟">**NAT Gateway** في public subnet. Internet Gateway لوحده بيسمح بالاتجاهين للموارد اللي ليها public IP.</Q>
+<Q n={24} q="عايز تفصل الـ checkout عن خدمة شحن بطيئة بحيث الطلبات متضيعش لو خدمة الشحن وقعت ساعة. أنهي خدمة؟">**Amazon SQS**. SNS بيبعت فورًا ومش بيخزن الرسايل لو المشترك مش موجود.</Q>
+<Q n={25} q="محتاجين اتصال خاص بأداء ثابت بين الـ data center وAWS، ومش بيعدّي على الإنترنت. أنهي خدمة؟">**AWS Direct Connect**. Site-to-Site VPN مشفّر بس بيمشي على الإنترنت العام.</Q>
+<Q n={26} q="عايز تبني بيئة كاملة (VPC وsubnets وEC2 وRDS) بنفس الشكل في ٣ حسابات من ملف واحد. أنهي خدمة؟">**AWS CloudFormation**. Elastic Beanstalk بينشر **تطبيق**، مش أي بنية من template.</Q>
+</Quiz>
 
 ## Billing, Pricing, and Support — ٤ أسئلة
 
-<Q n={27} q="Batch يستحمل interruption ويعمل checkpoint؟">
-`Spot Instances` غالبًا أكبر خصم، بشرط recovery design.
-</Q>
-<Q n={28} q="Architecture لسه متنفذتش وعايز estimate قابل للمشاركة؟">
-`Pricing Calculator`. Cost Explorer يحلل usage حصل ويقدم forecast.
-</Q>
-<Q n={29} q="Alert عند توقع تجاوز ميزانية الشهر؟">
-`AWS Budgets` forecasted alert؛ مش hard cap والبيانات ممكن تتأخر.
-</Q>
-<Q n={30} q="تحميل audit report وشراء security product من vendor؟">
-`Artifact` للتقارير، و`Marketplace` لعروض vendors؛ APN للـ partners والاستشارة.
-</Q>
+<Quiz title="💰 Billing">
+<Q n={27} q="rendering jobs بتعمل checkpoint كل دقيقة وممكن تكمل لو اتقطعت. أرخص طريقة دفع؟">**Spot Instances**. Reserved/Savings Plans لحمل ثابت ومعروف، مش لشغل متقطع.</Q>
+<Q n={28} q="عايز تنبيه بالإيميل لما **التوقع** لفاتورة الشهر يعدّي ٥٠٠ دولار. أنهي خدمة؟">**AWS Budgets** بتنبيه forecasted. Cost Explorer بيحلل ويتوقع، بس التنبيه على حد ده شغل Budgets.</Q>
+<Q n={29} q="شركة عايزة **Technical Account Manager** مخصص. أنهي خطة دعم؟">**Enterprise Support**. (في الأسماء القديمة: Enterprise On-Ramp كان فيه pool of TAMs، وEnterprise فيه TAM مخصص.)</Q>
+<Q n={30} q="شركة عندها ١٥ حساب AWS وعايزة فاتورة واحدة والاستخدام يتجمع عشان الخصومات. أنهي ميزة؟">**Consolidated billing** في **AWS Organizations**. ده مش بيدّي أي صلاحيات بين الحسابات.</Q>
 </Quiz>
 
-## قيّم النتيجة
+<Checklist id="aws-cp-42" title="خلّصت الاختبار لما" items={["حليت الـ ٣٠ في ٣٥ دقيقة من غير ما تبص", "سجلت نتيجتك لكل مجال لوحده", "رجعت لفصل كل سؤال غلطت فيه وقريت ⚖️ قارن", "حليت الأسئلة اللي غلطت فيها تاني بعد يوم"]} />
 
-- **٢٦–٣٠**: أساس قوي؛ راجع أسباب التردد وتغييرات ٢٠٢٦.
-- **٢١–٢٥**: ارجع للمقارنات اللي غلطت فيها.
-- **١٥–٢٠**: أعد service chooser والـ cheat sheet.
-- **أقل من ١٥**: راجع الفصول حسب المجال، واعمل flashcards للفروق.
-
-<Checklist id="aws-cp-42" title="خلصت المسار لما" items={["تحل الـ ٣٠ سؤال قبل كشف الشرح", "تصنف كل غلطة حسب domain", "ترجع للمقارنة مش لحرف الإجابة", "تراجع exam guide والـ docs الرسمية وقت الحجز"]} />
+<Quiz title="🎯 قيّم نفسك">
+<Q n={1} q="جبت أقل من ٦ من ٩ في Security. أعمل إيه؟">ده **أكبر مجال (٣٠٪)**. ارجع لفصول ٦–٩ و٢٩–٣١، وركّز على: shared responsibility، IAM roles، والفرق بين CloudWatch وCloudTrail وConfig، والفرق بين WAF وShield وGuardDuty وInspector وMacie.</Q>
+<Q n={2} q="غلطت في أسئلة «أنسب خدمة» بين خدمتين قريبين. الحل؟">ارجع لفصل **من المشكلة للخدمة** (٤٠) واعمل جدول «أشهر ١٠ أزواج» من الذاكرة.</Q>
+<Q n={3} q="جبت ٢٥ أو أكتر. جاهز؟">غالبًا أيوه. راجع الـ **Cheat Sheet** وجدول الأرقام يوم قبل الامتحان، واقرا **exam guide** الرسمي وقت الحجز عشان أي تغيير في الخدمات أو الأسماء.</Q>
+</Quiz>

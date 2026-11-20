@@ -1,79 +1,155 @@
 ---
 title: Events وWorkflows في Production
-short: Events وWorkflows
+short: EventBridge وStep Functions
 order: 27
 label: فصل ٢٧
 badge: ربط الأنظمة · فصل ٢٧
-en: Amazon EventBridge · AWS Step Functions · Amazon SES
-keywords: event bus · orchestration · state machine · email
-goal: تفصل event routing عن orchestration والبريد في رحلة معاملات قابلة للتتبع.
+en: event-driven · Amazon EventBridge · event bus · rules · EventBridge Scheduler · AWS Step Functions · state machine · retries
+keywords: event · rule · schedule · workflow · state machine
+goal: تفرّق «حصل حدث، مين مهتم؟» (EventBridge) عن «خطوات بالترتيب لازم تخلص» (Step Functions)، وتعمل جدول ليلي وworkflow لطلب دُكّان.
 part: ربط الأنظمة
 color: c2
 ---
 
-## المثال الأول: Refund خلال 30 دقيقة
+## 🧠 افهم: نوعين من «ربط الأنظمة»
 
-Fintech تستقبل `RefundRequested`. الرحلة لازم تتحقق من المعاملة، تمنع duplicate، تطلب موافقة لو المبلغ فوق `$5,000`، تنادي payment provider، ثم ترسل email. الـ SLA هو `30 دقيقة`.
+في دُكّان في نوعين من المواقف:
 
-١. EventBridge rule تطابق `detail-type` وcurrency وتبدأ workflow.
-٢. Step Functions تتحقق من idempotency ثم تعمل Choice حسب المبلغ.
-٣. خطأ `5xx` من provider يتعمل له retry بـ backoff؛ خطأ validation يروح Catch فورًا.
-٤. بعد النجاح، SES تبعت receipt، وevent منفصل يروح analytics.
+1. **حصل حاجة، ومين يهمه يتصرف:** «زبون جديد سجّل» ← فريق التسويق عايز يبعتله كوبون، وفريق التحليل عايز يسجله. الـ checkout **مش عارف ومش عايز يعرف** مين مهتم. ده **event-driven**.
+2. **خطوات بالترتيب، وكل خطوة ليها نتيجة:** الطلب لازم: يتأكد الدفع ← يتحجز المخزون ← يتعيّن مندوب. ولو الدفع فشل، يتلغي الحجز. ده **workflow**.
 
-<Flow items={[
-  { t: "EventBridge", s: "match + route", c: 2 }, "→",
-  { t: "Step Functions", s: "state + decisions", c: 3 }, "→",
-  { t: "Payment API", s: "retry/catch", c: 1 }, "→",
-  { t: "SES", s: "receipt", c: 4 },
-]} />
+<Hl c="o">EventBridge = لوحة إعلانات ذكية: الحدث بيتعلق، والقواعد بتوديه للي يهمه. Step Functions = مدير مشروع: بيمشي الخطوات بالترتيب، ويعيد المحاولة، ويتصرف لو حاجة فشلت.</Hl>
 
-## EventBridge: مين يهتم بالحدث؟
+<Box type="story" icon="💍" title="فرح">
 
-Event bus يستقبل events من AWS أو التطبيق أو SaaS integrations، والـ rules تعمل content-based matching إلى targets. استخدم schema/version واضح، ومتضعش card data أو secrets داخل event لمجرد سهولة النقل.
-
-EventBridge routing مش workflow state. لو target فشل، صمم retries وDLQ/monitoring حسب التكامل، واعرف إن event delivery قد يتكرر.
-
-## Step Functions: الرحلة تمشي إزاي؟
-
-State machine تعرض steps وChoice وWait وParallel وRetry وCatch وتاريخ execution. ده أوضح من Lambda واحدة تنام وتخزن state بنفسها.
-
-<Grid2>
-<Card title="Routing" c={2}>
-
-`OrderShipped` يروح billing وanalytics وnotifications حسب محتوى الحدث: EventBridge.
-
-</Card>
-<Card title="Orchestration" c={3}>
-
-Reserve inventory ثم charge ثم compensate لو الشحن فشل: Step Functions.
-
-</Card>
-</Grid2>
-
-## Failure وtradeoff
-
-الساعة `10:00` provider يرجع `503`. retries عند `10:00:01` و`10:00:03` و`10:00:07` تنجح في الرابعة. لو retry لكل error بما فيها `400`، workflow تضيع وقت وتكلفة من غير فرصة نجاح. حدد retryable errors وmax attempts وtimeout.
-
-في distributed transaction، نجاح charge وفشل inventory يحتاج compensation مصممة؛ Step Functions تنسقها لكنها لا تجعل APIs الخارجية atomic.
-
-## SES: البريد، مش الرحلة
-
-SES للإرسال والاستقبال على scale. identities لازم تتوثق، والحساب قد يبدأ sandbox لحد production access. راقب bounces وcomplaints وsuppression، والتزم بسياسات spam. نجاح API call لا يضمن إن المستخدم قرأ الرسالة.
-
-<Box type="warn" title="إيميل فشل بعد refund ناجح">
-
-متعملش rollback لمعاملة مالية ناجحة لمجرد إن receipt email فشلت. افصل business outcome عن notification، واعمل retry/DLQ للبريد.
+- **EventBridge** زي **جروب العيلة على واتساب**: حد كتب «العروسة وصلت القاعة!». المصور يقوم يصوّر، والـ DJ يشغّل الزفة، والمطبخ يجهز. اللي كتب مش بيكلم كل واحد، وكل واحد عارف هو مهتم بأنهي رسايل.
+- **Step Functions** زي **منظم الفرح** معاه ورقة: الزفة ← الكوشة ← التورتة ← البوفيه. لو الـ DJ اتأخر، بيستنى أو بيكلّم البديل. وفي الآخر عنده سجل باللي حصل في كل خطوة.
 
 </Box>
 
-## 🧪 تمرين: Video approval workflow
+## 👀 تخيّل: الاتنين في دُكّان
 
-ارسم upload event، virus scan، transcoding في فرعين، manual review لو content score فوق حد معين، publish، ثم email. اكتب timeout بالأرقام لكل خطوة، retryable errors، catch path، وcompensation لو publish حصل قبل اكتشاف فشل.
+<Diagram
+  title="EventBridge بيوزّع، وStep Functions بينظّم"
+  height={380}
+  mheight={620}
+  nodes={[
+    { id: "src", t: "Checkout", s: "OrderPlaced event", c: 1, x: 90, y: 22, mx: 50, my: 4 },
+    { id: "bus", t: "EventBridge bus", s: "rules", c: 2, x: 62, y: 22, mx: 50, my: 24 },
+    { id: "mkt", t: "Lambda تسويق", s: "total > 1000", c: 3, x: 32, y: 8, mx: 20, my: 46 },
+    { id: "sf", t: "Step Functions", s: "order workflow", c: 4, x: 32, y: 45, mx: 80, my: 46 },
+    { id: "pay", t: "١. الدفع", c: 5, x: 62, y: 82, mx: 20, my: 72 },
+    { id: "stock", t: "٢. احجز المخزون", c: 5, x: 35, y: 82, mx: 50, my: 86 },
+    { id: "ship", t: "٣. عيّن مندوب", c: 5, x: 8, y: 82, mx: 80, my: 72 },
+  ]}
+  edges={[
+    { from: "src", to: "bus", t: "put event", c: 1 },
+    { from: "bus", to: "mkt", t: "rule", c: 2 },
+    { from: "bus", to: "sf", t: "rule", c: 2 },
+    { from: "sf", to: "pay", c: 4, dash: true },
+    { from: "pay", to: "stock", c: 5 },
+    { from: "stock", to: "ship", c: 5 },
+  ]}
+/>
 
-<Checklist id="aws-cp-27" title="خلّصت الفصل لما" items={["تشرح rule وtarget في EventBridge", "تميز routing من orchestration", "تبني retry وcatch وtimeout في Step Functions", "تعرف إن SES للبريد مش workflow", "تفصل business success عن notification failure"]} />
+## 🔍 من جوه: الخدمتين
+
+### Amazon EventBridge
+
+- **Event:** JSON بيوصف حاجة حصلت.
+- **Event bus:** المكان اللي الأحداث بتتبعتله. في **default bus** بيستقبل أحداث خدمات AWS نفسها (EC2 وقفت، ملف اترفع…)، وتقدر تعمل **custom bus** لأحداث تطبيقك، وفي أحداث من شركاء SaaS.
+- **Rule:** pattern بيفلتر الأحداث («source = dukkan.checkout و total > 1000») ويبعتها لـ **targets** (Lambda، SQS، Step Functions، SNS، API خارجي…).
+- **EventBridge Scheduler:** يشغّل حاجة **بجدول** (cron أو rate) أو مرة واحدة في وقت محدد. بديل الـ cron jobs على سيرفر.
+- **Pipes:** يوصّل source بـ target مباشرة مع فلترة وتحويل.
+
+### AWS Step Functions
+
+- **State machine:** الـ workflow مكتوب كخطوات (states) باللغة اسمها **Amazon States Language** (JSON)، وبيظهر رسمة في الـ console.
+- كل خطوة ممكن تكلم Lambda أو خدمات AWS كتير **مباشرة** (DynamoDB، SQS، ECS…).
+- فيه **Retry** و**Catch** لكل خطوة، و**Choice** (if/else)، و**Parallel**، و**Map** (لكل عنصر في list)، و**Wait**.
+- **Standard workflows:** لحد سنة، مناسبة لعمليات طويلة (موافقة بشرية مثلًا). **Express:** قصيرة وكتيرة جدًا.
+
+<Box type="tip" title="ليه مش Lambda بتنادي Lambda؟">
+
+ممكن تكتب كل الخطوات في function واحدة، بس هتكتب الـ retries والـ waits والـ error handling بإيدك، ومش هتعرف الطلب وقف فين. Step Functions بيديك ده جاهز ومرسوم.
+
+</Box>
+
+## 🛠️ طبّق: تقرير ليلي وworkflow طلب
+
+⚠️ EventBridge Scheduler وStep Functions ليهم Free Tier شهري. التجربة صغيرة جدًا.
+
+### ١. جدول ليلي
+
+`EventBridge` ← `Schedules` ← `Create schedule`:
+
+- Pattern: `Recurring` ← cron: `0 2 * * ? *` (كل يوم الساعة ٢ الفجر، واختار الـ timezone `Africa/Cairo`).
+- Target: Lambda (مثلًا `dukkan-products` من فصل ١٥).
+
+**المتوقع:** بكرة الساعة ٢ هتلاقي invocation في الـ logs. ده بديل إنك تسيب سيرفر صاحي عشان cron.
+
+### ٢. Workflow الطلب
+
+`Step Functions` ← `Create state machine` ← `Blank` ← تبويب `Code` والصق:
+
+<File name="order-workflow.asl.json">
+
+```json
+{
+  "Comment": "طلب دُكّان",
+  "StartAt": "ChargePayment",
+  "States": {
+    "ChargePayment": {
+      "Type": "Pass",
+      "Result": { "paid": true },
+      "ResultPath": "$.payment",
+      "Next": "IsPaid"
+    },
+    "IsPaid": {
+      "Type": "Choice",
+      "Choices": [
+        { "Variable": "$.payment.paid", "BooleanEquals": true, "Next": "ReserveStock" }
+      ],
+      "Default": "PaymentFailed"
+    },
+    "ReserveStock": { "Type": "Wait", "Seconds": 3, "Next": "AssignCourier" },
+    "AssignCourier": { "Type": "Pass", "End": true },
+    "PaymentFailed": { "Type": "Fail", "Error": "PaymentDeclined" }
+  }
+}
+```
+
+</File>
+
+الخطوات هنا `Pass` و`Wait` للتجربة بس. في الحقيقة كل واحدة بتكلم Lambda أو خدمة. اضغط `Start execution` بأي input.
+
+**المتوقع:** رسمة بتنوّر كل خطوة بالأخضر وهي بتعدي. غيّر `"paid": true` لـ `false` ونفّذ تاني: هتلاقي الطريق راح لـ `PaymentFailed`.
+
+🧹 **تنضيف:** امسح الـ schedule والـ state machine.
+
+## ⚖️ قارن: أدوات الربط كلها
+
+| | SQS | SNS | EventBridge | Step Functions |
+| --- | --- | --- | --- | --- |
+| الفكرة | طابور شغل | broadcast | توجيه أحداث بقواعد | تنسيق خطوات |
+| بيعرف الترتيب والحالة؟ | لأ | لأ | لأ | **أيوه** |
+| فلترة | لأ | message filtering | **event patterns** قوية | Choice states |
+| أحداث خدمات AWS وSaaS | لأ | محدود | **أيوه** | — |
+| جدولة | لأ | لأ | **Scheduler** | Wait states |
+| مثال | تصغير الصور | إشعار كل الفرق | «لو EC2 وقفت، ابعت تنبيه» | الدفع ← المخزون ← الشحن |
+
+<Box type="interview" title="الكلمات المفتاحية">
+
+«event bus»، «react to changes in AWS services»، «SaaS events»، «schedule (cron)» ← **EventBridge**.
+«orchestrate»، «workflow»، «state machine»، «coordinate multiple Lambda functions with retries» ← **Step Functions**.
+
+</Box>
+
+<Checklist id="aws-cp-27" title="خلّصت الفصل لما" items={["تفرّق event-driven عن workflow بموقف من دُكّان", "تشرح event bus وrule وtarget", "تستخدم EventBridge Scheduler بدل cron على سيرفر", "تقرا state machine بسيطة فيها Choice وFail", "تختار بين SQS وSNS وEventBridge وStep Functions"]} />
 
 <Quiz>
-<Q n={1} q="عايز توجّه events لما `amount > 5000`؛ المرشح؟">EventBridge rule لو المطلوب matching وتوجيه.</Q>
-<Q n={2} q="عملية فيها قرار وانتظار وretry وتعويض؛ تستخدم إيه؟">AWS Step Functions.</Q>
-<Q n={3} q="Refund نجح وSES فشلت؛ هل ترجع الفلوس تاني؟">لأ؛ ثبّت نجاح المعاملة واعمل retry/DLQ للإشعار بشكل مستقل.</Q>
+<Q n={1} q="عايز Lambda تشتغل كل ما EC2 instance تتغير حالتها لـ stopped. أنهي خدمة؟">**Amazon EventBridge** rule على الأحداث بتاعة EC2.</Q>
+<Q n={2} q="عملية فيها ٥ خطوات بالترتيب، مع retries وفرع لو حاجة فشلت. أنهي خدمة؟">**AWS Step Functions**.</Q>
+<Q n={3} q="عايز تشغّل job كل يوم الساعة ٣ من غير سيرفر. أنهي خدمة؟">**EventBridge Scheduler**.</Q>
+<Q n={4} q="الفرق الأساسي بين EventBridge وSNS؟">الاتنين بيوزعوا، بس **EventBridge** عنده **event patterns** وفلترة قوية على محتوى الحدث، وبيستقبل أحداث خدمات AWS وSaaS، وفيه جدولة.</Q>
 </Quiz>

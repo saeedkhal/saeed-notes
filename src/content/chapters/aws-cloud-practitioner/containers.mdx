@@ -4,80 +4,141 @@ short: Containers
 order: 16
 label: فصل ١٦
 badge: Compute · فصل ١٦
-en: image · container · ECR · ECS · Fargate · EKS
-keywords: registry · orchestration · task · serverless containers · Kubernetes
-goal: تختار container platform من خلال deployment إنتاجي وأرقام scaling ووقت التعافي.
+en: container · Docker image · Amazon ECR · Amazon ECS · task definition · service · AWS Fargate · Amazon EKS · App Runner
+keywords: image · registry · orchestration · Fargate · Kubernetes
+goal: تفهم الـ container كعلبة بتشيل التطبيق ومكوناته، وتفرّق مكان تخزين الـ image (ECR) عن اللي بيشغّل (ECS/EKS) عن مكان التشغيل (Fargate أو EC2).
 part: Compute
 color: c1
 ---
 
-## المثال الأول: SaaS API وقت deploy
+## 🧠 افهم: «عندي شغال، عندك مش شغال»
 
-شركة SaaS عندها API داخل image حجمها `420 MB`. الحمل الطبيعي `12 task`، وكل task تستحمل `80 request/s`. المطلوب deploy إصدار جديد من غير downtime، وrollback خلال `5 دقايق` لو error rate عدّت `2%`.
+سارة كتبت موقع دُكّان على Node 22، وعلى اللابتوب بتاعها شغال تمام. على السيرفر Node 18، فالموقع وقع. المشكلة إن **البيئة مختلفة**.
 
-١. CI تبني image مرة واحدة وتفحصها، ثم ترفع digest ثابت إلى `Amazon ECR`.
-٢. `ECS service` تنشئ tasks جديدة من task definition الجديدة.
-٣. `ALB` مايبعتش traffic غير بعد نجاح health checks.
-٤. deployment يحتفظ بالعدد الأدنى من healthy tasks؛ CloudWatch alarm يوقف أو يرجع الإصدار حسب الإعداد.
-٥. الداتا تفضل في RDS/S3، مش جوه filesystem الـ container المؤقت.
+الـ **container** بيحل ده: بتحط التطبيق **ومعاه** كل اللي محتاجه (الـ runtime، المكتبات، الإعدادات) في علبة واحدة اسمها **image**. العلبة دي بتشتغل بنفس الشكل على اللابتوب أو على AWS.
 
-<Flow items={[
-  { t: "CI", s: "build + scan", c: 1 }, "→",
-  { t: "ECR", s: "image digest", c: 2 }, "→",
-  { t: "ECS Service", s: "desired count", c: 3 }, "→",
-  { t: "Fargate / EC2", s: "running tasks", c: 5 },
-]} />
+بس لما يبقى عندك ٢٠ container، محتاج حد **يرتبهم**: يشغّلهم، يعيد تشغيل اللي يقع، يوزعهم على الأجهزة، ويزوّدهم وقت الزحمة. ده اسمه **orchestration**.
 
-## أربع أسماء، أربع مسؤوليات
+<Hl c="u">Image بتتخزن في ECR. والـ orchestrator (ECS أو EKS) بيقرر يشغّل كام نسخة وفين. وبتشتغل يا إما على Fargate (من غير سيرفرات) يا إما على EC2 بتديرها إنت.</Hl>
 
-- الـ `image` package ثابت؛ الـ `container` process شغالة منه.
-- `ECR` registry للصور، مش runtime.
-- `ECS` و`EKS` orchestrators يقرروا placement والعدد والـ rollout.
-- `Fargate` compute capacity مُدارة تشغّل ECS tasks أو EKS pods من غير إدارة nodes.
+<Box type="story" icon="🚢" title="الحاويات في الميناء">
 
-## ECS ولا EKS؟
+- **الـ image** = الحاوية المقفولة، جواها البضاعة متغلفة بنفس الشكل. أي مركب يقدر يشيلها.
+- **ECR** = المخزن في الميناء اللي الحاويات مستنية فيه.
+- **ECS / EKS** = مدير الميناء اللي بيقرر أنهي حاوية تطلع على أنهي مركب، وكام واحدة.
+- **Fargate** = إنك تأجر مكان على مركب حد تاني ومتشغلش بالك بالمركب. **EC2** = إنك عندك المراكب بتاعتك وبتصونها.
+
+</Box>
+
+## 👀 تخيّل: من اللابتوب لحد الزبون
+
+<Diagram
+  title="رحلة الـ image"
+  height={320}
+  mheight={560}
+  nodes={[
+    { id: "dev", t: "لابتوب سارة", s: "docker build", c: 1, x: 90, y: 50, mx: 50, my: 6 },
+    { id: "ecr", t: "Amazon ECR", s: "dukkan-web:1.4", c: 2, x: 64, y: 20, mx: 50, my: 30 },
+    { id: "ecs", t: "Amazon ECS", s: "service: عايز ٣ نسخ", c: 3, x: 38, y: 50, mx: 50, my: 56 },
+    { id: "fg", t: "Fargate", s: "٣ tasks شغالة", c: 4, x: 10, y: 20, mx: 25, my: 90 },
+    { id: "alb", t: "ALB", s: "يوزّع عليهم", c: 5, x: 10, y: 82, mx: 75, my: 90 },
+  ]}
+  edges={[
+    { from: "dev", to: "ecr", t: "docker push", c: 1 },
+    { from: "ecr", to: "ecs", t: "pull", c: 2 },
+    { from: "ecs", to: "fg", t: "run tasks", c: 3 },
+    { from: "alb", to: "fg", t: "requests", c: 5 },
+  ]}
+/>
+
+## 🔍 من جوه: المصطلحات بالترتيب
+
+### Amazon ECR (Elastic Container Registry)
+
+مخزن private للـ images، شبه Docker Hub بس جوه حسابك وبصلاحيات IAM. بيعمل **scan** للـ images يدوّر على ثغرات معروفة، وفيه **lifecycle policies** تمسح الـ images القديمة.
+
+### Amazon ECS (Elastic Container Service)
+
+الـ orchestrator بتاع AWS، أبسط لو مش محتاج Kubernetes. مصطلحاته:
+
+- **Task definition:** الوصفة (JSON): أنهي image، كام CPU وmemory، أنهي port، أنهي IAM role، متغيرات البيئة.
+- **Task:** نسخة شغالة من الوصفة.
+- **Service:** بيقول «عايز دايمًا ٣ tasks شغالين»، ولو واحد وقع بيطلّع بداله، وبيربطهم بالـ Load Balancer.
+- **Cluster:** المجموعة المنطقية اللي الـ tasks بتشتغل فيها.
+
+### Amazon EKS (Elastic Kubernetes Service)
+
+**Kubernetes** مُدار. AWS بتدير الـ control plane. مناسب لو الفريق بيستخدم Kubernetes أصلًا أو محتاج يشتغل بنفس الأدوات على أكتر من cloud. أعقد من ECS.
+
+### Fargate ولا EC2؟
 
 <Grid2>
-<Card title="ECS" c={2}>
+<Card title="Fargate" c={3}>
 
-AWS-native، task definitions وservices، وتكامل مباشر مع IAM وALB. مناسب لفريق عايز orchestration من غير تشغيل Kubernetes ecosystem.
+مفيش سيرفرات تديرها. بتحدد CPU وmemory للـ task وبتدفع عليهم بالثانية. أبسط وأأمن (عزل لكل task).
 
 </Card>
-<Card title="EKS" c={4}>
+<Card title="EC2 launch type" c={4}>
 
-AWS تدير Kubernetes control plane، والفريق يدير manifests والـ add-ons والسياسات والـ workloads. اختاره لو Kubernetes API أو أدواته أو portability requirement حقيقية.
+إنت بتدير الـ instances اللي الـ containers شغالة عليها. تحكم أكتر، ممكن أرخص لحمل كبير وثابت، وتقدر تختار GPU مثلًا.
 
 </Card>
 </Grid2>
 
-شركة عندها `35` microservice وplatform team بتدير Kubernetes في أكتر من بيئة ممكن تبرر EKS. فريق من `4` مهندسين وعنده `3` APIs فقط غالبًا يستفيد من بساطة ECS؛ الشهرة مش requirement.
+وفي خدمات أبسط من كده لو عايز ترفع container وبس، زي **AWS App Runner** (راجع الـ docs لحالتها الحالية) أو **Elastic Beanstalk** بيدعم Docker.
 
-## Fargate ولا EC2 capacity؟
+## 🛠️ طبّق: شغّل دُكّان في container على Fargate
 
-Fargate يقلل patching وcapacity planning للـ hosts، وتحدد لكل task CPU وmemory. EC2 capacity تدي تحكم أوسع في instance types والـ agents والـ utilization، وممكن تبقى أوفر لحمل ثابت بعد القياس، لكن الفريق مسؤول عن nodes وسعتها وتحديثها.
+⚠️ Fargate بيتحاسب بالثانية على الـ CPU والـ memory، والـ ALB بالساعة. خلّص وامسح في نفس القعدة.
 
-<Hl c="p">ECS/EKS يحددوا orchestration؛ Fargate/EC2 يحددوا compute اللي الـ workloads هتشتغل عليه.</Hl>
+1. **ابني الـ image واعمل push لـ ECR:**
 
-## Incident flow: task بتستهلك memory
+```bash
+# اعمل repository
+aws ecr create-repository --repository-name dukkan-web
 
-الساعة `14:03` task تعدي memory limit وتتوقف. الساعة `14:03:20` ALB health check يشيلها من التوجيه. ECS يبدأ replacement، لكن لو image tag متحرك أو startup بياخد `4 دقايق`، التعافي يتأخر. الحل: digest ثابت، startup سريع، health checks مضبوطة، وdesired count موزع على AZs.
+# سجّل دخول Docker على ECR (استبدل الـ account والـ region)
+aws ecr get-login-password --region eu-central-1 | \
+  docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.eu-central-1.amazonaws.com
 
-الـ orchestrator يعيد process، لكنه مش بيرجع state ضاعت من داخل container. استخدم persistent storage/database واكتب shutdown handling للطلبات اللي كانت شغالة.
+# ابني واعمل tag وpush
+docker build -t dukkan-web:1.0 .
+docker tag dukkan-web:1.0 <ACCOUNT_ID>.dkr.ecr.eu-central-1.amazonaws.com/dukkan-web:1.0
+docker push <ACCOUNT_ID>.dkr.ecr.eu-central-1.amazonaws.com/dukkan-web:1.0
+```
 
-## الأمان والتكلفة
+لو معندكش تطبيق، اعمل `Dockerfile` فيه سطر واحد `FROM nginx:alpine`.
 
-- متحطش secrets في image أو environment محفوظة في source؛ استخدم Secrets Manager أو Parameter Store وصلاحيات task/pod.
-- افحص base images وحدّثها، وافصل task execution role عن application task role.
-- Fargate تتحاسب حسب الموارد والمدة، وEKS له رسوم cluster وموارد، وECR له storage وtransfer/requests حسب الاستخدام.
+2. **اعمل cluster:** `ECS` ← `Clusters` ← `Create` ← infrastructure: `AWS Fargate`.
+3. **Task definition:** `Create new` ← Fargate ← `0.25 vCPU / 0.5 GB` ← container بالـ image URI من ECR ← port `80`.
+4. **Service:** جوه الـ cluster ← `Create service` ← الـ task definition ← desired tasks `2` ← (اختياري) Application Load Balancer جديد.
+5. **المتوقع:** في تبويب `Tasks` تلاقي ٢ بحالة `RUNNING`. افتح الـ DNS بتاع الـ ALB (أو الـ public IP للـ task لو مفيش ALB وفاتح port 80).
+6. **جرّب:** اعمل `Stop` لـ task يدويًا. الـ service هيطلّع بداله، لأنه وعد بـ ٢.
 
-## 🧪 تمرين: خطط deploy واقعي
+🧹 **تنضيف:** خلّي الـ service `desired = 0` وامسحه، امسح الـ ALB والـ target group، امسح الـ cluster، وامسح الـ ECR repository (`--force` لو فيه images).
 
-API عليها `600 request/s`، وكل task تستحمل `75 request/s`. احسب الحد الأدنى النظري، ثم زوّد headroom وفشل task واحدة. ارسم rolling deployment لإصدار جديد يحتاج `90 ثانية` عشان يبقى healthy. قارن ECS on Fargate مع EKS managed node group في: التشغيل، التحكم، وقت الفريق، والتكلفة.
+## ⚖️ قارن: مين بيعمل إيه في عالم الـ containers؟
 
-<Checklist id="aws-cp-16" title="خلّصت الفصل لما" items={["تفرق image عن container", "تتبع image من CI وECR لحد task", "تختار ECS أو EKS من requirement", "تعرف إن Fargate capacity مش orchestrator", "تصمم health checks وrollback وداتا دائمة"]} />
+| الخدمة | دورها | سؤالها |
+| --- | --- | --- |
+| ECR | تخزين الـ images | «الـ image محفوظة فين؟» |
+| ECS | orchestration بتاع AWS | «مين بيشغّل ويرتب الـ containers؟» (بسيط) |
+| EKS | Kubernetes مُدار | «مين بيشغّل ويرتب؟» (لو Kubernetes) |
+| Fargate | مكان تشغيل serverless | «بتشتغل على إيه من غير سيرفرات؟» |
+| EC2 | مكان تشغيل تديره | «بتشتغل على سيرفرات بتاعتي» |
+
+| | Containers على Fargate | Lambda |
+| --- | --- | --- |
+| وحدة النشر | image فيها أي حاجة | function (أو image) |
+| المدة | مفيش حد | ١٥ دقيقة |
+| شغال إمتى | طول ما الـ service شغال | مع الحدث |
+| مناسب لـ | مواقع وservices دايمة | events وشغل متقطع |
+
+<Checklist id="aws-cp-16" title="خلّصت الفصل لما" items={["تشرح الـ container والـ image بتشبيه الميناء", "تفرّق ECR وECS وEKS وFargate في جملة لكل واحد", "تعرف task definition وtask وservice", "تختار Fargate أو EC2 launch type بسبب", "تختار ECS أو EKS حسب الفريق"]} />
 
 <Quiz>
-<Q n={1} q="ECS service محتاجة تشغّل image خاصة؛ مين يخزنها ومين يشغل العدد المطلوب؟">ECR يخزن image، وECS service تنظم tasks على Fargate أو EC2.</Q>
-<Q n={2} q="هل restart للـ container يرجّع ملف اتكتب على filesystem المؤقت؟">مش مضمون؛ الداتا المهمة لازم تروح storage دائم مناسب.</Q>
-<Q n={3} q="إمتى EKS مبرر بدل ECS؟">لما Kubernetes APIs والـ ecosystem أو متطلبات portability والسياسات تستاهل التعقيد التشغيلي الإضافي.</Q>
+<Q n={1} q="فين تخزن Docker images بشكل private على AWS؟">**Amazon ECR**.</Q>
+<Q n={2} q="شركة عايزة تشغّل containers ومش عايزة تدير أي سيرفرات. أنهي خيار؟">**AWS Fargate** (مع ECS أو EKS).</Q>
+<Q n={3} q="الفريق عنده خبرة وأدوات Kubernetes وعايز يستخدمها على AWS. أنهي خدمة؟">**Amazon EKS**.</Q>
+<Q n={4} q="في ECS، إيه اللي بيضمن إن في دايمًا ٣ نسخ شغالة ويستبدل اللي يقع؟">الـ **ECS service**.</Q>
 </Quiz>

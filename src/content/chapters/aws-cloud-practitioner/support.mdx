@@ -4,56 +4,137 @@ short: Support
 order: 39
 label: فصل ٣٩
 badge: التكلفة والامتحان · فصل ٣٩
-en: AWS Support · re:Post · Knowledge Center · Artifact · Marketplace · Partner Network
-keywords: Basic · Business Support+ · Enterprise · Unified Operations · مجتمع · Compliance · Software · Partner
-goal: تختار مصدر المساعدة أو خطة الدعم حسب خطورة الحالة، وتنتبه لتغيير الخطط في ٢٠٢٦.
+en: AWS Support plans · Basic · Business Support+ · Enterprise · Unified Operations · TAM · AWS re:Post · Knowledge Center · AWS Artifact · AWS Marketplace · AWS Partner Network · AWS Professional Services
+keywords: خطط الدعم · TAM · مجتمع · Compliance · Software · Partner
+goal: تعرف تروح فين لما تحتاج مساعدة، حسب نوع المشكلة وخطورتها، وتعرف خطط الدعم الحالية والقديمة اللي ممكن تتسأل عنها.
 part: التكلفة والامتحان
 color: c4
 ---
 
-## Production outage الساعة 02:10
+## 🧠 افهم: «عندي مشكلة، أكلّم مين؟»
 
-Checkout واقع في 3 Regions؟ لأ، account واحدة فيها RDS issue. الفريق جمع timestamps وresource IDs وrecent changes وشال secrets، وبعدين فتح case بالseverity الصحيحة.
+دُكّان قابل مواقف مختلفة في شهر واحد:
 
-1. 02:10 alarm.
-2. 02:14 internal triage أكد impact: 100% checkout failures.
-3. 02:18 Support case اتفتح تحت الخطة المؤهلة.
-4. أول response target مش معناه حل نهائي؛ التحقيق والـ mitigation كملوا.
-5. بعد recovery، team راجع architecture وrunbook بدل اعتبار Support بديل للتصميم.
+1. سؤال عام: «إزاي أعمل Lambda تقرا من SQS؟»
+2. الفاتورة فيها رسوم مش فاهمها.
+3. **الساعة ٢ الفجر، الـ checkout واقف** والزباين مش عارفين يدفعوا.
+4. البنك طلب **تقرير compliance** بتاع AWS.
+5. محتاجين **firewall** من شركة معينة.
+6. محتاجين **شركة** تساعد في نقل «الأمانة».
 
-## خطط أكتوبر ٢٠٢٦
+كل موقف ليه باب مختلف. ولو استنيت رد مجاني على re:Post والموقع واقف، هتخسر فلوس.
 
-- `Basic Support`: لكل العملاء؛ account/billing help، quota requests، docs وre:Post وقدرات أساسية متاحة.
-- `Business Support+`: 24/7 technical support؛ الحد الأدنى المنشور `$29/account/month` أو النسبة، أيهما أكبر.
-- `Enterprise Support`: mission-critical وdesignated TAM؛ الحد الأدنى المنشور `$5,000/month` أو النسبة.
-- `Unified Operations`: عمليات كبيرة ومعقدة؛ الحد الأدنى المنشور `$50,000/month` أو النسبة.
+<Hl c="p">مجتمع وdocs = re:Post وKnowledge Center. مشكلة في حسابك = AWS Support (حسب خطتك). تقارير compliance = Artifact. software جاهز = Marketplace. شركة تساعدك = Partner Network أو Professional Services.</Hl>
 
-الأسماء والأسعار والresponse times تتغير. `Developer Support` و`Business Support` و`Enterprise On-Ramp` القديمة مقرر ينتهي دعمها **١ يناير ٢٠٢٧** في commercial AWS، مع تفاصيل انتقال واستثناءات GovCloud. CLF-C02 قد يستخدم taxonomy القديمة؛ قرار الشراء يرجع للصفحة الرسمية.
+<Box type="story" icon="🏥" title="لو تعبت">
 
-## اختار المصدر
+- **re:Post** = تسأل **صحابك** في الجروب. مجاني، وممكن حد خبير يرد.
+- **Knowledge Center** = **الكتيب** اللي فيه أشهر المشاكل وحلولها.
+- **Basic Support** = **الاستقبال**: بيساعدك في الحجز والفلوس، مش بيكشف.
+- **Business Support+** = **دكتور على التليفون ٢٤ ساعة**.
+- **Enterprise** = **دكتور العيلة (TAM)** اللي عارف تاريخك وبيتابعك قبل ما تتعب.
 
-- سؤال عام بلا بيانات حساسة → `re:Post`.
-- حلول شائعة → `Knowledge Center` داخل re:Post.
-- case خاص بالحساب أو incident → AWS Support.
-- تقارير واتفاقيات compliance → `AWS Artifact`.
-- شراء ونشر software أو data من vendor → `AWS Marketplace`.
-- شركة consulting أو implementation → `AWS Partner Network`.
-- guidance استباقي → TAM في الخطة المؤهلة.
+</Box>
 
-Artifact لا يعمل audit لتطبيقك. Marketplace لا يضمن إن المنتج مناسب أو إن AWS تشغله نيابة عن vendor. APN partner مش بديل تلقائي عن عقد Support.
+## 👀 تخيّل: الباب الصح لكل موقف
 
-## Tradeoff
+<Diagram
+  title="نوع المشكلة → الباب"
+  height={380}
+  mheight={620}
+  nodes={[
+    { id: "q", t: "عندي مشكلة", c: 1, x: 92, y: 50, mx: 50, my: 4 },
+    { id: "gen", t: "سؤال عام", c: 2, x: 62, y: 10, mx: 20, my: 28 },
+    { id: "acc", t: "حسابي أو production", c: 3, x: 62, y: 37, mx: 80, my: 28 },
+    { id: "cmp", t: "تقرير compliance", c: 4, x: 62, y: 63, mx: 20, my: 62 },
+    { id: "buy", t: "software أو شركة", c: 5, x: 62, y: 90, mx: 80, my: 62 },
+    { id: "repost", t: "re:Post / Knowledge Center", c: 2, x: 15, y: 10, mx: 20, my: 45 },
+    { id: "sup", t: "AWS Support case", c: 3, x: 15, y: 37, mx: 80, my: 45 },
+    { id: "art", t: "AWS Artifact", c: 4, x: 15, y: 63, mx: 20, my: 80 },
+    { id: "mkt", t: "Marketplace / APN", c: 5, x: 15, y: 90, mx: 80, my: 80 },
+  ]}
+  edges={[
+    { from: "q", to: "gen", c: 1 },
+    { from: "q", to: "acc", c: 1 },
+    { from: "q", to: "cmp", c: 1 },
+    { from: "q", to: "buy", c: 1 },
+    { from: "gen", to: "repost", c: 2 },
+    { from: "acc", to: "sup", c: 3 },
+    { from: "cmp", to: "art", c: 4 },
+    { from: "buy", to: "mkt", c: 5 },
+  ]}
+/>
 
-قارن تكلفة الخطة بتكلفة downtime والاحتياج لـ TAM، مش بحجم الشركة فقط. SaaS يخسر `$40,000/hour` ممكن يبرر دعم أعلى؛ workload داخلي noncritical ممكن لا.
+## 🔍 من جوه: الخطط والمصادر
 
-## 🧪 Lab ورقي
+### خطط الدعم (نوفمبر ٢٠٢٦)
 
-صنف: billing dispute، Sev-1 outage، SOC report، firewall vendor، architecture question، migration delivery. اكتب القناة وسبب استبعاد البديل.
+| الخطة | لمين | أهم حاجة |
+| --- | --- | --- |
+| **Basic** | كل العملاء، مجانية | دعم الحساب والفواتير وزيادة الـ quotas، الـ docs وre:Post، وفحوصات Trusted Advisor الأساسية، وAWS Health |
+| **Business Support+** | production workloads | دعم فني **٢٤/٧**. الحد الأدنى المنشور `$29` للحساب في الشهر أو نسبة من الاستهلاك، أيهما أكبر |
+| **Enterprise** | workloads حساسة | **TAM** (Technical Account Manager) مخصص، استجابة أسرع للحالات الحرجة. الحد الأدنى المنشور `$5,000` في الشهر أو نسبة |
+| **Unified Operations** | عمليات ضخمة ومعقدة | أعلى مستوى. الحد الأدنى المنشور `$50,000` في الشهر أو نسبة |
 
-<Checklist id="aws-cp-39" title="خلّصت الفصل لما" items={["تعرف الخطط التجارية الحالية في أكتوبر ٢٠٢٦", "تذكر إن الخطط القديمة بتنتهي في ٢٠٢٧", "تفرق re:Post وArtifact وMarketplace وAPN", "تعامل response target كاستجابة مش حل مضمون"]} />
+<Box type="warn" title="الأسماء القديمة لسه في الامتحان">
+
+الخطط القديمة **Developer** و**Business** و**Enterprise On-Ramp** مقرر ينتهي دعمها **١ يناير ٢٠٢٧** في الـ commercial Regions. امتحان CLF-C02 ممكن يسأل بالأسماء القديمة: **Developer** = ساعات العمل وبالإيميل للتجربة، **Business** = ٢٤/٧ لـ production، **Enterprise On-Ramp** = pool of TAMs، **Enterprise** = TAM مخصص. الأسعار والـ response times بتتغير، فقرار الشراء من الصفحة الرسمية.
+
+</Box>
+
+### مصادر المساعدة
+
+- **AWS re:Post:** مجتمع أسئلة وأجوبة، فيه خبراء من AWS والمجتمع. **متحطش داتا حساسة.**
+- **AWS Knowledge Center:** مقالات لأشهر الأسئلة (جوه re:Post).
+- **Documentation، Whitepapers، Prescriptive Guidance، Architecture Center:** مراجع رسمية.
+- **AWS Skill Builder / Training and Certification:** كورسات وتحضير امتحانات.
+
+### المصادر التانية
+
+- **AWS Artifact:** تقارير **compliance** بتاعة AWS (SOC، ISO، PCI) واتفاقيات (زي BAA). مجاني (فصل ٩).
+- **AWS Marketplace:** كتالوج **software** وdata وخدمات من شركات تانية، تشتريه وتشغّله على AWS وفاتورته مع فاتورة AWS.
+- **AWS Partner Network (APN):** **شركات** consulting وsoftware معتمدة تساعدك تبني أو تنقل.
+- **AWS Professional Services:** فريق من **AWS نفسها** بيشتغل معاك على مشاريع كبيرة.
+- **TAM:** في خطة Enterprise، مرشد فني مخصص بيساعدك استباقيًا.
+- **AWS Trust & Safety:** لو حد بيستخدم موارد AWS في abuse (spam، هجوم عليك).
+
+## 🛠️ طبّق: افتح case صح
+
+⚠️ فتح case للحساب والفواتير متاح في Basic مجانًا. الـ technical cases محتاجة خطة مدفوعة.
+
+1. **`Support Center` ← `Create case`.** شوف الأنواع المتاحة لخطتك (Account and billing، Service limit increase، Technical).
+2. **اكتب case فاتورة نموذجية** (متبعتهاش لو مفيش مشكلة حقيقية):
+   - **العنوان:** «رسوم NAT Gateway غير متوقعة في eu-central-1».
+   - **التفاصيل:** الفترة، الـ Region، الـ resource IDs، اللي جربته، والـ screenshots. **من غير** باسوردات أو secrets.
+3. **حدد الـ severity بأمانة:** «production system down» بس لما يكون فعلًا واقف. الـ response time **هدف للرد الأول**، مش وعد بالحل.
+4. **صنّف المواقف الست** من أول الفصل:
+
+| الموقف | الباب |
+| --- | --- |
+| سؤال Lambda + SQS | re:Post / Knowledge Center / docs |
+| رسوم مش مفهومة | Support case (Account and billing)، حتى في Basic |
+| الـ checkout واقف ٢ الفجر | Support case حرجة (محتاج Business Support+ أو أعلى) |
+| تقرير compliance للبنك | AWS Artifact |
+| firewall من شركة معينة | AWS Marketplace |
+| شركة تساعد في الهجرة | AWS Partner Network (أو Professional Services) |
+
+## ⚖️ قارن: اللي بيتلخبط
+
+| بيتلخبطوا | الفرق |
+| --- | --- |
+| re:Post ↔ AWS Support | re:Post = **مجتمع عام** مجاني. Support = **case خاص بحسابك** |
+| Artifact ↔ Audit Manager | Artifact = تقارير **AWS** عن نفسها. Audit Manager = يجمع أدلة **لتطبيقك** إنت |
+| Marketplace ↔ APN | Marketplace = **منتجات** تشتريها. APN = **شركات** تشتغل معاك |
+| APN ↔ Professional Services | APN = شركاء **برّه** AWS. Professional Services = فريق **AWS** |
+| TAM ↔ Support engineer | TAM = **مرشد مستمر واستباقي** (Enterprise). المهندس = بيحل **case** معينة |
+| Basic ↔ مدفوع | Basic = حساب وفواتير وquotas. **دعم فني** = خطة مدفوعة |
+
+<Checklist id="aws-cp-39" title="خلّصت الفصل لما" items={["تعرف خطط الدعم الحالية والقديمة وإن القديمة بتنتهي ٢٠٢٧", "تعرف إن Basic بيغطي الحساب والفواتير مجانًا", "تعرف TAM في أنهي خطة وبيعمل إيه", "تفرّق re:Post وArtifact وMarketplace وAPN وProfessional Services", "تكتب support case بتفاصيل كافية ومن غير secrets"]} />
 
 <Quiz>
-<Q n={1} q="تقرير compliance من AWS؟">AWS Artifact.</Q>
-<Q n={2} q="شراء firewall من vendor؟">AWS Marketplace.</Q>
-<Q n={3} q="Developer Support لمشروع جديد في أكتوبر ٢٠٢٦؟">خطة legacy؛ راجع Business Support+ والخطط الرسمية الحالية.</Q>
+<Q n={1} q="شركة عايزة مرشد فني مخصص بيساعدها استباقيًا. أنهي خطة؟">**Enterprise** (فيها **TAM**).</Q>
+<Q n={2} q="عايز تقرير SOC 2 بتاع AWS للمراجع. منين؟">**AWS Artifact**.</Q>
+<Q n={3} q="عايز تشتري وتشغّل software جاهز من vendor والفاتورة مع AWS. منين؟">**AWS Marketplace**.</Q>
+<Q n={4} q="سؤال عام عن خدمة، ومش عايز تدفع. فين؟">**AWS re:Post** (وKnowledge Center والـ docs).</Q>
+<Q n={5} q="محتاج شركة consulting معتمدة تساعدك تبني على AWS. فين؟">**AWS Partner Network (APN)**.</Q>
 </Quiz>

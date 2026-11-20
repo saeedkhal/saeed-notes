@@ -4,69 +4,168 @@ short: Service Chooser
 order: 40
 label: فصل ٤٠
 badge: التكلفة والامتحان · فصل ٤٠
-en: compute · storage · database · networking · security · operations · analytics · migration · cost
-keywords: Decision guide · Keywords · Managed · Serverless · Resilience · Cost
-goal: تحول وصف المشكلة لاختيار مبرر، وتستبعد الخدمات القريبة بدل حفظ كلمة واحدة.
+en: scenario-based questions · keywords · service categories · elimination
+keywords: كلمة مفتاحية · فئة · استبعاد · تدريب
+goal: تتدرب على طريقة حل أسئلة «أنسب خدمة إيه؟» في ٣ خطوات، وتراجع كل الخدمات مقسمة على فئات، وتحل ٢٠ موقف.
 part: التكلفة والامتحان
 color: c5
 ---
 
-## Requirement كامل قبل اسم الخدمة
+## 🧠 افهم: السؤال بيديك الإجابة
 
-E-commerce محتاج 3,000 requests/sec، p95 أقل من 300ms، RTO 30m، RPO 5m، PCI scope محدود، وbudget `$25k/month`.
+أغلب أسئلة CLF-C02 شكلها: «شركة عايزة X. أنسب خدمة؟». والـ ٤ اختيارات غالبًا خدمات **حقيقية وقريبة من بعض**. يعني الحفظ لوحده مش كفاية، لازم **تفرّق**.
 
-1. `Route 53` للـ DNS وhealth routing.
-2. `CloudFront + WAF` للـ cache وحماية web patterns.
-3. `ALB` يوزع على `ECS/Fargate` متعدد AZs.
-4. `Aurora/RDS Multi-AZ` للـ relational data والتوفر؛ read replicas لو القراءة bottleneck.
-5. `SQS` يفصل order intake عن workers؛ `SNS` لو event لازم يروح لعدة subscribers.
-6. `Secrets Manager + KMS` للأسرار والمفاتيح.
-7. `CloudWatch` للمراقبة، `CloudTrail` للـ API audit، وConfig للحالة والcompliance.
+السؤال دايمًا فيه **كلمة أو اتنين** بيحسموا: «serverless»، «audit»، «stateless»، «SQL على S3»، «dedicated»، «DDoS». لو مسكتهم، الإجابة بتبان.
 
-الاختيار ينجح لو يحقق latency والتوفر والاسترجاع والتكلفة. إضافة خدمات أكتر من غير requirement تزود complexity ومش تعتبر إجابة أحسن.
+<Hl c="y">٣ خطوات: (١) لاقي الكلمة اللي بتحسم، (٢) حدد الفئة (compute، storage، security…)، (٣) استبعد الخدمات اللي بتحل سؤال تاني.</Hl>
 
-## أسئلة الاختيار
+<Box type="story" icon="🔎" title="المحقق">
+
+المحقق مش بيخمّن المجرم من الأول. بيدوّر على **دليل** (الكلمة المفتاحية)، يحدد **الدايرة** (أهل البيت ولا الجيران؟)، وبعدين **يستبعد** اللي كان في مكان تاني وقت الحادثة.
+
+</Box>
+
+## 👀 تخيّل: الطريقة على سؤال
+
+<Flow items={[
+  { t: "السؤال", s: "«مين حذف الـ bucket امبارح؟»", c: 1 },
+  "→",
+  { t: "الكلمة", s: "مين + عمل إيه = audit", c: 2 },
+  "→",
+  { t: "الفئة", s: "مراقبة وحوكمة", c: 3 },
+  "→",
+  { t: "استبعد", s: "CloudWatch = صحة · Config = إعدادات", c: 4 },
+  "→",
+  { t: "الإجابة", s: "CloudTrail", c: 5 },
+]} />
+
+## 🔍 من جوه: الخريطة بالفئات
 
 ### Compute
 
-تحكم في OS → `EC2`. Function قصيرة event-driven → `Lambda`. Containers AWS-native → `ECS`، Kubernetes → `EKS`، compute بلا إدارة nodes → `Fargate`. نشر app مُدار → `Elastic Beanstalk` أو `App Runner` حسب القيود.
+| لو السؤال بيقول | الخدمة |
+| --- | --- |
+| تحكم كامل في الـ OS، سيرفر افتراضي | EC2 |
+| كود من غير سيرفرات مع events، أقل من ١٥ دقيقة | Lambda |
+| containers من غير سيرفرات | Fargate |
+| Kubernetes | EKS |
+| ارفع الكود والمنصة تعمل الباقي | Elastic Beanstalk |
+| سعر شهري ثابت وبسيط | Lightsail |
+| batch jobs كتير | AWS Batch |
 
-### Storage وdatabase
+### Storage
 
-Object → `S3`؛ block لـ EC2 → `EBS`؛ shared Linux files → `EFS`؛ specialized/Windows files → `FSx`. Relational → `RDS/Aurora`؛ key-value/document low latency → `DynamoDB`؛ cache → `ElastiCache`؛ warehouse → `Redshift`.
+| لو السؤال بيقول | الخدمة |
+| --- | --- |
+| objects، صور، backups، data lake، static website | S3 |
+| أرشيف رخيص جدًا | S3 Glacier (Deep Archive) |
+| هارد لـ EC2 واحدة | EBS |
+| فولدر مشترك Linux | EFS |
+| file share Windows/SMB | FSx for Windows |
+| HPC file system | FSx for Lustre |
+| on-prem يكتب على AWS (hybrid) | Storage Gateway |
 
-Multi-AZ للتوفر/failover؛ read replica للتوسع في القراءة. S3 مش POSIX file system، وRedshift مش OLTP database.
+### Databases
 
-### Networking وintegration
+| لو السؤال بيقول | الخدمة |
+| --- | --- |
+| relational مُدارة | RDS |
+| MySQL/PostgreSQL compatible بأداء عالي | Aurora |
+| NoSQL key-value serverless | DynamoDB |
+| cache | ElastiCache |
+| data warehouse | Redshift |
+| graph | Neptune |
+| MongoDB compatible | DocumentDB |
 
-DNS → Route 53؛ CDN → CloudFront؛ load distribution → ELB؛ managed API front door → API Gateway. VPN اتصال encrypted عبر الإنترنت؛ Direct Connect وصلة private dedicated. SQS queue، SNS pub/sub، EventBridge event routing.
+### Networking
 
-### Security وoperations
+| لو السؤال بيقول | الخدمة |
+| --- | --- |
+| شبكة معزولة | VPC |
+| DNS، domain، routing policies | Route 53 |
+| CDN، caching على الـ edge | CloudFront |
+| IPs ثابتة وشبكة AWS العالمية لـ TCP/UDP | Global Accelerator |
+| نفق مشفّر على الإنترنت | Site-to-Site VPN |
+| خط خاص | Direct Connect |
+| hub لـ VPCs كتير | Transit Gateway |
+| توزيع ترافيك | Elastic Load Balancing |
 
-IAM للـ workforce/AWS access، Cognito لمستخدمي التطبيق. KMS keys، Secrets Manager secrets، ACM certificates. WAF web attacks، Shield DDoS، GuardDuty threats، Inspector vulnerabilities، Macie sensitive S3 data، Security Hub aggregation.
+### Security
 
-CloudWatch metrics/logs/alarms؛ CloudTrail API actions؛ Config configuration/compliance؛ Systems Manager fleet؛ Health AWS events؛ Trusted Advisor recommendations؛ Organizations accounts/SCPs؛ Control Tower landing zone.
+| لو السؤال بيقول | الخدمة |
+| --- | --- |
+| users وroles وpolicies | IAM |
+| SSO لحسابات كتير | IAM Identity Center |
+| مفاتيح تشفير | KMS |
+| rotation للباسوردات | Secrets Manager |
+| شهادات SSL/TLS | ACM |
+| SQL injection، XSS، rate limiting | WAF |
+| DDoS | Shield |
+| threat detection | GuardDuty |
+| ثغرات | Inspector |
+| PII في S3 | Macie |
+| تقارير compliance بتاعة AWS | Artifact |
 
-### Data وmigration والتكلفة
+### Management والمراقبة
 
-Athena SQL على S3؛ Glue catalog/ETL؛ EMR Spark؛ Kinesis streaming؛ QuickSight BI؛ OpenSearch search. Bedrock foundation models؛ SageMaker AI custom ML.
+| لو السؤال بيقول | الخدمة |
+| --- | --- |
+| metrics، alarms، logs | CloudWatch |
+| مين عمل إيه (API) | CloudTrail |
+| تاريخ الإعدادات والـ compliance | Config |
+| infrastructure as code | CloudFormation |
+| multi-account، SCPs | Organizations |
+| landing zone | Control Tower |
+| توصيات تكلفة وأمان وأداء وlimits | Trusted Advisor |
+| إدارة سيرفرات، patches، Session Manager | Systems Manager |
 
-Evaluator assessment؛ AWS Transform planning الحالي؛ MGN rehost؛ DMS database/CDC؛ Schema Conversion schema؛ DataSync files؛ Transfer Family SFTP؛ Storage Gateway hybrid.
+## 🛠️ طبّق: ٢٠ موقف
 
-Calculator estimate؛ Explorer analysis؛ Budgets alerts؛ CUR 2.0 details. راجع caveats أكتوبر ٢٠٢٦: Migration Hub للعملاء الحاليين، Snow Family غير متاح تجاريًا لعملاء جدد، وخطط Support القديمة في انتقال.
+غطّي الإجابة وجاوب. لو غلطت، ارجع لجزء ⚖️ قارن في فصل الخدمة.
 
-## Incident لاختبار الاختيار
+<Quiz title="🏋️ تدريب سريع">
+<Q n={1} q="موقع static (HTML وJS) من غير سيرفرات وبأقل تكلفة؟">**S3** (static website) ويفضل وراه **CloudFront**.</Q>
+<Q n={2} q="تصغير صورة كل ما تترفع على S3؟">**Lambda** بـ S3 event.</Q>
+<Q n={3} q="عايز تفصل الـ checkout عن خدمة الإيميل البطيئة؟">**SQS**.</Q>
+<Q n={4} q="رسالة واحدة توصل لـ ٥ أنظمة؟">**SNS** (وتحتها SQS لو محتاج متضيعش).</Q>
+<Q n={5} q="workflow فيه خطوات وretries وموافقة بشرية؟">**Step Functions**.</Q>
+<Q n={6} q="اتصال مشفّر من المكتب للـ VPC النهارده؟">**Site-to-Site VPN**.</Q>
+<Q n={7} q="database تستحمل وقوع AZ من غير تغيير الـ endpoint؟">**RDS Multi-AZ**.</Q>
+<Q n={8} q="تقارير تقيلة بتبطّأ الـ database؟">**Read replica** (أو Redshift لو تحليل تاريخي).</Q>
+<Q n={9} q="SQL على CSV في S3 مرة في الأسبوع؟">**Athena**.</Q>
+<Q n={10} q="عايز تعرف مين فتح port 22 للعالم؟">**CloudTrail**.</Q>
+<Q n={11} q="تتأكد باستمرار إن مفيش security group فاتح 22 للعالم؟">**AWS Config** rule (أو Trusted Advisor/Security Hub للفحص).</Q>
+<Q n={12} q="فيديو بيتحمّل ببطء في آسيا والـ Region في أوروبا؟">**CloudFront**.</Q>
+<Q n={13} q="credentials بتتستخدم من دولة غريبة؟">**GuardDuty**.</Q>
+<Q n={14} q="تمنع أي حساب في الشركة يستخدم Regions برّه أوروبا؟">**SCP** في Organizations.</Q>
+<Q n={15} q="batch job رخيص يستحمل الانقطاع؟">**Spot Instances**.</Q>
+<Q n={16} q="تقدير تكلفة architecture جديدة؟">**Pricing Calculator**.</Q>
+<Q n={17} q="تحويل مكالمات خدمة العملاء لنص؟">**Transcribe**.</Q>
+<Q n={18} q="chatbot generative AI من مستندات الشركة من غير تدريب؟">**Bedrock**.</Q>
+<Q n={19} q="نقل database وهي شغالة بأقل downtime؟">**DMS**.</Q>
+<Q n={20} q="باسورد الـ database يتغير لوحده كل شهر؟">**Secrets Manager**.</Q>
+</Quiz>
 
-CPU طبيعي لكن latency 4s: ابدأ CloudWatch ثم X-Ray، مش تزود EC2 تلقائيًا. مين غيّر SG: CloudTrail، مش Config وحده. SG كان compliant إمتى: Config. نفس كلمة "monitor" لا تكفي؛ حدد السؤال.
+## ⚖️ قارن: أشهر ١٠ أزواج بتتلخبط
 
-## 🧪 Lab ورقي
+| الزوج | افتكر |
+| --- | --- |
+| CloudWatch ↔ CloudTrail | **صحة** ← Watch. **مين عمل** ← Trail |
+| Security Group ↔ NACL | instance + **stateful** ← SG. subnet + **stateless** + deny ← NACL |
+| SQS ↔ SNS | **طابور** يسحب منه واحد ← SQS. **ميكروفون** للكل ← SNS |
+| Multi-AZ ↔ Read replica | **availability** ← Multi-AZ. **scale قراية** ← replica |
+| WAF ↔ Shield | **محتوى HTTP** ← WAF. **حجم DDoS** ← Shield |
+| GuardDuty ↔ Inspector | **سلوك** ← GuardDuty. **ثغرة** ← Inspector |
+| Athena ↔ Redshift | **SQL على S3 متقطع** ← Athena. **warehouse** ← Redshift |
+| VPN ↔ Direct Connect | **إنترنت مشفّر وسريع التجهيز** ← VPN. **خط خاص ثابت** ← DX |
+| Polly ↔ Transcribe | **نص ← صوت** ← Polly. **صوت ← نص** ← Transcribe |
+| Savings Plans ↔ Capacity Reservation | **خصم** ← SP. **ضمان سعة** ← CR |
 
-صمم media upload: 5 GB files، processing async، global download، metadata relational، RTO ساعة. اختار خدمة لكل hop واكتب بديل قريب وليه اترفض.
-
-<Checklist id="aws-cp-40" title="خلّصت الفصل لما" items={["تختار من نوع المهمة مش keyword وحيدة", "تفرق الخدمات المتشابهة في compute وstorage وdatabase", "تربط security وoperations بالسؤال", "تختار analytics وmigration وcost من النتيجة المطلوبة"]} />
+<Checklist id="aws-cp-40" title="خلّصت الفصل لما" items={["تطبّق الـ ٣ خطوات: كلمة، فئة، استبعاد", "تجاوب ١٧ من ٢٠ في التدريب من غير ما تبص", "تفرّق العشر أزواج اللي بتتلخبط", "ترجع لفصل الخدمة لما تغلط بدل ما تحفظ الإجابة"]} />
 
 <Quiz>
-<Q n={1} q="مين غيّر security group؟">CloudTrail؛ CloudWatch للـ metrics.</Q>
-<Q n={2} q="هوية مستخدمي التطبيق؟">Cognito؛ IAM للوصول إلى موارد AWS.</Q>
-<Q n={3} q="Event لعدة مستلمين؟">SNS؛ SQS queue للمعالجة المنفصلة.</Q>
+<Q n={1} q="«monitor resource utilization and set alarms». أنهي خدمة؟">**CloudWatch**.</Q>
+<Q n={2} q="«record API calls for governance and auditing». أنهي خدمة؟">**CloudTrail**.</Q>
+<Q n={3} q="«decouple application components». أنهي خدمة غالبًا؟">**SQS**.</Q>
+<Q n={4} q="«protect web application from common exploits like SQL injection». أنهي خدمة؟">**AWS WAF**.</Q>
 </Quiz>

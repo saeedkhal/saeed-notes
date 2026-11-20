@@ -4,51 +4,132 @@ short: Pricing Models
 order: 37
 label: فصل ٣٧
 badge: التكلفة والامتحان · فصل ٣٧
-en: pay-as-you-go · On-Demand · Reserved Instances · Savings Plans · Spot · Dedicated Hosts · data transfer
+en: pay-as-you-go · On-Demand · Savings Plans · Reserved Instances · Spot Instances · Dedicated Hosts · Dedicated Instances · Capacity Reservations · data transfer
 keywords: مرونة · التزام · سعة فائضة · سيرفر مخصص · نقل البيانات
-goal: تختار purchase option من ثبات الحمل وقدرته على الانقطاع، من غير خلط الخصم بحجز السعة.
+goal: تقسّم أي حمل لـ baseline ثابت وpeak متغير وشغل يستحمل الانقطاع، وتختار لكل جزء طريقة الدفع الصح، وتفهم الداتا بتتحاسب إمتى.
 part: التكلفة والامتحان
 color: c2
 ---
 
-## SaaS فاتورته 120 ألف دولار
+## 🧠 افهم: نفس السيرفر، أسعار مختلفة
 
-الـ baseline ثابت 300 vCPU، والـ peak الشهري 900، وفيه rendering batch يعمل checkpoint.
+فاتورة دُكّان بقت كبيرة. سارة لاحظت إن الـ compute شكله كده:
 
-1. أول شهر: On-Demand عشان الفريق يقيس الاستخدام.
-2. بعد 90 يوم: baseline ثابت 70%، فاشتروا commitment مناسب له فقط.
-3. الـ peak المتغير فضل On-Demand.
-4. rendering اتحول Spot ووفر، مع retries وcheckpoint كل دقيقتين.
-5. license قديمة per-socket احتاجت Dedicated Hosts.
+- **٤ سيرفرات شغالين ٢٤ ساعة طول السنة.** ده الأساس (baseline).
+- **لحد ١٢ سيرفر زيادة** بعد الفطار في رمضان. ده الـ peak.
+- **تقرير الليل وتصغير الصور القديمة**: شغل لو اتقطع يكمل من مكانه.
 
-شراء commitment على peak كان هيدر فلوس 25 يوم كل شهر. وتشغيل checkout الوحيد على Spot كان هيعرض الإيراد للانقطاع.
+كلهم شغالين **On-Demand** (أغلى سعر للساعة). بس AWS بتدّي **خصم** لو التزمت بسنة أو ٣، و**خصم أكبر** لو قبلت إن السيرفر ممكن يتاخد منك بإنذار قصير.
 
-## الاختيارات
+<Hl c="g">On-Demand = مرونة كاملة وأغلى سعر. Savings Plans وReserved = خصم مقابل التزام. Spot = خصم كبير مقابل إن AWS ممكن تاخده. Dedicated = سيرفر فعلي ليك لوحدك.</Hl>
 
-- `On-Demand`: بلا التزام؛ مناسب للجديد والمتغير، وسعر الوحدة عادة أعلى.
-- `Savings Plans`: commitment بدولار/ساعة لسنة أو 3؛ خصم على استخدام مؤهل. Compute أوسع مرونة، وEC2 Instance أضيق. التغطية تتغير؛ راجع docs.
-- `Reserved Instances`: billing discount على استخدام مطابق، مش server مادي محجوز. بعض الخدمات لها reservations خاصة.
-- `Spot`: spare capacity قابلة للاسترجاع؛ batch وCI وstateless workers.
-- `Dedicated Hosts`: physical server لعميل واحد، مفيد للترخيص أو compliance المحدد.
+<Box type="story" icon="🏨" title="حجز أوضة فندق">
 
-<Hl c="y">Savings Plans وRI خصم مالي؛ Capacity Reservation ضمان سعة. ممكن تحتاج واحد أو الاتنين.</Hl>
+- **On-Demand** = تدخل الفندق من غير حجز وتدفع سعر الليلة كامل. تمشي وقت ما تحب.
+- **Savings Plan / Reserved** = **اشتراك سنوي** في الفندق بخصم كبير. بس لو مسافرتش، دفعت برضه.
+- **Spot** = أوضة **فاضية الليلة دي بنص التمن**، بس لو جه نزيل حاجز، الفندق بيطلب منك تمشي خلال دقايق.
+- **Dedicated Host** = تأجر **دور كامل** لوحدك. مفيش حد غيرك فيه.
 
-## أرقام قرار
+</Box>
 
-لو baseline يكلف On-Demand `$10/hour` طوال 730 ساعة = `$7,300/month`، commitment بخصم افتراضي 30% يقلله لـ `$5,110`. لكن لو الاستخدام هبط للنصف، هتفضل تدفع commitment؛ التوفير النظري ممكن يتحول waste.
+## 👀 تخيّل: قسّم الحمل لطبقات
 
-## Data transfer
+<Diagram
+  title="كل طبقة من الحمل ليها طريقة دفع"
+  height={340}
+  mheight={560}
+  nodes={[
+    { id: "base", t: "Baseline", s: "٤ سيرفرات ٢٤/٧", c: 1, x: 85, y: 15, mx: 25, my: 6 },
+    { id: "peak", t: "Peak", s: "+١٢ بعد الفطار", c: 2, x: 85, y: 50, mx: 75, my: 6 },
+    { id: "batch", t: "Batch", s: "يستحمل الانقطاع", c: 3, x: 85, y: 85, mx: 50, my: 40 },
+    { id: "sp", t: "Savings Plan", s: "التزام سنة", c: 4, x: 20, y: 15, mx: 25, my: 75 },
+    { id: "od", t: "On-Demand", s: "وقت الحاجة", c: 5, x: 20, y: 50, mx: 75, my: 75 },
+    { id: "spot", t: "Spot", s: "لحد ٩٠٪ خصم", c: 3, x: 20, y: 85, mx: 50, my: 96 },
+  ]}
+  edges={[
+    { from: "base", to: "sp", t: "ثابت ومعروف", c: 1 },
+    { from: "peak", to: "od", t: "متغير", c: 2 },
+    { from: "batch", to: "spot", t: "ينفع يتقطع", c: 3 },
+  ]}
+/>
 
-الدخول من الإنترنت غالبًا بلا رسوم، والخروج غالبًا مدفوع بعد allowances. بين Regions غالبًا مدفوع، وبين AZs ممكن يكلف. نفس Region لا يعني مجاني. `CloudFront` وcaching ممكن يقلل origin transfer، لكن pricing path الحالي هو الحكم.
+## 🔍 من جوه: كل طريقة دفع
 
-## 🧪 Lab ورقي
+| الطريقة | الفكرة | الخصم تقريبًا | مناسب لـ |
+| --- | --- | --- | --- |
+| **On-Demand** | بالثانية أو الساعة، بلا التزام | — | حمل جديد أو متغير، تجارب |
+| **Compute Savings Plans** | التزام بـ **$ في الساعة** لسنة أو ٣ | لحد ~٦٦٪ | baseline، **مرن** بين EC2 وFargate وLambda والـ Regions والعائلات |
+| **EC2 Instance Savings Plans** | نفس الفكرة بس لعائلة في Region | لحد ~٧٢٪ | baseline ثابت على نوع معروف |
+| **Reserved Instances** | التزام سنة أو ٣ على خصائص instance | لحد ~٧٢٪ | baseline (وموجودة لـ RDS وغيره) |
+| **Spot Instances** | سعة فاضية عند AWS، ممكن تتاخد بإنذار **دقيقتين** | لحد ~٩٠٪ | batch، CI، شغل stateless بيعمل checkpoint |
+| **Dedicated Hosts** | سيرفر فعلي كامل ليك، وبتشوف الـ sockets والـ cores | — | licenses مربوطة بالسيرفر (BYOL)، compliance |
+| **Dedicated Instances** | instances على hardware مش مشترك مع عملاء تانيين | — | عزل hardware من غير تحكم في الـ host |
+| **On-Demand Capacity Reservations** | **ضمان سعة** في AZ، بسعر On-Demand | — | حدث مهم ولازم السعة تبقى موجودة |
 
-قسم workload إلى baseline وpeak وinterruptible، واحسب commitment على 50% و80% من baseline. اكتب تكلفة interruption ومتطلب capacity.
+(النسب «لحد» وبتختلف حسب النوع والمدة وطريقة الدفع. راجع صفحة الأسعار.)
 
-<Checklist id="aws-cp-37" title="خلّصت الفصل لما" items={["تختار On-Demand أو Spot من طبيعة الحمل", "تفرق بين Savings Plans وRI وحجز السعة", "تعرف سبب Dedicated Host", "تراجع اتجاه ومكان data transfer"]} />
+### تفاصيل بتفرق
+
+- **RI وSavings Plans خصم في الفاتورة**، مش سيرفر محجوز. لو عايز **ضمان سعة**، ده **Capacity Reservation** (أو RI zonal).
+- **طريقة الدفع في الالتزام:** All Upfront (خصم أكبر)، Partial Upfront، No Upfront.
+- **مدة أطول = خصم أكبر**: ٣ سنين أرخص من سنة، بس مخاطرة أكبر لو احتياجك اتغير.
+
+### Data transfer: الفلوس اللي بتتنسي
+
+| الاتجاه | غالبًا |
+| --- | --- |
+| من الإنترنت **لـ AWS** (inbound) | **مجاني** |
+| من AWS **للإنترنت** (outbound) | **مدفوع** (بعد كمية مجانية شهرية) |
+| بين **AZs** في نفس الـ Region | مدفوع في الاتجاهين غالبًا |
+| بين **Regions** | مدفوع |
+| جوه نفس الـ AZ بـ private IP | غالبًا مجاني |
+
+CloudFront بيقلل الـ transfer من الـ origin، والـ VPC endpoints بتقلل مصاريف NAT. راجع صفحة الأسعار للمسار بتاعك.
+
+## 🛠️ طبّق: احسب فاتورة دُكّان
+
+الـ Lab ورقي، والأسعار **تخيلية** للتمرين.
+
+**المعطيات:** سعر السيرفر On-Demand `$0.10/ساعة`. الشهر = ٧٣٠ ساعة.
+
+1. **الوضع الحالي (كله On-Demand):**
+   - Baseline: `4 × 730 × 0.10 = $292`
+   - Peak (١٢ سيرفر × ٤ ساعات × ٣٠ يوم): `12 × 120 × 0.10 = $144`
+   - Batch (٢ سيرفر × ٦ ساعات × ٣٠): `2 × 180 × 0.10 = $36`
+   - **المجموع: `$472`**
+2. **بعد التقسيم:**
+   - Baseline على Savings Plan بخصم افتراضي ٤٠٪: `292 × 0.6 = $175.2`
+   - Peak يفضل On-Demand: `$144`
+   - Batch على Spot بخصم افتراضي ٧٠٪: `36 × 0.3 = $10.8`
+   - **المجموع: `$330`** (توفير ~٣٠٪)
+3. **فخ:** لو التزمت Savings Plan على **١٦ سيرفر** (الـ peak)، هتدفع على ١٢ سيرفر مش شغالين **٢٠ ساعة في اليوم**. الالتزام بيتعمل على الـ **baseline اللي متأكد منه**.
+4. **فخ تاني:** لو حطيت سيرفر الـ checkout الوحيد على Spot، AWS ممكن تاخده وسط الفطار. Spot للشغل اللي **يستحمل**.
+
+**في الحقيقة:** استخدم **AWS Pricing Calculator** للأرقام، و**Cost Explorer** بيقترح Savings Plans من استخدامك الفعلي (الفصل الجاي).
+
+## ⚖️ قارن: الأسئلة اللي بتحسم
+
+| الموقف | الاختيار |
+| --- | --- |
+| تطبيق جديد، الحمل مش معروف | **On-Demand** |
+| حمل ثابت ٢٤/٧ لسنين، وعايز مرونة بين EC2 وLambda وFargate | **Compute Savings Plans** |
+| حمل ثابت على نفس عائلة الـ instances في Region | **EC2 Instance Savings Plans** أو **Reserved Instances** |
+| batch أو CI يستحمل الانقطاع | **Spot** |
+| license مربوط بعدد sockets أو cores | **Dedicated Hosts** |
+| لازم سعة مضمونة في AZ يوم حدث مهم | **Capacity Reservation** |
+| database ثابتة على RDS لسنين | **RDS Reserved Instances** |
+
+| | Savings Plans / RI | Capacity Reservation |
+| --- | --- | --- |
+| بيدّي | **خصم** | **ضمان سعة** |
+| التزام | سنة أو ٣ | مفيش (بتدفع طول ما هي موجودة) |
+
+<Checklist id="aws-cp-37" title="خلّصت الفصل لما" items={["تقسّم الحمل لـ baseline وpeak وinterruptible", "تختار On-Demand أو Savings Plans أو Spot لكل جزء", "تفرّق Compute Savings Plans عن EC2 Instance Savings Plans", "تفرّق الخصم (RI/SP) عن ضمان السعة", "تعرف Dedicated Hosts لإيه وإن الـ inbound transfer مجاني غالبًا والـ outbound مدفوع"]} />
 
 <Quiz>
-<Q n={1} q="Batch يعمل checkpoint ويستحمل قطع؟">Spot Instances.</Q>
-<Q n={2} q="Savings Plan تضمن capacity؟">لأ؛ ده pricing commitment.</Q>
-<Q n={3} q="نقل بين AZs مجاني؟">مش بالضرورة؛ راجع pricing للمسار.</Q>
+<Q n={1} q="Batch job بيعمل checkpoint ويستحمل إنه يتقطع، وعايز أرخص سعر. أنهي خيار؟">**Spot Instances**.</Q>
+<Q n={2} q="حمل ثابت لـ ٣ سنين، والشركة عايزة تنقل بين EC2 وFargate وLambda براحتها. أنهي خيار؟">**Compute Savings Plans**.</Q>
+<Q n={3} q="شركة عندها license Windows Server مربوط بعدد الـ physical cores. أنهي خيار؟">**Dedicated Hosts**.</Q>
+<Q n={4} q="Savings Plan بيضمن إن السعة هتبقى متاحة؟">**لأ**. ده خصم. ضمان السعة = **Capacity Reservation**.</Q>
+<Q n={5} q="رفع داتا من الإنترنت لـ S3 بيتحاسب؟">**غالبًا لأ**. الـ inbound data transfer مجاني، والـ outbound هو اللي بيتحاسب.</Q>
 </Quiz>

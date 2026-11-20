@@ -1,93 +1,142 @@
 ---
 title: "Serverless: Lambda وAPI Gateway"
-short: Serverless
+short: Lambda
 order: 15
 label: فصل ١٥
 badge: Compute · فصل ١٥
-en: Lambda · API Gateway · event-driven · concurrency · cold start
-keywords: function · trigger · managed scaling · quotas · short-lived
-goal: تفهم serverless من خلال API إنتاجية، وتحسب أثر الـ concurrency والـ retries والـ latency.
+en: AWS Lambda · event source · execution role · cold start · concurrency · Amazon API Gateway · function URL
+keywords: serverless · event · function · API
+goal: تفهم إن Lambda كود بيصحى مع حدث ويخلص، وتعرف حدوده وطريقة حسابه، وتعمل API صغير لدُكّان بـ Lambda وAPI Gateway.
 part: Compute
 color: c5
 ---
 
-## المثال الأول: Checkout وقت حملة
+## 🧠 افهم: ليه أدفع على سيرفر صاحي ونايم؟
 
-متجر متوقع ينتقل من `40 request/s` إلى `1,200 request/s` لمدة 10 دقايق. المطلوب إن `POST /orders` يرد خلال `500 ms`، يسجّل الطلب مرة واحدة، وما يفتحش آلاف الاتصالات على PostgreSQL.
+دُكّان محتاج يصغّر كل صورة منتج بعد ما تترفع. ده بيحصل ٢٠٠ مرة في اليوم، وكل مرة ٢ ثانية. يعني **٧ دقايق شغل في اليوم**. لو حطيته على EC2 شغال ٢٤ ساعة، هتدفع على ٢٣ ساعة و٥٣ دقيقة فاضيين، وهتعمل patches لسيرفر مبيعملش حاجة.
 
-١. `API Gateway` يستقبل HTTPS ويطبّق route وauthorization وthrottling.
-٢. Lambda تتحقق من الطلب وتستخدم `idempotencyKey` عشان retry ما يعملش order تاني.
-٣. العملية القصيرة تكتب في database أو تبعت شغل خلفي لـ SQS.
-٤. CloudWatch يقيس duration وerrors وthrottles؛ alarm يشتغل لو error rate عدّت `1%` لخمس دقايق.
+**AWS Lambda** بتقلب الفكرة: إنت بترفع **function**، وAWS بتشغّلها **بس لما حدث يحصل** (صورة اترفعت، request جه، رسالة وصلت)، وبعدين بتنام. بتدفع على **عدد المرات** و**مدة التشغيل** بالمللي ثانية.
 
-<Flow items={[
-  { t: "POST /orders", s: "1,200 req/s", c: 1 }, "→",
-  { t: "API Gateway", s: "auth + throttle", c: 2 }, "→",
-  { t: "Lambda", s: "idempotent logic", c: 5 }, "→",
-  { t: "DB / SQS", s: "durable state", c: 3 },
-]} />
+<Hl c="o">Serverless مش معناها مفيش سيرفرات. معناها إن السيرفرات مش شغلتك: AWS بتجهّزها وتعملها scale وpatches، وإنت بتكتب الكود وبتدفع على الاستخدام.</Hl>
 
-<Box type="idea" title="Serverless وصف تشغيل، مش اختفاء السيرفرات">
+<Box type="story" icon="🔔" title="الجرس والجرسون">
 
-AWS تدير hosts والـ OS وتوفير السعة. الفريق لسه مسؤول عن الكود، IAM، حماية الداتا، limits، observability، وتصميم الفشل والتكلفة.
+مطعم فيه **جرسون واقف جنب كل ترابيزة طول اليوم** حتى لو فاضية: ده EC2.
+مطعم فيه **جرس على كل ترابيزة**: لما الزبون يضغط، جرسون ييجي، ياخد الطلب، ويمشي. لو ١٠٠ زبون ضغطوا مع بعض، ييجي ١٠٠ جرسون. ولو محدش ضغط، محدش بيقبض: ده Lambda.
+
+بس أول مرة الجرس يرن في الصبح، الجرسون بياخد ثانية زيادة عشان يلبس: ده الـ **cold start**.
 
 </Box>
 
-## Concurrency بالأرقام
+## 👀 تخيّل: API طلبات دُكّان
 
-لو متوسط execution هو `250 ms` والحمل `1,200 request/s`، الـ concurrency التقريبية هي `1,200 × 0.25 = 300`. لو الـ database تستحمل `80` connection بس وfunction بتفتح connection لكل execution، النجاح في scaling عند Lambda ممكن يبقى فشل للـ database.
+<Diagram
+  title="من الموبايل لحد الـ database من غير سيرفر واحد تديره"
+  height={320}
+  mheight={540}
+  nodes={[
+    { id: "app", t: "موبايل الزبون", s: "POST /orders", c: 1, x: 90, y: 50, mx: 50, my: 6 },
+    { id: "apigw", t: "API Gateway", s: "auth + throttling", c: 2, x: 62, y: 50, mx: 50, my: 33 },
+    { id: "fn", t: "Lambda", s: "createOrder", c: 3, x: 35, y: 50, mx: 50, my: 62 },
+    { id: "db", t: "DynamoDB", s: "جدول Orders", c: 4, x: 8, y: 20, mx: 25, my: 92 },
+    { id: "logs", t: "CloudWatch Logs", s: "console.log", c: 5, x: 8, y: 80, mx: 75, my: 92 },
+  ]}
+  edges={[
+    { from: "app", to: "apigw", t: "HTTPS", c: 1 },
+    { from: "apigw", to: "fn", t: "event", c: 2 },
+    { from: "fn", to: "db", t: "PutItem", c: 3 },
+    { from: "fn", to: "logs", t: "logs", c: 5, dash: true },
+  ]}
+/>
 
-الحلول تشمل connection pooling مناسب زي `RDS Proxy`، queue لتنعيم الحمل، و`reserved concurrency` لحماية downstream. Reserved concurrency كمان تعزل سعة function، لكنها ممكن تعمل throttling لو اتحددت أقل من المطلوب.
+1. الموبايل بيبعت request لـ **API Gateway**: الباب الأمامي اللي بيستقبل HTTP، ويتأكد من الـ auth، ويحدد عدد الطلبات المسموح (throttling).
+2. API Gateway بيحوّل الـ request لـ **event** ويصحّي **Lambda**.
+3. الـ function بتكتب الطلب في الـ database بصلاحيات الـ **execution role** بتاعتها.
+4. أي `console.log` بيروح لـ **CloudWatch Logs** أوتوماتيك.
 
-## Cold start والـ latency
+## 🔍 من جوه: إزاي Lambda بتشتغل
 
-لما Lambda تحتاج execution environment جديدة، أول invocation عليها وقت تجهيز إضافي. مش كل invocation cold، والأثر بيتغير حسب runtime وحجم package والتهيئة والشبكة.
+### الحاجات الأساسية
 
-`Provisioned Concurrency` تجهز environments مسبقًا وتقلل التذبذب، مقابل تكلفة إضافية. في checkout حساس، قارن `p95` و`p99` قبل وبعد؛ متدفعش للحل قبل ما القياس يثبت المشكلة.
+- **Event source:** مين بيصحّي الـ function؟ API Gateway، S3، SQS، EventBridge (جدول زمني)، DynamoDB Streams، وغيرهم.
+- **Execution role:** الـ IAM role اللي الـ function بتشتغل بيها. least privilege هنا مهم.
+- **Memory:** من `128 MB` لحد `10 GB`، والـ CPU بيزيد مع الـ memory.
+- **Timeout:** أقصى مدة للتشغيل الواحد **١٥ دقيقة**.
+- **Runtimes:** Node.js، Python، Java، .NET، Ruby، أو container image، أو custom runtime.
 
-## Event sources والـ retries
+### Scaling والـ concurrency
 
-- API Gateway ينادي Lambda بشكل synchronous وينتظر response.
-- S3 وEventBridge يقدروا يبدأوا processing بسبب event.
-- Lambda تقرأ SQS على batches من خلال event source mapping.
+كل request في نفس اللحظة بياخد نسخة منفصلة من الـ function. ١٠٠ طلب مع بعض = ١٠٠ نسخة شغالة. في حد للحساب (account concurrency quota) قابل للزيادة، وتقدر تحجز concurrency لـ function مهمة.
 
-مصدر الحدث بيحدد retry behavior. في معالجة دفعة SQS، failure ممكن يرجّع messages للظهور؛ لذلك كل write مالي لازم يبقى idempotent، والرسائل المستعصية تروح DLQ بعد عدد محاولات محسوب.
+### Cold start
 
-## حدود واختيار بديل
+أول مرة (أو بعد فترة سكون) AWS بتجهّز بيئة جديدة وتحمّل الكود، فالطلب ده بياخد وقت زيادة. للحالات الحساسة في **Provisioned Concurrency** بيخلّي نسخ جاهزة دايمًا (وبتدفع عليها).
 
-Lambda execution التقليدية حدها الأقصى `15 دقيقة` حتى أكتوبر 2026. فيه quotas للـ concurrency والـ payload والذاكرة والـ ephemeral storage؛ بعضها قابل للزيادة وبعضها مرتبط بنوع التكامل، فراجع docs الحالية.
+### بتدفع على إيه؟
 
-<Grid2>
-<Card title="Lambda مناسبة" c={2}>
+**عدد الـ requests** + **المدة × الـ memory** (GB-seconds). في Free Tier شهري لـ Lambda بعدد requests ومدة. راجع صفحة الأسعار للأرقام الحالية.
 
-Traffic متغير، tasks قصيرة وstateless، event-driven processing، وفريق عايز يقلل إدارة infrastructure.
+<Box type="warn" title="Lambda مش لكل حاجة">
 
-</Card>
-<Card title="Container أو EC2 أنسب" c={4}>
-
-Process أطول من الحد، daemon مستمر، تحكم OS عميق، أو workload ثابت كبير أثبتت الأرقام إن compute مخصصة أوفر.
-
-</Card>
-</Grid2>
-
-<Box type="warn" title="نجاح تقني ممكن يعمل incident مالي">
-
-Loop بين S3 وLambda أو retry بلا idempotency يضاعف invocations والكتابات. استخدم budgets وalarms وconcurrency controls، وافصل output prefix عن input في image pipelines.
+شغل أطول من ١٥ دقيقة، أو process لازم يفضل صاحي ومحتفظ بحالة في الذاكرة، أو حمل ثابت عالي جدًا ٢٤ ساعة، غالبًا هيبقى أنسب وأرخص على containers أو EC2.
 
 </Box>
 
-## 🧪 تمرين: Image pipeline إنتاجية
+## 🛠️ طبّق: endpoint يرجّع منتجات دُكّان
 
-شركة تستقبل `300` صورة في الدقيقة، وكل صورة تحتاج thumbnail في `4 ثوانٍ`. ارسم S3 event → Lambda → S3 output، واحسب concurrency التقريبية. أضف duplicate event، ملف تالف، وارتفاع مفاجئ إلى `3,000` صورة/دقيقة. اكتب: إزاي تمنع overwrite مؤذٍ؟ فين DLQ أو failure destination؟ وإمتى تنقل المعالجة لـ ECS؟
+⚠️ Lambda وAPI Gateway ليهم Free Tier شهري، والـ Lab ده هيستهلك كام request بس.
 
-## مقارنة سريعة
+1. **`Lambda` ← `Create function`** ← `Author from scratch` ← الاسم `dukkan-products` ← Runtime `Node.js` (أحدث إصدار متاح).
+2. الصق الكود ده في `index.mjs` واضغط **Deploy**:
 
-API Gateway يدير واجهة الـ API؛ Lambda تنفذ compute. Lambda scaling مش ضمان إن كل dependency هتتحمل. `Pay per use` مفيد للحمل المتقطع، لكنه مش وعد إن التكلفة أقل في كل workload.
+<File name="index.mjs">
 
-<Checklist id="aws-cp-15" title="خلّصت الفصل لما" items={["تشرح serverless من غير ما تقول مفيش servers", "تتبع checkout من API Gateway لحد التخزين", "تحسب concurrency من المعدل والمدة", "تذكر حد 15 دقيقة والـ cold start", "تصمم retry وidempotency وحماية للـ downstream"]} />
+```js
+// الـ handler بيستقبل الـ event وبيرجّع response
+export const handler = async (event) => {
+  const products = [
+    { id: 1, name: "عيش بلدي", price: 5 },
+    { id: 2, name: "جبنة رومي", price: 120 },
+  ];
+  console.log("request جه", event.requestContext?.http?.method);
+  return {
+    statusCode: 200,
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify(products),
+  };
+};
+```
+
+</File>
+
+3. **اربط API Gateway:** `Add trigger` ← `API Gateway` ← `Create a new API` ← `HTTP API` ← Security: `Open` (للتجربة بس).
+4. افتح الـ **API endpoint** اللي ظهر. **المتوقع:** JSON بالمنتجين.
+5. **شوف الـ logs:** تبويب `Monitor` ← `View CloudWatch logs`. هتلاقي سطر «request جه» وكمان سطر `REPORT` فيه `Duration` و`Billed Duration` و`Init Duration` (ده الـ cold start، بيظهر في أول request بس).
+
+🧹 **تنضيف:** امسح الـ API من `API Gateway`، والـ function من `Lambda`، والـ log group من `CloudWatch` لو عايز.
+
+## ⚖️ قارن: Lambda ضد الباقي
+
+| | Lambda | Fargate | EC2 |
+| --- | --- | --- | --- |
+| بتدير سيرفرات؟ | لأ | لأ | أيوه |
+| بيشتغل إمتى؟ | مع الحدث بس | طول ما الـ task شغال | طول ما الـ instance شغالة |
+| أطول تشغيل | ١٥ دقيقة | مفيش حد | مفيش حد |
+| بتدفع على | requests + مدة × memory | CPU + memory في الثانية | وقت الـ instance |
+| بيكبر إزاي؟ | أوتوماتيك لكل request | بالـ service scaling | Auto Scaling group |
+| مناسب لـ | events، APIs متقطعة، automation | services دايمة في containers | تحكم كامل |
+
+| API Gateway | Application Load Balancer |
+| --- | --- |
+| API management: auth، throttling، API keys، stages | توزيع ترافيك HTTP على targets |
+| بيتحاسب بالـ request | بيتحاسب بالساعة + الاستخدام |
+| مثالي قدام Lambda | مثالي قدام EC2 وcontainers (وممكن Lambda) |
+
+<Checklist id="aws-cp-15" title="خلّصت الفصل لما" items={["تشرح serverless من غير ما تقول «مفيش سيرفرات»", "تعدّ ٣ event sources لـ Lambda", "تعرف حد الـ ١٥ دقيقة وإزاي الحساب بيتعمل", "تشرح الـ cold start وإزاي تقلله", "تعمل function وتربطها بـ API Gateway وتشوف الـ logs"]} />
 
 <Quiz>
-<Q n={1} q="عندك `400 request/s` وكل execution مدتها `0.5 s`؛ الـ concurrency التقريبية كام؟">حوالي `200` execution متزامنة، قبل احتساب التذبذب والـ retries.</Q>
-<Q n={2} q="Lambda وسّعت بنجاح لكن RDS وقعت من الاتصالات؛ ده failure فين؟">في تصميم الـ downstream capacity. استخدم pooling/proxy أو queue وحدود concurrency حسب السيناريو.</Q>
-<Q n={3} q="هل API Gateway بديل لـ Lambda؟">لأ. API Gateway front door وإدارة API، وLambda واحدة من integrations اللي تنفذ المنطق.</Q>
+<Q n={1} q="عايز كود يشتغل كل ما ملف يترفع على S3، وتدفع على وقت التشغيل بس. أنهي خدمة؟">**AWS Lambda** بـ S3 event.</Q>
+<Q n={2} q="job بياخد ٤٠ دقيقة. ينفع على Lambda؟">**لأ**، أقصى مدة ١٥ دقيقة. استخدم Fargate أو AWS Batch أو EC2، أو قسّم الشغل.</Q>
+<Q n={3} q="عايز تعمل REST API بـ authentication وrate limiting قدام Lambda. أنهي خدمة؟">**Amazon API Gateway**.</Q>
+<Q n={4} q="أول request بعد فترة سكون أبطأ من الباقي. اسمها إيه؟">**Cold start**. ممكن تقلله بـ Provisioned Concurrency.</Q>
 </Quiz>

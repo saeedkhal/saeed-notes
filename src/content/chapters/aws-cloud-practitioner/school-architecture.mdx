@@ -1,103 +1,136 @@
 ---
-title: معمارية E-commerce Production
-short: معمارية E-commerce
+title: معمارية دُكّان الكاملة
+short: المعمارية الكاملة
 order: 28
 label: فصل ٢٨
 badge: ربط الأنظمة · فصل ٢٨
-en: CloudFront · S3 · API Gateway · Lambda · DynamoDB · Cognito · SQS · SNS
-keywords: serverless commerce · request flow · event flow
-goal: تتبع checkout متزامن ومعالجة orders غير متزامنة مع security وfailure objectives واضحة.
+en: reference architecture · multi-AZ · edge · stateless tier · managed data · async processing · tradeoffs
+keywords: تجميع · طبقات · request flow · failure · تطور
+goal: تجمع كل اللي اتعلمته في رسمة واحدة لدُكّان، وتتبع طلب من أوله لآخره، وتعرف كل حتة موجودة ليه وبتحمي من إيه.
 part: ربط الأنظمة
 color: c3
 ---
 
-## المتطلبات قبل الرسم
+## 🧠 افهم: من سيرفر واحد لنظام بيستحمل رمضان
 
-متجر يعالج `300 order/s` طبيعيًا و`2,000 order/s` وقت الحملات. المطلوب:
+دُكّان بدأ بسيرفر واحد. دلوقتي المطلوب، بكلام عم حسن:
 
-- product pages عند `p95 < 200 ms`.
-- checkout response خلال `700 ms`.
-- لا duplicate charge حتى مع retries.
-- email وanalytics ممكن يتأخروا `10 دقايق` من غير تعطيل الطلب.
-- AZ failure ما توقفش الخدمة، وorder data لها RPO أقل من دقيقة.
+1. «الموقع يفتح بسرعة لزباين مصر والخليج.» ← **سرعة**
+2. «لو حاجة وقعت، الزبون ميحسش.» ← **availability**
+3. «متضيعش ولا طلب.» ← **durability**
+4. «رمضان ×١٠ من غير ما حد يصحى.» ← **elasticity**
+5. «داتا الزباين محدش يشوفها.» ← **security**
+6. «الفاتورة تبقى على قد الشغل.» ← **cost**
 
-<Diagram
-  title="E-commerce production flow"
-  height={380}
-  mheight={760}
-  nodes={[
-    { id: "u", t: "Customer", c: 1, x: 7, y: 45, mx: 50, my: 5 },
-    { id: "cf", t: "CloudFront", s: "edge + cache", c: 4, x: 23, y: 45, mx: 50, my: 18 },
-    { id: "s3", t: "S3", s: "private static origin", c: 2, x: 40, y: 20, mx: 50, my: 31 },
-    { id: "api", t: "API Gateway", s: "auth + throttle", c: 3, x: 40, y: 70, mx: 50, my: 44 },
-    { id: "l", t: "Lambda", s: "checkout logic", c: 1, x: 59, y: 70, mx: 50, my: 57 },
-    { id: "db", t: "DynamoDB", s: "orders/idempotency", c: 5, x: 80, y: 48, mx: 50, my: 70 },
-    { id: "q", t: "SNS + SQS", s: "async fanout", c: 2, x: 80, y: 82, mx: 50, my: 84 },
-  ]}
-  edges={[
-    { from: "u", to: "cf" },
-    { from: "cf", to: "s3", t: "static" },
-    { from: "cf", to: "api", t: "API" },
-    { from: "api", to: "l" },
-    { from: "l", to: "db", t: "durable write" },
-    { from: "l", to: "q", t: "event" },
-  ]}
-/>
+كل requirement من دول اتحلت في فصل. الفصل ده بيركّبهم مع بعض، ويوريك إن كل خدمة **موجودة عشان سبب**.
 
-## Flow 1: فتح الموقع في 140 ms
+<Hl c="u">المعمارية الكويسة مش أكتر خدمات. كل مكوّن لازم تقدر تقول «ده موجود عشان يحمي من كذا»، ولو مش قادر، شيله.</Hl>
 
-١. Route 53 يحل الاسم إلى CloudFront.
-٢. CloudFront ترجع JavaScript والصور من edge لو cache hit؛ لو miss تجيبها من S3 origin خاصة.
-٣. الـ customer يسجل الدخول عبر Cognito ويحصل على token.
-٤. الواجهة تعرض catalog؛ personalized responses لا تتكيّش بسياسة عامة بالغلط.
+<Box type="story" icon="🏗️" title="المطعم الكبير">
 
-CloudFront يقلل latency وorigin load، لكنه مش بديل authorization. S3 تفضل private، والوصول للـ origin بصلاحيات مخصصة.
-
-## Flow 2: Checkout في 520 ms
-
-١. الساعة `20:00:00.000` العميل يرسل `POST /orders` مع token و`idempotencyKey`.
-٢. API Gateway تتحقق من route/authorizer وتطبّق throttling.
-٣. Lambda تتحقق من tenant/customer والسعر الحالي.
-٤. conditional write في DynamoDB تسجل order ومفتاح idempotency؛ retry بنفس المفتاح يرجع نفس النتيجة بدل charge جديد.
-٥. response يرجع الساعة `20:00:00.520`.
-٦. event يخرج للمسار الخلفي بعد ضمان عدم ضياعه وفق pattern مناسب؛ dual-write الساذج بين database وpublish خطر.
-
-## Flow 3: شغل خلفي مستقل
-
-SNS تعمل fanout إلى SQS queues للمخزون والإيميل والتحليلات. كل consumer عنده retries وDLQ وidempotency. لو email worker يقع `8 دقايق`، orders تفضل ناجحة والـ backlog يتعالج بعد رجوعه.
-
-<Hl c="g">المسار المتزامن يخلص أقل قدر لازم لتأكيد الطلب؛ الشغل اللي يقبل التأخير يخرج لمسار durable غير متزامن.</Hl>
-
-## Incident: حملة أكبر من المتوقع
-
-- `20:00`: الحمل يصل `2,000 order/s`.
-- `20:01`: Lambda توسع، لكن DynamoDB throttling يظهر بسبب partition key مركزة.
-- `20:02`: API error rate تعدي `2%` والـ alarm يفتح incident.
-- `20:04`: الفريق يفعّل mitigation المخطط ويقلل traffic؛ orders المقبولة محفوظة، والرسائل المتأخرة في queues.
-
-الدرس: serverless scaling في طبقة لا يضمن capacity في الطبقة التالية. load test لازم يثبت keys والـ quotas والـ downstream قبل الحملة.
-
-## Security وtradeoffs
-
-- Cognito يدير user identity/tokens، لكن backend يتحقق من token والـ authorization لكل order.
-- IAM roles أقل صلاحية لكل function/consumer، وتشفير وlogs بلا card secrets.
-- WAF/controls مناسبة قد تحمي الـ edge/API، وbudgets تراقب requests وduration وcapacity والرسائل.
-- DynamoDB اختيار تعليمي هنا؛ لو checkout يحتاج joins وmulti-row relational transactions، RDS/Aurora ممكن يكونوا أنسب.
-
-<Box type="warn" title="Architecture مش قائمة خدمات">
-
-كل مكوّن لازم يرتبط بمتطلب وفشل محدد. إزالة SNS أو Cognito أو DynamoDB ممكن تكون صح في نظام مختلف؛ القرار يتغير مع consistency والـ SLA والفريق والتكلفة.
+مطعم صغير فيه طباخ واحد بيعمل كل حاجة. لما يكبر بيبقى فيه: **بواب** على الباب (CloudFront/WAF)، **مضيف** بيوزّع على الترابيزات (ALB)، **جرسونات** كتير وبيتغيروا (containers)، **دفتر حسابات** محفوظ عند محاسب (Aurora)، **حامل أوردرات** للمطبخ (SQS)، و**مدير** بيراقب كل حاجة (CloudWatch). كل واحد ليه دور، ولو واحد غاب في بديل.
 
 </Box>
 
-## 🧪 تمرين: Production review
+## 👀 تخيّل: الرسمة الكاملة
 
-غيّر المتطلبات إلى `5,000 order/s`، RTO `10 دقايق` لRegion failure، وتقارير تقبل تأخير ساعة. ارسم request/event flows، احسب concurrency لو Lambda مدتها `250 ms`، وحدد hot-key risk وDLQ alarm. بعدها اكتب game day: Region/AZ failure، duplicate request، email outage، وشرط نجاح رقمي لكل تجربة.
+<Diagram
+  title="دُكّان على AWS"
+  height={460}
+  mheight={760}
+  nodes={[
+    { id: "user", t: "الزبون", c: 1, x: 94, y: 50, mx: 50, my: 3 },
+    { id: "r53", t: "Route 53", s: "dukkan.example", c: 2, x: 80, y: 12, mx: 20, my: 14 },
+    { id: "cf", t: "CloudFront + WAF", s: "edge", c: 2, x: 76, y: 50, mx: 50, my: 22 },
+    { id: "s3", t: "S3", s: "صور + frontend", c: 4, x: 58, y: 88, mx: 80, my: 36 },
+    { id: "alb", t: "ALB", s: "public subnets · ٢ AZ", c: 3, x: 56, y: 50, mx: 50, my: 40 },
+    { id: "app", t: "ECS on Fargate", s: "private · Auto Scaling", c: 3, x: 36, y: 50, mx: 50, my: 56 },
+    { id: "db", t: "Aurora", s: "Multi-AZ", c: 4, x: 14, y: 22, mx: 20, my: 74 },
+    { id: "ddb", t: "DynamoDB", s: "السلة", c: 4, x: 14, y: 50, mx: 50, my: 74 },
+    { id: "sns", t: "SNS → SQS", s: "fan-out", c: 5, x: 30, y: 88, mx: 80, my: 74 },
+    { id: "lam", t: "Lambda", s: "إيميلات + صور", c: 5, x: 8, y: 88, mx: 80, my: 92 },
+  ]}
+  edges={[
+    { from: "user", to: "r53", t: "DNS", c: 1 },
+    { from: "user", to: "cf", t: "HTTPS", c: 1 },
+    { from: "cf", to: "s3", t: "static", c: 2 },
+    { from: "cf", to: "alb", t: "/api", c: 2 },
+    { from: "alb", to: "app", c: 3 },
+    { from: "app", to: "db", t: "orders", c: 3 },
+    { from: "app", to: "ddb", t: "cart", c: 3 },
+    { from: "app", to: "sns", t: "OrderPlaced", c: 5 },
+    { from: "sns", to: "lam", c: 5 },
+  ]}
+/>
 
-<Checklist id="aws-cp-28" title="خلّصت الفصل لما" items={["تربط كل خدمة بمتطلب إنتاجي", "تتبع checkout بالأوقات", "تفصل event flow عن response", "تحط auth وidempotency على backend", "تصمم DLQ وalarms وfailure test"]} />
+حوالين الرسمة، في طبقة مش ظاهرة بس موجودة في كل حتة: **IAM roles** لكل خدمة، **KMS** للتشفير، **Secrets Manager** للباسوردات، **CloudWatch** و**CloudTrail** للمراقبة، و**AWS Backup** للنسخ.
+
+## 🔍 من جوه: كل طبقة وبتحمي من إيه
+
+| الطبقة | الخدمة | بتحل إيه | لو شلناها؟ |
+| --- | --- | --- | --- |
+| DNS | Route 53 | الاسم والتوجيه وfailover | مفيش اسم ثابت، ومفيش تحويل لـ Region تانية |
+| Edge | CloudFront | سرعة للزباين البعيدين، cache، HTTPS | كل طلب بيسافر للـ Region |
+| حماية | WAF + Shield | SQL injection، bots، DDoS | الهجمات توصل للتطبيق |
+| Static | S3 (+ OAC) | صور وfrontend بمتانة عالية ومن غير سيرفر | السيرفرات تشيل حمل ملفات |
+| توزيع | ALB في AZين | يوزّع ويستبعد العيّان | سيرفر واحد = نقطة فشل |
+| تطبيق | ECS/Fargate + Auto Scaling | stateless، بيكبر ويصغر | تدير سيرفرات، ورمضان يوقّعك |
+| طلبات | Aurora Multi-AZ | معاملات وjoins وfailover | تضيع طلبات أو توقف لو AZ وقعت |
+| سلة | DynamoDB | قراية بالمفتاح بسرعة ثابتة | ضغط على Aurora |
+| async | SNS → SQS → Lambda | الطلب ميستناش الإيميل | خدمة بطيئة توقّع الـ checkout |
+| شبكة | VPC، private subnets، SGs | الـ database مش ظاهرة للإنترنت | سطح هجوم أكبر |
+
+## 🛠️ طبّق: اتبع طلب، وكسّر حاجات
+
+الـ Lab ورقي. خد ورقة وارسم الرسمة اللي فوق من الذاكرة الأول، وبعدين:
+
+### ١. اتبع طلب «اطلب» خطوة خطوة
+
+1. المتصفح يسأل Route 53 ← عنوان CloudFront.
+2. CloudFront: WAF يفحص ← `/api/orders` مش متكيّش ← ALB.
+3. ALB ← task سليم في أي AZ.
+4. الـ task: يقرا السلة من DynamoDB ← يكتب الطلب في Aurora (transaction).
+5. يعمل publish لـ `OrderPlaced` ← يرد على الزبون **فورًا** برقم الطلب.
+6. في الخلفية: SQS ← Lambda تبعت الإيميل، وخدمة المخزن تحجز.
+
+### ٢. سيناريوهات فشل: إيه اللي بيحصل؟
+
+| اللي حصل | النتيجة المتوقعة |
+| --- | --- |
+| AZ a وقعت | ALB يبعت لـ AZ b، Auto Scaling يطلّع tasks هناك، Aurora يعمل failover. الزبون ممكن يحس ببطء ثواني |
+| خدمة الإيميل وقعت ساعة | الرسايل مستنية في SQS، الطلبات شغالة عادي، الإيميلات توصل متأخرة |
+| رمضان ×١٠ | Auto Scaling يزوّد tasks، CloudFront يشيل الصور، DynamoDB on-demand يكبر |
+| bot بيعمل ١٠٠٠ طلب في الثانية | WAF rate-based rule يوقفه |
+| موظف مسح جدول بالغلط | Aurora point-in-time recovery لقبلها بدقيقة |
+| Region كلها وقعت | **الرسمة دي مش بتغطي ده.** محتاج DR في Region تانية (فصل ٤): هل الـ RTO يستاهل التمن؟ |
+
+### ٣. الفاتورة
+
+اكتب أغلى ٣ حاجات تتوقعها (غالبًا: Fargate tasks، Aurora، NAT Gateway/data transfer). وحط لكل واحدة فكرة توفير (Savings Plans، تصغير، VPC endpoints).
+
+## ⚖️ قارن: تطور المعمارية
+
+| | v1: البداية | v2: الرسمة دي | v3: لو كبرنا جدًا |
+| --- | --- | --- | --- |
+| Compute | EC2 واحدة | Fargate في AZين + Auto Scaling | + Regions متعددة |
+| Database | على نفس السيرفر | Aurora Multi-AZ + DynamoDB | Aurora Global + DynamoDB global tables |
+| Static | من السيرفر | S3 + CloudFront | نفس الشيء |
+| Async | مفيش | SNS + SQS + Lambda | + EventBridge + Step Functions |
+| Availability | لو وقع، وقع | يستحمل وقوع AZ | يستحمل وقوع Region |
+| التكلفة والتعقيد | أقل حاجة | متوسط | عالي |
+| مناسب لـ | تجربة الفكرة | معظم الشركات | خدمة عالمية حساسة |
+
+<Box type="interview" title="الدرس">
+
+مفيش «أحسن معمارية». في معمارية **مناسبة للمطلوب**. ابدأ بسيط، واعرف كل خطوة لقدام بتحل مشكلة إيه وبتكلف إيه. ده بالظبط اللي الـ Well-Architected Framework بيسأل عنه (فصل ٥).
+
+</Box>
+
+<Checklist id="aws-cp-28" title="خلّصت الفصل لما" items={["ترسم معمارية دُكّان من الذاكرة", "تقول كل مكوّن بيحمي من إيه", "تتبع طلب من DNS لحد الإيميل", "تتوقع اللي بيحصل في ٥ سيناريوهات فشل", "تعرف إمتى تنقل من v1 لـ v2 لـ v3"]} />
 
 <Quiz>
-<Q n={1} q="Retry لنفس checkout لازم ما يعملش charge تاني؛ أهم control؟">Idempotency key محفوظة بشرط atomic/conditional مناسب في مصدر دائم.</Q>
-<Q n={2} q="Email worker وقع 8 دقايق؛ هل checkout لازم يفشل؟">لأ لو الإيميل requirement غير متزامن؛ SQS تحتفظ بالشغل والـ backlog يتعالج لاحقًا.</Q>
-<Q n={3} q="هل Cognito token في الواجهة يغني عن authorization في API؟">لأ؛ الـ backend لازم يتحقق من token وصلاحية العميل على المورد.</Q>
+<Q n={1} q="في التصميم ده، ليه الطلب مش مستني الإيميل يتبعت؟">لأن الإيميل بيتبعت **async** عن طريق SNS → SQS → Lambda. الـ checkout بيرد بعد ما يحفظ الطلب وينشر الحدث.</Q>
+<Q n={2} q="AZ وقعت. أنهي مكونات بتخلّي الموقع يكمل؟">**ALB في AZين**، **Auto Scaling** بيطلّع بدائل، و**Aurora Multi-AZ** بيعمل failover.</Q>
+<Q n={3} q="ليه الـ database في private subnet؟">عشان **محدش من الإنترنت يوصلها**. التطبيق بس يقدر، عن طريق Security Group.</Q>
+<Q n={4} q="التصميم ده بيستحمل وقوع Region كاملة؟">**لأ**. محتاج استراتيجية DR في Region تانية، وده قرار تكلفة مقابل RTO/RPO.</Q>
 </Quiz>

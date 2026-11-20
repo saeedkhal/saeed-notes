@@ -1,120 +1,139 @@
 ---
 title: افتح الحساب من غير مفاجآت
-short: أمان التكلفة
+short: حساب آمن التكلفة
 order: 10
 label: فصل ١٠
 badge: الأمان والحساب · فصل ١٠
-en: Free plan · Paid plan · credits · AWS Budgets · billing alerts · cost allocation tags
-keywords: Free plan · Paid plan · credits · Budgets · tags · cleanup
-goal: تميز خطط الحساب الحالية وتبني حواجز تكلفة وتنضيف قبل أول Lab بموارد حقيقية.
+en: Free plan · Paid plan · credits · AWS Budgets · tags · cleanup · Free Tier usage
+keywords: Free plan · Budgets · tags · cleanup
+goal: تفتح حساب وتعرف الفرق بين Free plan وPaid plan، وتعمل Budget قبل أي resource، وتتعود على tags وتنضيف بعد كل Lab.
 part: الأمان والحساب
 color: c5
 ---
 
-## Incident تكلفة: Lab اتساب آخر الأسبوع
+## 🧠 افهم: إزاي الفاتورة بتفاجئ الناس؟
 
-فريق صغير أنشأ يوم الخميس EC2 وload balancer وEBS snapshot لاختبار ساعتين. الـ instance اتوقفت، لكن الـ load balancer والـ volume والـ snapshot فضلوا موجودين. الاثنين الصبح budget forecast نبه إن الإنفاق هيعدي السقف.
+سارة جربت يوم الخميس سيرفر وload balancer عشان تتعلم. يوم الأحد لقت فاتورة ٦٠ دولار. هي عملت `Stop` للسيرفر، بس:
 
-المشكلة مش بس «resource غالية»؛ المشكلة إن مفيش owner ولا expiry ولا cleanup verification.
+- الـ load balancer كان لسه شغال، وده بيتحاسب بالساعة.
+- الهارد (EBS volume) لسه موجود، وده بيتحاسب حتى لو السيرفر واقف.
+- عملت الـ Lab في Region، وراحت تمسح في Region تانية فمشافتش حاجة.
 
-## Timeline آمن قبل أول resource
+المشكلة مش إن AWS غالية. المشكلة إن **مفيش حد كان مراقب، ومفيش قايمة باللي اتعمل**.
 
-1. **قبل التسجيل:** افهم هل الحساب Free plan ولا Paid plan وشروط credits.
-2. **قبل الإنشاء بـ١٥ دقيقة:** اعمل budget وتنبيهات actual وforecasted.
-3. **وقت الإنشاء:** أضف `Project` و`Environment` و`Owner` و`ExpiresOn`.
-4. **بعد الـ Lab مباشرة:** احذف الأصل والتوابع، وافحص كل Region مستخدمة.
-5. **اليوم التالي:** راجع Cost Explorer/Billing لأن بيانات التكلفة مش فورية.
+<Hl c="o">قبل أول resource: اعمل Budget بتنبيه. وقت الإنشاء: حط tags. بعد الـ Lab: امسح كل حاجة في نفس الـ Region واتأكد.</Hl>
 
-النجاح إن كل تكلفة لها owner والغرض معروف والتنضيف مثبت. الفشل إن budget يوصل alert ولا حد يقرأه، أو إن حذف instance يتفهم غلط إنه حذف كل التوابع.
+<Box type="story" icon="⚡" title="عداد الكهربا">
 
-## خطتين للحساب الجديد
+لما تسافر، مش كفاية تطفي النور. التلاجة والسخان والراوتر لسه شغالين وبيعدّوا. وعشان متتفاجئش، بتبص على العداد قبل ما تمشي وأول ما ترجع. الـ **Budget** هو إن العداد يبعتلك رسالة لما يعدّي رقم معين، بس **مش بيفصل الكهربا لوحده**.
 
-في تجربة AWS الحالية للحسابات الجديدة، تختار بين **Free plan** و**Paid plan**. التفاصيل والأهلية بتتغير، فالكلام هنا صورة أكتوبر ٢٠٢٦ ولازم تراجع صفحة AWS Free Tier وقت التسجيل.
+</Box>
+
+## 👀 تخيّل: دورة حياة Lab آمن
+
+<Flow items={[
+  { t: "١. Budget", s: "تنبيه قبل أي حاجة", c: 1 },
+  "→",
+  { t: "٢. اعمل بـ tags", s: "Project · Owner · ExpiresOn", c: 2 },
+  "→",
+  { t: "٣. جرّب", s: "في Region واحدة", c: 3 },
+  "→",
+  { t: "٤. امسح", s: "الأصل + توابعه", c: 4 },
+  "→",
+  { t: "٥. اتأكد بكرة", s: "Billing مش لحظي", c: 5 },
+]} />
+
+## 🔍 من جوه: الحساب والتنبيهات
+
+### Free plan ولا Paid plan؟
+
+لما تعمل حساب جديد دلوقتي، AWS بتخيّرك بين خطتين (الشروط بتتغير، فراجع صفحة Free Tier وقت التسجيل):
 
 <Grid2>
 <Card title="Free plan" c={1}>
 
-للتجربة وproof of concept بخدمات مختارة. لا تُحصّل رسوم خلال فترة الخطة، وتنتهي بعد ٦ شهور أو نفاد credits أيهما أقرب، وبعدها يُغلق الحساب إن لم ترقيه.
+للتعلم والتجربة على خدمات مختارة. مش بيتحصّل منك فلوس طول الخطة. بتخلص بعد **٦ شهور** أو لما الـ credits تخلص، أيهما أقرب، والحساب بيتقفل لو مرقّتهوش.
 
 </Card>
 <Card title="Paid plan" c={2}>
 
-يوصل لكل الخدمات والمزايا المتاحة للحساب، وتسعيره pay-as-you-go. أي استخدام يتجاوز الرصيد أو لا تغطيه credits قد يُحصّل على وسيلة الدفع.
+كل الخدمات متاحة، والدفع pay-as-you-go. أي استهلاك أكتر من الـ credits بيتحصّل على الكارت.
 
 </Card>
 </Grid2>
 
-الحسابات المؤهلة الجديدة تحصل حاليًا على `100 USD` credits عند البداية، ويمكن كسب حتى `100 USD` إضافية بأنشطة محددة. الأهلية والمدة وما تغطيه credits لها شروط.
+الحسابات الجديدة المؤهلة بتاخد credits في الأول (حاليًا `$100`)، وتقدر تكسب credits زيادة لما تجرب أنشطة معينة. الـ credits ليها تاريخ انتهاء ومش بتغطي كل حاجة.
 
-<Box type="warn" title="Credits مش فلوس لكل خدمة">
+### AWS Budgets
 
-بعض الرسوم أو الخدمات قد لا تكون مؤهلة، والـ credits لها انتهاء وشروط. الـ Free plan نفسها محدودة، والترقية لـ Paid plan تغيّر خطر التكلفة. اقرأ الرصيد وتاريخ الانتهاء وشروط العرض في حسابك.
+بتحط رقم (مثلًا `$10` في الشهر) وتختار إمتى تتنبّه:
+
+- **Actual:** لما الصرف الفعلي يعدّي نسبة (مثلًا ٨٠٪).
+- **Forecasted:** لما **التوقع** لآخر الشهر يعدّي الرقم. ده بينبهك بدري.
+
+<Box type="warn" title="Budget بينبّه، مش بيقفل">
+
+الـ Budget مش سقف بيوقف الصرف. في **Budget Actions** تقدر تعمل حاجات محددة (زي إنك تحط policy تمنع إنشاء موارد)، بس محتاجة إعداد وصلاحيات، ومش بتوقف كل حاجة. وبيانات الفواتير بتتأخر ساعات، فممكن تصرف قبل ما التنبيه يوصل.
 
 </Box>
 
-## Budget قبل resource
+### Tags
 
-AWS Budgets تقدر تراقب actual أو forecasted cost وترسل alerts عند thresholds. اعمل budget صغير مناسب للتجربة، وتنبيهات تدريجية بدل تنبيه واحد بعد فوات الأوان.
+كل resource تقدر تحط عليه labels بشكل `Key=Value`. لما تفعّلهم كـ **cost allocation tags** في Billing، الفاتورة تتقسم بيهم وتعرف مين صرف إيه:
 
-مثال: تنبيه عند مبلغ فعلي صغير، وتنبيه forecast لما التوقع يعدي السقف. اختبر وصول البريد وتأكد إن العنوان بيراقبه شخص فعلًا.
-
-<Hl c="o">Budget تنبّهك؛ مش قاطع كهربا افتراضي يوقف كل الموارد تلقائيًا.</Hl>
-
-فيه Budget Actions لأنواع إجراءات محددة، لكنها تحتاج إعداد وصلاحيات ولا تضمن إيقاف كل مصدر تكلفة. صمم cleanup واضحًا حتى لو التنبيه اشتغل.
-
-## Billing alerts وFree Tier usage
-
-فعّل تفضيلات Billing المناسبة، وراجع Billing and Cost Management بانتظام. CloudWatch billing alarms لها متطلبات ونطاق محدد، ومش بديل عن Budgets أو Cost Explorer.
-
-راقب Free Tier usage والـ credits من الصفحات الحالية في Billing أو Settings حسب تجربة الحساب. أسماء الشاشات ممكن تتغير.
-
-## Tags عشان تعرف مين صرف
-
-استخدم tags ثابتة من البداية:
-
-- `Project=checkout-lab`
+- `Project=dukkan`
 - `Environment=lab`
-- `Owner=team-name`
+- `Owner=sara`
 - `ExpiresOn=2026-11-30`
 
-لتظهر tag في تقارير التكلفة قد تحتاج تفعيلها كـ cost allocation tag، وفيه تأخير قبل ظهور بيانات الفوترة. والـ tags مش مدعومة بنفس الشكل على كل resource.
+### الحاجات اللي بتفضل تتحاسب بعد Stop
 
-<Box type="story" icon="🧾" title="تكلفة قابلة للمحاسبة">
+| المورد | بيتحاسب وهو واقف؟ |
+| --- | --- |
+| EC2 instance واقفة | الـ compute لأ |
+| EBS volume المربوط بيها | **أيوه** |
+| Elastic IP / public IPv4 | **أيوه** (AWS بتحاسب على الـ public IPv4) |
+| Load balancer | **أيوه** طول ما هو موجود |
+| NAT Gateway | **أيوه** بالساعة + الداتا |
+| Snapshots | **أيوه** على حجمها |
 
-لما كل resource عليها project وenvironment وowner وexpiry، تقدر تربط الإنفاق بفريق وقرار. resource من غير metadata تظهر في الفاتورة لكن يصعب تعرف قيمتها أو صاحب قرارها.
+## 🛠️ طبّق: جهّز حساب دُكّان قبل أي Lab
 
-</Box>
+⚠️ Budgets: أول كام budget مجانية، والباقي ليه سعر صغير. راجع الـ docs.
 
-## Cleanup جزء من الـ Lab
+1. **اعمل Budget:** `Billing and Cost Management` ← `Budgets` ← `Create budget` ← اختار template `Monthly cost budget` ← المبلغ `$10` ← إيميلك.
+   **المتوقع:** budget بتنبيهات عند ٨٥٪ و١٠٠٪ actual و١٠٠٪ forecasted (حسب الـ template).
+2. **فعّل تنبيهات Free Tier:** من `Billing preferences` فعّل إيميلات استهلاك الـ Free Tier.
+3. **اتفق مع نفسك على tags ثابتة:** أي حاجة هتعملها في الفصول الجاية حط عليها `Project=dukkan-lab` و`Owner=<اسمك>`.
+4. **اعرف تدوّر:** `Resource Groups & Tag Editor` ← `Tag Editor` ← Regions = `All regions` ← tag `Project=dukkan-lab`. دي الطريقة اللي هتلاقي بيها أي حاجة نسيتها.
 
-قبل الإنشاء، اكتب قائمة الموارد اللي هتتعمل. بعد التجربة:
+نفس الـ Budget بالـ CLI (للتوضيح، راجع الـ docs للـ flags):
 
-1. احذف الموارد الأساسية من شاشة الخدمة.
-2. راجع التوابع: volumes وsnapshots وload balancers وElastic IPs وlogs.
-3. فتّش كل Region استخدمتها؛ الـ Console قد تعرض Region واحدة.
-4. راجع الفاتورة وCost Explorer لاحقًا لأن بيانات التكلفة مش فورية.
-5. احتفظ بالدليل إن التنضيف تم، من غير أسرار.
+```bash
+aws budgets create-budget --account-id <ACCOUNT_ID> \
+  --budget '{"BudgetName":"dukkan-lab","BudgetLimit":{"Amount":"10","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+  --notifications-with-subscribers '[{"Notification":{"NotificationType":"FORECASTED","ComparisonOperator":"GREATER_THAN","Threshold":100},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"you@example.com"}]}]'
+```
 
-## مفاهيم متقاربة
+🧹 **عادة التنضيف:** بعد كل Lab، افتح Tag Editor على `All regions` واتأكد إن مفيش حاجة باقية بالـ tag بتاعك. وتاني يوم بص على `Bills`.
 
-- **Credits:** رصيد بشروط وأهلية وانتهاء؛ مش ضمان عدم الفاتورة.
-- **Budget:** يقارن actual أو forecasted بحدود وينبه؛ مش kill switch افتراضي.
-- **Billing alarm:** آلية تنبيه بمتطلبات ونطاق محدد؛ مش بديل عن Budgets.
-- **Cost allocation tags:** تساعد نسب التكلفة بعد تفعيلها وظهور البيانات.
-- **Cleanup:** إجراء تشغيلي يحذف الأصل والتوابع ويثبت النتيجة.
+## ⚖️ قارن: أدوات الفلوس الأولية
 
-## 🧪 Lab آمن: tabletop لفاتورة
+| الأداة | بتعمل إيه | إمتى |
+| --- | --- | --- |
+| AWS Budgets | تنبيه (وأحيانًا action) لما الصرف أو التوقع يعدي رقم | قبل أي حاجة |
+| Free Tier usage alerts | تنبيه لما تقرب من حدود الـ Free Tier | من أول يوم |
+| Cost Explorer | رسوم بيانية للصرف اللي فات وتوقع | لما تحقق «الفلوس راحت فين» |
+| Bills | الفاتورة التفصيلية لكل خدمة | آخر الشهر أو بعد Lab |
+| Tag Editor | تلاقي الموارد بالـ tag في كل الـ Regions | التنضيف |
 
-خطط Lab مدته ساعتان فيه EC2 وALB وEBS. حدد budget عند `5 USD` و`10 USD`، recipients، tags، قائمة التوابع، وموعد مراجعة اليوم التالي. افترض إن forecast وصل `12 USD`: اكتب timeline للاستجابة ومن يملك قرار الإيقاف. متنشئش resources.
+هنتعمق في أدوات التكلفة في فصل ٣٨.
 
-## قبل الفصل الجاي
-
-الحساب بقى له حواجز أمان وتكلفة. الفصل ١١ هيبدأ البناء الفعلي باختيار compute مناسب، مع تسعير وcleanup واضحين قبل أي مورد.
-
-<Checklist id="aws-cp-10" title="خلّصت الفصل لما" items={["تفرّق بين Free plan وPaid plan الحالية", "تعرف إن credits محدودة ومش بتغطي كل شيء", "تعمل budget وتفهم إنه تنبيه مش إيقاف شامل", "تحط tags وخطة cleanup قبل الإنشاء", "تراجع كل Region والتوابع بعد الـ Lab"]} />
+<Checklist id="aws-cp-10" title="خلّصت الفصل لما" items={["تفرّق بين Free plan وPaid plan", "تعمل Budget بتنبيه actual وforecasted", "تعرف إن Budget بينبّه ومش بيوقف الصرف", "تحط tags على أي resource وتدوّر بيها في كل الـ Regions", "تعرف موارد بتفضل تتحاسب بعد Stop"]} />
 
 <Quiz>
-<Q n={1} q="هل وجود credits يمنع أي فاتورة على Paid plan؟">لأ. الاستخدام بعد الرصيد أو الرسوم غير المؤهلة ممكن تتحاسب حسب الشروط.</Q>
-<Q n={2} q="Budget وصل ١٠٠٪. هل كل resources هتقف تلقائيًا؟">لأ. الـ budget تنبيه افتراضيًا؛ أي action تحتاج إعداد، ومش بديل عن cleanup.</Q>
-<Q n={3} q="حذفت EC2 instance. خلصت التكلفة أكيد؟">مش بالضرورة. راجع volumes وsnapshots وIP وload balancer وlogs وكل Region، ثم راجع بيانات التكلفة.</Q>
+<Q n={1} q="عايز إيميل لما توقع فاتورة الشهر يعدي $50. أنهي خدمة؟">**AWS Budgets** بتنبيه forecasted.</Q>
+<Q n={2} q="عملت Stop للـ EC2. الفاتورة بقت صفر؟">**مش أكيد**. الـ EBS volume والـ public IP والـ load balancer وغيرهم ممكن يفضلوا بيتحاسبوا.</Q>
+<Q n={3} q="عايز تعرف كل فريق صرف قد إيه. تعمل إيه؟">تحط **tags** زي `Project` و`Owner` وتفعّلهم كـ **cost allocation tags**.</Q>
+<Q n={4} q="الـ Budget وصل ١٠٠٪. الموارد هتقف لوحدها؟">**لأ**. الـ Budget تنبيه. لازم تتصرف إنت، أو تكون مجهّز Budget Action محددة.</Q>
 </Quiz>

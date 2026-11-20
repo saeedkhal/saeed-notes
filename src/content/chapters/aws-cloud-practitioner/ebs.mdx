@@ -1,98 +1,130 @@
 ---
 title: "EBS: الهارد الدائم بتاع EC2"
-short: EBS والـ snapshots
+short: EBS
 order: 13
 label: فصل ١٣
 badge: Compute · فصل ١٣
-en: block storage · EBS · instance store · snapshots · volume types
-keywords: persistent block · ephemeral disk · incremental snapshot · SSD · HDD
-goal: تميّز EBS الدائم عن instance store المؤقت وتختار نوع volume مبدئيًا وتفهم snapshot صح.
+en: Amazon EBS · volume types · gp3 · io2 · snapshots · instance store · encryption · AWS Backup
+keywords: block storage · AZ · snapshot · instance store
+goal: تفهم EBS كهارد بيتركب في instance جوه AZ واحدة، وتعمل snapshot وترجع منه، وتفرّقه عن instance store.
 part: Compute
 color: c3
 ---
 
-## Incident: instance انتهت والداتا فين؟
+## 🧠 افهم: الداتا بتروح فين لما السيرفر يقفل؟
 
-خدمة processing على EC2 اتعمل لها terminate بالخطأ الساعة `16:00`. الملفات المؤقتة على instance store اختفت، لكن transaction files على EBS volume فضلت لأن إعداد الحذف كان مقفول. آخر snapshot كانت `02:00`، فالفريق اكتشف إن الديمومة والـ backup سؤالين مختلفين.
+برنامج المحاسبة على EC2 بيكتب ملفات كل يوم. سؤال: لو الـ instance وقفت أو اتمسحت، الملفات دي بتروح فين؟
 
-`Amazon EBS` بيدي block storage على مستوى الـ blocks، يتعمل له format وfilesystem. الـ volume مورد مستقل في Availability Zone معينة، وممكن يفضل بعد توقف أو انتهاء instance حسب الإعداد.
+ده بيعتمد على **الهارد اللي الملفات عليه**. الـ instance نفسها مجرد CPU وRAM. التخزين الدائم بيجي من **Amazon EBS (Elastic Block Store)**: هارد افتراضي متوصل بالـ instance عن طريق الشبكة، وبيفضل موجود حتى لو الـ instance وقفت.
 
-## Timeline للاستعادة
+<Hl c="g">EBS volume = هارد افتراضي دائم، بيتركب في instance في نفس الـ AZ. والـ snapshot = نسخة منه محفوظة بأمان تقدر تعمل منها هارد جديد في أي مكان.</Hl>
 
-1. **16:03:** monitoring يعلن فقد instance.
-2. **16:08:** الفريق يحدد هل الـ volume الأصلية سليمة وموجودة.
-3. **16:12:** يربط volume بـ instance بديلة داخل قيود الـ AZ المناسبة.
-4. لو الـ volume نفسها فشلت أو الداتا فسدت، يختار snapshot point-in-time.
-5. ينشئ **volume جديدة** من snapshot، يعمل validation، ثم يعيد الترافيك.
+<Box type="story" icon="💾" title="الفلاشة والصورة">
 
-النجاح إن البيانات المطلوبة ترجع خلال الهدف ويتم إثبات سلامتها. الفشل إن وجود volume يُفهم كأنه backup، أو إن snapshot موجودة من غير restore test.
-
-<Box type="story" icon="💾" title="ديمومة مختلفة">
-
-EBS مستقلة عن عمر instance نسبيًا. Instance store محلية على host ومؤقتة؛ ممتازة لـ cache أو scratch data قابلة لإعادة البناء، وليست مكان النسخة الوحيدة من بيانات مهمة.
+- **EBS volume** زي **هارد خارجي** بتركّبه في اللابتوب. لو اللابتوب باظ، الهارد سليم وتركّبه في لابتوب تاني. بس لازم يكون **في نفس الأوضة** (نفس الـ AZ).
+- **Snapshot** زي إنك تصوّر الهارد كله وتحط الصورة في **خزنة البنك** (S3). تقدر تعمل منها هارد جديد في أي أوضة أو أي فرع.
+- **Instance store** زي **الـ RAM**: سريع جدًا، بس لما الجهاز يقفل اللي عليه بيروح.
 
 </Box>
 
-## EBS ولا instance store؟
+## 👀 تخيّل: volume وsnapshot وAZ
 
-<Grid2>
-<Card title="EBS" c={3}>
+<Diagram
+  title="الـ volume محبوس في AZ، والـ snapshot بيطلّعه منها"
+  height={340}
+  mheight={560}
+  nodes={[
+    { id: "ec2", t: "EC2", s: "AZ a", c: 1, x: 88, y: 25, mx: 25, my: 6 },
+    { id: "vol", t: "EBS volume", s: "gp3 · 20GB · AZ a", c: 2, x: 60, y: 25, mx: 75, my: 6 },
+    { id: "snap", t: "Snapshot", s: "محفوظ على مستوى الـ Region", c: 3, x: 35, y: 75, mx: 50, my: 45 },
+    { id: "vol2", t: "volume جديد", s: "AZ b", c: 4, x: 10, y: 25, mx: 25, my: 90 },
+    { id: "other", t: "Region تانية", s: "copy للـ DR", c: 5, x: 80, y: 85, mx: 75, my: 90 },
+  ]}
+  edges={[
+    { from: "ec2", to: "vol", t: "attach", c: 1 },
+    { from: "vol", to: "snap", t: "snapshot", c: 2 },
+    { from: "snap", to: "vol2", t: "create volume", c: 3 },
+    { from: "snap", to: "other", t: "copy", c: 5, dash: true },
+  ]}
+/>
 
-تخزين block دائم نسبيًا، منفصل عن عمر الـ instance. مناسب للـ boot volume، ملفات تطبيق بتتغير، أو database محتاجة disk. الـ volume موجود في Availability Zone معينة.
+1. الـ volume في **AZ a**، ومتركّب في instance في **AZ a** بس.
+2. عايز تنقله لـ AZ b؟ اعمل **snapshot**.
+3. اعمل من الـ snapshot **volume جديد** في AZ b.
+4. عايز نسخة للكوارث؟ **انسخ** الـ snapshot لـ Region تانية.
 
-</Card>
-<Card title="Instance store" c={4}>
+## 🔍 من جوه: التفاصيل اللي بتفرق
 
-تخزين محلي على host ومؤقت. البيانات تفضل مع reboot، لكنها تضيع عند stop أو hibernate أو terminate أو فشل الـ host. استخدمه cache أو scratch data قابلة للبناء.
+### حقائق أساسية
 
-</Card>
-</Grid2>
+- الـ volume مربوط بـ **AZ واحدة**.
+- عادةً متركّب في **instance واحدة** في نفس الوقت (في استثناء اسمه Multi-Attach لأنواع `io1/io2` وبشروط).
+- الـ instance الواحدة ممكن يتركّب فيها **أكتر من volume**.
+- تقدر **تكبّر** الحجم أو تغيّر النوع وهو شغال.
+- بتدفع على **الحجم اللي حجزته** (GB في الشهر)، حتى لو فاضي، وكمان على الأداء الزيادة في بعض الأنواع.
 
-<Hl c="o">لو فقدان الداتا يعمل أزمة، متعتبرش instance store نسخة دائمة.</Hl>
+### أنواع الـ volumes
 
-## الـ snapshot مش copy عادية
+| النوع | SSD/HDD | مناسب لـ |
+| --- | --- | --- |
+| `gp3` | SSD | الاختيار الافتراضي: OS، مواقع، databases صغيرة. تقدر تزود الـ IOPS لوحدها من غير ما تكبّر الحجم |
+| `io2 Block Express` | SSD | databases حساسة محتاجة IOPS عالية جدًا وثابتة |
+| `st1` | HDD | throughput كبير وقراية متتالية: logs، big data |
+| `sc1` | HDD | أرخص حاجة، لداتا نادرًا ما بتتقري |
 
-`EBS snapshot` نسخة point-in-time من volume. أول snapshot تحفظ blocks المستخدمة، واللاحقة incremental: تحفظ التغييرات، مع إن الاسترجاع يبان لك snapshot كاملة.
+### Snapshots
 
-الـ snapshots بتتخزن عبر عدة AZs داخل الـ Region في بنية S3 تديرها AWS؛ مش bucket تفتحه من S3 Console. تقدر تعمل منها volume جديدة، حتى في AZ مختلفة داخل نفس الـ Region.
+- **Incremental:** أول snapshot بينسخ الـ blocks المستخدمة، واللي بعده بينسخ اللي اتغير بس. فبتدفع على الفرق.
+- بيتخزن في S3 بتاع AWS (إنت مش بتشوف الـ bucket).
+- **Amazon Data Lifecycle Manager** أو **AWS Backup** بيعملوا snapshots بجدول ويمسحوا القديم أوتوماتيك.
 
-<Box type="warn" title="Snapshot مش backup plan لوحدها">
+### التشفير
 
-EBS مش بيعمل snapshot تلقائي لمجرد إنك أنشأت volume. حدد schedule وretention واختبر restore، باستخدام Data Lifecycle Manager أو AWS Backup عند الحاجة. الـ snapshots نفسها ليها تكلفة.
+فعّل **EBS encryption by default** في الـ Region، وكل volume جديد هيتشفّر بمفتاح من **KMS** (فصل ٣٠). الـ snapshot من volume مشفّر بيبقى مشفّر.
+
+## 🛠️ طبّق: backup واسترجاع لهارد المحاسبة
+
+⚠️ volume صغير (`1 GiB`) وsnapshot بيتحاسبوا بمبالغ صغيرة جدًا، بس امسحهم بعد الـ Lab.
+
+1. **اعمل volume:** `EC2` ← `Volumes` ← `Create volume` ← `gp3`، `1 GiB`، نفس AZ الـ instance بتاعتك (لو عندك واحدة من فصل ١٢)، tag `Project=dukkan-lab`.
+2. **ركّبه (اختياري):** `Actions` ← `Attach volume` ← اختار الـ instance.
+3. **اعمل snapshot:**
+
+```bash
+aws ec2 create-snapshot --volume-id vol-0123456789abcdef0 \
+  --description "dukkan accounting backup" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Project,Value=dukkan-lab}]'
+```
+
+4. **استرجع في AZ تانية:** `Snapshots` ← اختاره ← `Create volume from snapshot` ← اختار AZ مختلفة.
+   **المتوقع:** volume جديد بنفس الداتا في AZ تانية. ده إزاي «بتنقل» volume.
+5. **فكّر:** لو عايز الـ backup ده يتعمل كل ليلة ويتمسح بعد ٧ أيام، هتستخدم إيه؟ (AWS Backup أو Data Lifecycle Manager).
+
+🧹 **تنضيف:** detach وdelete للـ volumes، وdelete للـ snapshot.
+
+## ⚖️ قارن: أنواع تخزين جنب الـ instance
+
+| | EBS | Instance store | EFS (فصل ١٨) | S3 (فصل ١٧) |
+| --- | --- | --- | --- | --- |
+| النوع | block (هارد) | block (هارد محلي) | file (فولدر مشترك) | object |
+| بيفضل بعد Stop؟ | **أيوه** | **لأ** | أيوه | أيوه |
+| مربوط بإيه؟ | AZ واحدة | الجهاز نفسه | Region (أكتر من AZ) | Region |
+| كام instance توصل له؟ | واحدة عادةً | واحدة | آلاف في نفس الوقت | أي حد عنده صلاحية |
+| مناسب لـ | OS وdatabase على EC2 | cache وملفات مؤقتة | ملفات مشتركة بين سيرفرات | صور وbackups وملفات كبيرة |
+
+<Box type="interview" title="الفخ الشائع">
+
+«داتا مؤقتة وسريعة جدًا ومش مشكلة لو ضاعت» ← **Instance store**.
+«هارد دائم لـ EC2 واحدة» ← **EBS**.
+«أكتر من instance تقرا وتكتب نفس الملفات» ← **EFS**.
 
 </Box>
 
-## أنواع EBS على مستوى CLF-C02
-
-- `gp3` و`gp2`: General Purpose SSD لأحمال كتير؛ `gp3` اختيار حديث شائع ويفصل الحجم عن إعدادات أداء معينة.
-- `io2` و`io1`: Provisioned IOPS SSD لقواعد بيانات وأحمال محتاجة IOPS ثابتة وعالية.
-- `st1`: Throughput Optimized HDD للـ streaming والـ logs والـ big data، مش boot volume.
-- `sc1`: Cold HDD لداتا قليلة الاستخدام وتكلفة أقل، ومش boot volume.
-- `standard` magnetic جيل قديم، مش نقطة بداية لتصميم جديد.
-
-SSD يناسب عمليات صغيرة ومتكررة حيث الـ IOPS مهمة. HDD يناسب تدفق blocks كبيرة حيث الـ throughput أهم.
-
-## مثال media production
-
-قرص نظام EC2 وworking data ممكن يبدأوا على `gp3`. مكتبة الفيديو الأصلية المشتركة مش لازم تتحول لـ EBS؛ object storage زي S3 غالبًا أنسب. ملفات مؤقتة أثناء transcoding ممكن تستخدم instance store **فقط** لو العملية قابلة للإعادة والأصل محفوظ دائمًا.
-
-## 🧪 Lab ورقي: خطة رجوع
-
-صمم خطة EBS لقاعدة processing: snapshot كل ساعة، `RPO=60 دقيقة`، و`RTO=90 دقيقة`. اكتب timeline لحادث الساعة `14:37`، وحدد restore point المتوقع، validation، retention، وowner. وضح إمتى instance store تكون مقبولة في نفس النظام.
-
-## نقط امتحان صغيرة
-
-- Stop للـ instance لا يعني حذف EBS.
-- Terminate قد يحذف root volume حسب الإعداد، فلا تفترض.
-- Snapshot incremental في التخزين، وتقدر تسترجع منها volume.
-- EBS عادةً لاحتياج block مرتبط بـ EC2، مش shared folder لكل السيرفرات.
-
-الفصل الجاي هنشوف إزاي أكتر من instance يستقبلوا الطلبات ويكبروا ويصغروا مع الضغط.
-
-<Checklist id="aws-cp-13" title="خلّصت الفصل لما" items={["تشرح block storage بسيناريو عملي", "تميّز ديمومة EBS عن instance store", "تعرف إن snapshots incremental وليها تكلفة", "تختار SSD للـ IOPS وHDD للـ throughput على مستوى عالي", "تضيف restore test لخطة النسخ"]} />
+<Checklist id="aws-cp-13" title="خلّصت الفصل لما" items={["تعرف إن EBS volume مربوط بـ AZ واحدة", "تنقل volume لـ AZ تانية عن طريق snapshot", "تعرف إن الـ snapshots incremental", "تختار gp3 كافتراضي وتعرف io2 وst1 وsc1 لإيه", "تفرّق EBS عن instance store في الاستمرارية"]} />
 
 <Quiz>
-<Q n={1} q="Cache قابلة لإعادة البناء ومحتاجة disk محلي سريع؛ ممكن تستخدم إيه؟">Instance store، بشرط إن فقدانها مقبول والداتا الأصلية محفوظة.</Q>
-<Q n={2} q="هل snapshot تظهر في bucket تملكه على S3؟">لأ. AWS تدير تخزينها، وإنت تتعامل معاها من EC2/EBS APIs والـ Console.</Q>
-<Q n={3} q="قاعدة بيانات محتاجة IOPS عالية ثابتة؛ أي عائلة تفكر فيها؟">Provisioned IOPS SSD زي io2، بعد قياس الحمل ومراجعة التكلفة.</Q>
+<Q n={1} q="عايز تنقل EBS volume من AZ لـ AZ تانية. إزاي؟">تعمل **snapshot**، وبعدين **volume جديد** من الـ snapshot في الـ AZ التانية.</Q>
+<Q n={2} q="أنهي تخزين بتضيع الداتا اللي عليه لما الـ instance تقف؟">**Instance store**.</Q>
+<Q n={3} q="عملت ٣ snapshots ورا بعض للـ volume. بتدفع على ٣ نسخ كاملة؟">**لأ**. الـ snapshots **incremental**، بتدفع على الـ blocks اللي اتغيرت.</Q>
+<Q n={4} q="عايز snapshots كل ليلة تتعمل وتتمسح أوتوماتيك. أنهي خدمة؟">**AWS Backup** أو **Amazon Data Lifecycle Manager**.</Q>
 </Quiz>

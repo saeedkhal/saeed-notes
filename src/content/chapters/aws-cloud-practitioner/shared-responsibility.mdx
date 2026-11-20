@@ -1,128 +1,128 @@
 ---
 title: الأمان مسؤولية مين؟
-short: المسؤولية المشتركة
+short: Shared Responsibility
 order: 9
 label: فصل ٩
 badge: الأمان والحساب · فصل ٩
-en: shared responsibility · security of the cloud · security in the cloud · managed service
-keywords: of the cloud · in the cloud · EC2 · managed services
-goal: تقسم مهام الأمان بين AWS والعميل، وتعدّل الإجابة حسب نوع الخدمة.
+en: shared responsibility model · security of the cloud · security in the cloud · inherited controls · shared controls · AWS Artifact
+keywords: of the cloud · in the cloud · الخط بيتحرك · Artifact
+goal: ترسم خط المسؤولية بين AWS والعميل، وتعرف إن الخط ده بيتحرك حسب الخدمة (EC2 ضد RDS ضد Lambda)، وتجاوب أي سؤال «مين مسؤول؟».
 part: الأمان والحساب
 color: c4
 ---
 
-## Incident: vulnerability على EC2
+## 🧠 افهم: «إحنا على AWS، يبقى الأمان عليهم»؟
 
-شركة fintech شغالة على EC2. الساعة `03:00` scanner اكتشف vulnerability حرجة في guest OS. الفريق قال في البداية «السيرفر عند AWS»، لكن ده خلط بين البنية المادية والطبقة اللي العميل اختار يديرها.
+عم حسن قرا إن AWS عندها شهادات أمان عالمية، فافتكر إن دُكّان بقى آمن أوتوماتيك. بعد أسبوع، bucket فيه فواتير الزباين بقى مفتوح للإنترنت لأن حد اختار `public` بالغلط.
 
-## Timeline: مين يتحرك؟
+مين الغلطان؟ **دُكّان.** AWS أمّنت المبنى والأجهزة والشبكة اللي تحت، لكن **إعدادات الـ bucket** دي شغل العميل.
 
-1. AWS تدير data center والهاردوير والشبكة الأساسية والـ hypervisor.
-2. العميل يحدد الـ AMI ويشغل guest OS، وبالتالي يخطط patching له.
-3. **03:10:** فريق الأمن يحدد instances المتأثرة من inventory.
-4. **03:25:** يبني image محدثة ويختبر التطبيق عليها.
-5. **04:00:** يستبدل instances تدريجيًا ويراقب errors.
-6. **04:30:** evidence يثبت version الجديدة، ثم تتراجع السياسات لمنع تكرار التأخير.
+<Hl c="b">AWS مسؤولة عن أمان الـ cloud نفسها (Security OF the cloud). وإنت مسؤول عن أمان اللي إنت حاطه جوه الـ cloud (Security IN the cloud).</Hl>
 
-النجاح إن كل مهمة لها owner قبل incident. الفشل إن patch يتأخر لأن كل طرف افترض إن الطرف الآخر مسؤول.
+<Box type="story" icon="🏢" title="شقة في كومباوند">
 
-## الخط الفاصل بيتحرك حسب الخدمة
+إدارة الكومباوند مسؤولة عن **السور والبوابة والأمن على الباب والكهربا والأسانسير**. إنت مسؤول عن **قفل باب شقتك، ومين معاه نسخة من المفتاح، والحاجات اللي جوه**.
 
-AWS Shared Responsibility Model بيقسم الأمان:
-
-- **Security of the cloud:** AWS تحمي البنية اللي تشغّل خدمات AWS: المرافق، الهاردوير، الشبكات الأساسية، وطبقة الافتراضية.
-- **Security in the cloud:** العميل يحمي اللي يضعه ويضبطه: الداتا، الهويات، الإعدادات، والصلاحيات، ومسؤوليات إضافية حسب الخدمة.
-
-<Hl c="p">AWS تؤمّن الـ Cloud، والعميل يؤمّن استخدامه للـ Cloud.</Hl>
-
-## مثال EC2
-
-مع Amazon EC2، AWS تدير data center والهاردوير والـ hypervisor. العميل يدير guest OS وتحديثاته، التطبيق، security groups، IAM، والتصنيف والتشفير المناسب للداتا.
-
-لو نظام التشغيل قديم واتخترق، مينفعش نقول إن السيرفر المادي عند AWS وخلاص. الطبقة اللي اخترنا نديرها مسؤوليتنا.
-
-## مثال خدمة مُدارة
-
-مع خدمة database مُدارة، AWS قد تدير نظام التشغيل وطبقة قاعدة البيانات أو أجزاء أكبر من الصيانة. العميل يفضل مسؤولًا عن اختيار الإعدادات، المستخدمين والصلاحيات، network access، الداتا، والنسخ أو الاحتفاظ حسب خصائص الخدمة وإعداده.
-
-<Box type="story" icon="🔄" title="نفس الداتا، خط فاصل مختلف">
-
-تشغيل database على EC2 يخلي العميل يدير OS والـ engine. نقلها لخدمة database مُدارة ينقل طبقات أكتر لـ AWS، لكن users وnetwork access والداتا والـ configuration المتاح يفضلوا مسؤولية العميل.
+لو سبت الباب مفتوح والحاجة اتسرقت، الكومباوند مش غلطان. ولو السور وقع، دي مش غلطتك.
 
 </Box>
 
-## نوع الخدمة يغيّر نصيبك
+## 👀 تخيّل: الخط بيتحرك حسب الخدمة
 
-<Grid2>
-<Card title="IaaS" c={1}>
-
-تحكم أكبر ومسؤولية أكبر: OS وpatching والتطبيق وإعدادات الشبكة والداتا.
-
-</Card>
-<Card title="Managed service" c={2}>
-
-AWS تدير طبقات أكتر، وإنت تركز على access والسياسات والداتا والإعداد الصحيح.
-
-</Card>
-<Card title="SaaS" c={3}>
-
-المزود يدير معظم الـ stack، والعميل لسه يدير الحسابات والمحتوى والإعدادات المتاحة.
-
-</Card>
-<Card title="كل الحالات" c={4}>
-
-العميل مسؤول عن فهم بياناته ومتطلبات الامتثال وإعطاء الوصول المناسب.
-
-</Card>
-</Grid2>
-
-## AWS مش مسؤولة عن كل configuration
-
-S3 bucket خاصة بالافتراضي في سيناريوهات كثيرة، لكن العميل مسؤول عن السياسات والـ public access وإعدادات المشاركة. وجود encryption feature لا يعني إنها مفعلة أو مناسبة تلقائيًا لكل workload.
-
-كمان العميل مسؤول عن training والإجراءات والاستجابة داخل بيئته. AWS توفر خدمات وتقارير امتثال، لكن المؤسسة تقرر إذا تصميمها يحقق متطلباتها.
-
-## Request flow لتحديد المسؤولية
+كل ما الخدمة تبقى «مُدارة» (managed) أكتر، AWS بتشيل طبقات أكتر، والخط بيطلع لفوق:
 
 <Flow items={[
-  { t: "مين يدير الهاردوير؟", c: 1 },
+  { t: "EC2", s: "إنت: OS + patches + app + data + firewall", c: 1 },
   "→",
-  { t: "مين يعمل patch للـ OS والمنصة؟", c: 2 },
+  { t: "RDS", s: "إنت: الداتا + مين يدخل + الإعدادات", c: 2 },
   "→",
-  { t: "مين يضبط access والتشفير؟", c: 3 },
+  { t: "Lambda", s: "إنت: الكود + الداتا + الصلاحيات", c: 3 },
   "→",
-  { t: "مين يصنف الداتا ويراقب؟", c: 4 },
+  { t: "S3", s: "إنت: الداتا + مين يشوفها + التشفير", c: 4 },
 ]} />
 
-الإجابة الدقيقة موجودة في docs الخدمة وشروطها. متعممش مسؤولية EC2 على Lambda أو S3.
+| الطبقة | EC2 | RDS | Lambda |
+| --- | --- | --- | --- |
+| المباني والأجهزة والشبكة العالمية | AWS | AWS | AWS |
+| الـ virtualization | AWS | AWS | AWS |
+| نظام التشغيل وpatches | **إنت** | AWS | AWS |
+| الـ database engine وpatches | **إنت** (لو ركّبتها) | AWS | — |
+| الـ runtime | **إنت** | — | AWS |
+| كود التطبيق | **إنت** | **إنت** | **إنت** |
+| الداتا والتشفير | **إنت** | **إنت** | **إنت** |
+| IAM ومين يدخل | **إنت** | **إنت** | **إنت** |
+| الـ firewall (Security Groups) | **إنت** | **إنت** | **إنت** (لو جوه VPC) |
 
-<Box type="warn" title="Shared مش معناها نصف بنصف">
+## 🔍 من جوه: التلات أنواع controls
 
-التقسيم مش نسبة ثابتة. كل طرف مسؤول عن طبقات ومهام محددة، وحدودها تتغير مع abstraction والخدمة والإعداد.
+### Inherited controls — بتورثها من AWS
+
+حاجات AWS بتعملها كاملة وإنت بتستفيد منها: الأمن الفعلي للمباني، الكهربا، التبريد، تدمير الهاردات القديمة.
+
+### Shared controls — كل واحد في طبقته
+
+نفس الموضوع، بس كل طرف ليه حتة:
+
+- **Patch management:** AWS بتصلّح الـ infrastructure، وإنت بتصلّح نظام التشغيل والتطبيقات اللي عليك (في EC2).
+- **Configuration management:** AWS بتظبط أجهزتها، وإنت بتظبط الـ OS والـ databases والتطبيقات بتاعتك.
+- **Awareness & training:** AWS بتدرّب موظفينها، وإنت بتدرّب موظفينك.
+
+### Customer-specific — عليك إنت بس
+
+حاجات AWS متقدرش تعملها عنك لأنها متعرفش شغلك: مين من الموظفين يشوف الداتا، تصنيف الداتا (حساسة ولا عادية)، الـ network zones جوه شبكتك.
+
+### إزاي تثبت إن AWS عاملة اللي عليها؟
+
+**AWS Artifact**: بوابة مجانية في الـ console فيها تقارير الـ compliance بتاعة AWS (زي SOC وISO وPCI) واتفاقيات زي BAA. لو مراجع حسابات سألك «إثبت إن الداتا سنتر آمن»، بتنزّل التقرير من هنا.
+
+<Box type="warn" title="Artifact مش بيفحص تطبيقك">
+
+تقرير SOC بيقول إن **AWS** عاملة شغلها. مش بيقول إن **دُكّان** آمن. أمان دُكّان عليك إنت تثبته.
 
 </Box>
 
-## مقارنة سريعة
+## 🛠️ طبّق: قسّم مسؤوليات دُكّان
 
-- **EC2:** العميل يدير OS وpatching والتطبيق فوقه.
-- **Managed database:** AWS تدير طبقات database/OS حسب الخدمة؛ العميل يدير الوصول والداتا والإعدادات المتاحة.
-- **S3:** AWS تدير البنية والمنصة؛ العميل يدير data classification والسياسات والمشاركة والإعداد.
-- **SaaS:** المزود يدير أغلب الـ stack؛ المؤسسة تدير accounts والمحتوى والـ configuration المتاح.
+الـ Lab ورقي. دُكّان بيستخدم: EC2 للموقع، RDS للطلبات، S3 للصور، Lambda لإرسال إيميلات.
 
-`Managed` معناها مسؤوليات أقل في طبقات محددة، مش انعدام مسؤولية العميل.
+لكل مشكلة، اكتب **مين مسؤول** و**أول خطوة**:
 
-## 🧪 تمرين آمن: incident matrix
+| المشكلة | المسؤول | أول خطوة |
+| --- | --- | --- |
+| ثغرة في Linux على سيرفر الموقع | دُكّان (EC2 = IaaS) | patch، أو استخدم Systems Manager Patch Manager (فصل ٣٢) |
+| ثغرة في PostgreSQL engine على RDS | AWS بتعمل الـ patch | دُكّان بيختار maintenance window مناسب |
+| bucket الفواتير مفتوح للعامة | دُكّان | فعّل Block Public Access |
+| هارد قديم في الداتا سنتر محتاج يتدمّر | AWS | — (inherited) |
+| مكتبة npm فيها ثغرة في كود الـ Lambda | دُكّان | حدّث المكتبة |
+| موظف ساب الشغل ولسه عنده access | دُكّان | امسح الهوية أو عطّلها |
+| مراجع عايز تقرير PCI للداتا سنتر | AWS تقدّمه | نزّله من AWS Artifact |
 
-اعمل matrix لخدمة دفع على EC2 ثم على managed service. وزع: physical security، hypervisor، guest OS patch، engine patch، IAM، network access، encryption choice، data classification، backup retention، وincident response. اكتب مصدر docs لازم يتراجع عند أي نقطة مش واضحة.
+**قاعدة تحل بيها أي سؤال:** اسأل «الحاجة دي **أنا** اللي بظبطها ولا AWS؟». لو إنت اللي بتختار الإعداد أو بتكتب الكود أو بتحط الداتا، يبقى عليك.
 
-## قبل الفصل الجاي
+## ⚖️ قارن: AWS ولا العميل؟
 
-عرفنا مين مسؤول عن إيه. الفصل الجاي هنحمي الحساب من مفاجآت التكلفة: نفهم Free وPaid plans، نعمل budgets وتنبيهات، وننضف الـ resources.
+| AWS (OF the cloud) | العميل (IN the cloud) |
+| --- | --- |
+| المباني والأمن الفعلي | الداتا وتصنيفها |
+| الهاردوير والشبكة العالمية | IAM: users وroles وpolicies |
+| الـ virtualization (hypervisor) | تشفير الداتا (تفعيله واختيار المفاتيح) |
+| الـ Regions والـ AZs والـ edge | Security Groups وإعدادات الشبكة |
+| نظام التشغيل في الخدمات المُدارة (RDS، Lambda) | نظام التشغيل في EC2 |
+| تقارير compliance للبنية | compliance للتطبيق بتاعك |
 
-<Checklist id="aws-cp-09" title="خلّصت الفصل لما" items={["تشرح of the cloud وin the cloud", "تقسم مسؤوليات EC2 بمثال", "تعرف إن الخدمة المُدارة تنقل بعض الطبقات فقط", "ترفض فكرة إن المسؤولية نصف بنصف"]} />
+<Box type="interview" title="كلمات تمسكها في السؤال">
+
+«physical»، «hardware»، «facilities»، «hypervisor»، «global infrastructure» ← **AWS**.
+«customer data»، «IAM»، «guest OS على EC2»، «security group»، «encryption settings»، «application» ← **العميل**.
+
+</Box>
+
+<Checklist id="aws-cp-09" title="خلّصت الفصل لما" items={["تشرح Security OF the cloud وIN the cloud بتشبيه", "تعرف إن خط المسؤولية بيتحرك بين EC2 وRDS وLambda", "تفرّق inherited وshared وcustomer-specific controls", "تعرف إن patching الـ OS على EC2 عليك وعلى RDS على AWS", "تعرف إن AWS Artifact بيدي تقارير compliance بتاعة AWS"]} />
 
 <Quiz>
-<Q n={1} q="مين يعمل patch للـ guest OS على EC2؟">العميل، لأن نظام التشغيل داخل الـ instance من مسؤوليته.</Q>
-<Q n={2} q="AWS بتدير database engine في خدمة مُدارة. هل IAM والداتا بقوا مسؤوليتها؟">لأ. العميل يظل مسؤولًا عن الوصول والداتا والإعدادات الواقعة تحت تحكمه.</Q>
-<Q n={3} q="ليه الإجابة تختلف بين EC2 وS3؟">لأن مستوى الإدارة مختلف؛ AWS تدير طبقات أكثر في S3، بينما العميل يدير OS على EC2.</Q>
+<Q n={1} q="مين مسؤول عن الأمن الفعلي للداتا سنتر؟">**AWS**.</Q>
+<Q n={2} q="مين مسؤول عن patching نظام التشغيل على EC2؟">**العميل**.</Q>
+<Q n={3} q="مين مسؤول عن patching الـ database engine في Amazon RDS؟">**AWS**، والعميل بيحدد الـ maintenance window.</Q>
+<Q n={4} q="Patch management نوعه إيه في الـ shared responsibility model؟">**Shared control**: كل طرف بيعمل patch لطبقته.</Q>
+<Q n={5} q="شركة محتاجة تقرير SOC 2 بتاع AWS للمراجع. منين؟">**AWS Artifact**.</Q>
 </Quiz>

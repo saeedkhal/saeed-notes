@@ -1,122 +1,130 @@
 ---
 title: "ELB وAuto Scaling: الخدمة تكبر بأمان"
-short: Scaling وLoad Balancing
+short: ELB وAuto Scaling
 order: 14
 label: فصل ١٤
 badge: Compute · فصل ١٤
-en: Elastic Load Balancing · Auto Scaling · horizontal · vertical · health checks
-keywords: ALB · NLB · GWLB · target group · scale out · high availability
-goal: تفهم توزيع الترافيك والتوسّع الأفقي والرأسي ودور ELB مع EC2 Auto Scaling.
+en: Elastic Load Balancing · ALB · NLB · GWLB · health checks · Auto Scaling group · launch template · scaling policies
+keywords: load balancer · health check · min/desired/max · target tracking
+goal: تفهم إزاي الـ Load Balancer بيوزّع الطلبات ويشيل السيرفر العيّان، وإزاي Auto Scaling بيزوّد ويقلل السيرفرات، وتركّبهم مع بعض على AZين.
 part: Compute
 color: c4
 ---
 
-## Incident وقت campaign
+## 🧠 افهم: سيرفر واحد مش هيكفي رمضان
 
-منصة e-commerce بدأت حملة الساعة `20:00`. الترافيك قفز من `800` إلى `6,000 request/min`، والـ p95 latency وصل `1.8s`. عندها ALB قدام Auto Scaling Group موزعة على AZs.
+دُكّان شغال على instance واحدة. مشكلتين:
 
-## Timeline من الضغط للاستقرار
+1. **الزحمة:** بعد الفطار الطلبات ×١٠، والسيرفر الواحد بيبطّأ ويقع.
+2. **العطل:** لو السيرفر ده باظ الساعة ٢ الفجر، الموقع واقف لحد ما حد يصحى.
 
-1. **20:00:** `desired=2` وCPU المتوسطة `35%`.
-2. **20:04:** CPU تعدي `70%` حسب policy لمدة التقييم.
-3. **20:06:** Auto Scaling تعمل scale out من `2` إلى `4 instances`.
-4. **20:08:** instances الجديدة تكمل bootstrap وتنجح في health checks.
-5. **20:09:** ALB يبدأ يوجه لها requests؛ الـ p95 يرجع `320 ms`.
-6. **22:30:** الحمل يهدى، وبعد stabilization تعمل المجموعة scale in من غير النزول تحت `min=2`.
+الحل خدمتين بيشتغلوا مع بعض:
 
-النجاح إن latency رجعت للهدف، والـ instances غير السليمة ما استقبلتش traffic، والسعة رجعت بعد الذروة. الفشل إن policy تضيف instances أسرع من جاهزيتها، أو إن bottleneck الحقيقي database.
+- **Elastic Load Balancing (ELB):** باب واحد للزباين، بيوزّع الطلبات على كذا سيرفر، وبيبطّل يبعت لأي سيرفر عيّان.
+- **Amazon EC2 Auto Scaling:** بيزوّد السيرفرات لما الحمل يزيد، ويقللها لما يقل، ويستبدل أي سيرفر بيفشل.
 
-<Box type="story" icon="📈" title="دوران مختلفان">
+<Hl c="b">الـ Load Balancer بيوزّع ويستبعد العيّان. والـ Auto Scaling group بيحافظ على العدد الصح من السيرفرات السليمة. مع بعض = scale + high availability.</Hl>
 
-ELB يقرر أي target سليمة تستقبل الطلب الحالي. EC2 Auto Scaling يقرر عدد instances ويحافظ عليه. واحد يوزع traffic والتاني يدير fleet.
+<Box type="story" icon="🏦" title="شبابيك البنك">
 
-</Box>
-
-## Elastic Load Balancing
-
-`ELB` اسم العيلة. الـ load balancer يستقبل الترافيك ويوجهه لـ targets سليمة في target groups، ويعمل health checks بدل ما يبعت الطلب لسيرفر تعبان.
-
-<Grid2>
-<Card title="Application Load Balancer" c={1}>
-
-للـ `HTTP/HTTPS` على Layer 7. يفهم host وpath؛ مثلًا `/api` لخدمة و`/images` لخدمة تانية.
-
-</Card>
-<Card title="Network Load Balancer" c={2}>
-
-للـ `TCP/UDP` وحالات الأداء العالي وLayer 4، ويدعم خصائص شبكة زي static IPs.
-
-</Card>
-</Grid2>
-
-<Grid2>
-<Card title="Gateway Load Balancer" c={3}>
-
-لتوزيع الترافيك على virtual appliances زي firewalls وأنظمة الفحص. مش الاختيار العادي لتطبيق ويب.
-
-</Card>
-<Card title="Classic Load Balancer" c={5}>
-
-الجيل السابق. موجود في أسئلة ومشاريع قديمة، لكن التصميم الجديد يبدأ غالبًا من ALB أو NLB حسب البروتوكول.
-
-</Card>
-</Grid2>
-
-## EC2 Auto Scaling
-
-الـ <En>Auto Scaling Group</En> ليها:
-
-- `minimum`: أقل عدد تحافظ عليه.
-- `desired`: العدد المطلوب حاليًا.
-- `maximum`: السقف اللي متعديهوش.
-- launch template يصف instance الجديدة.
-- scaling policies مبنية على metric أو schedule أو توقع.
-
-لو instance بقت unhealthy، المجموعة تقدر تستبدلها. ولما تربط target group، الـ instances الجديدة تتسجل والقديمة تتشال تلقائيًا.
-
-<Hl c="b">ELB يوزّع الطلبات؛ Auto Scaling يغيّر عدد الـ instances. الاتنين بيكملوا بعض، مش نفس الخدمة.</Hl>
-
-## Request flow في Production
-
-<Flow items={[
-  { t: "المستخدم", c: 1 },
-  "→",
-  { t: "ALB", s: "HTTPS + health checks", c: 2 },
-  "→",
-  { t: "Auto Scaling Group", s: "instances عبر AZs", c: 4 },
-]} />
-
-وقت الحملة، policy تعمل scale out. بعد الزحمة، تعمل scale in ضمن الحدود. التطبيق لازم يبقى مستعد: session مش متعلقة بقرص instance واحدة، والـ instances قابلة للاستبدال.
-
-## قارن القرارات
-
-- **Vertical scaling:** موارد أكتر لنفس instance؛ له سقف وقد يحتاج downtime.
-- **Horizontal scaling:** instances أكتر؛ يحتاج تطبيقًا قابلًا للتوزيع والاستبدال.
-- **ALB:** HTTP/HTTPS وLayer 7 وhost/path routing.
-- **NLB:** TCP/UDP وLayer 4 وخصائص أداء وشبكة.
-- **GWLB:** fleet من virtual network appliances.
-- **Health check:** تمنع توجيه الطلب لـ target غير سليمة؛ مش اختبارًا كاملًا لكل business function.
-
-## 🧪 تمرين ورقة: احسب الاستجابة
-
-ابدأ بـ `min=2`, `desired=2`, `max=8`. الحمل يتضاعف كل دقيقتين، والـ instance تحتاج ٤ دقائق لتصبح healthy. اكتب timeline من أول alarm لحد رجوع latency، وحدد metric وthreshold وstabilization. بعدين افترض إن database هي bottleneck واشرح ليه web scale out قد يفشل.
-
-<Box type="warn" title="Scaling مش علاج لكل مشكلة">
-
-لو query قاعدة البيانات بطيئة، إضافة web servers ممكن تزود الضغط عليها. راقب bottleneck، وحط cooldown أو stabilization مناسب، ومتخليش policy تتأرجح.
+- **الـ Load Balancer** = الموظف اللي على الباب بيدي كل عميل رقم ويوجّهه لأفضى شباك. ولو شباك الموظف بتاعه تعبان، بيقفل الشباك ده ويوزّع على الباقي.
+- **الـ Auto Scaling** = المدير اللي لما الطابور يطول بيفتح شبابيك زيادة، ولما يفضى بيقفلها، ولو موظف مشي بيجيب بداله.
 
 </Box>
 
-## اختار من كلمات السؤال
+## 👀 تخيّل: طلب زبون وقت الزحمة
 
-`HTTP path routing` → ALB. `TCP/UDP أو Layer 4` → NLB. `fleet of security appliances` → GWLB. `يحافظ على العدد ويستبدل unhealthy` → EC2 Auto Scaling.
+<Diagram
+  title="ALB قدام Auto Scaling group على AZين"
+  height={360}
+  mheight={580}
+  nodes={[
+    { id: "users", t: "الزباين", s: "١٠٠٠ طلب/دقيقة", c: 1, x: 90, y: 50, mx: 50, my: 5 },
+    { id: "alb", t: "Application Load Balancer", s: "health checks", c: 2, x: 62, y: 50, mx: 50, my: 30 },
+    { id: "a1", t: "EC2 · AZ a", s: "سليم ✓", c: 3, x: 28, y: 15, mx: 25, my: 60 },
+    { id: "b1", t: "EC2 · AZ b", s: "سليم ✓", c: 3, x: 28, y: 50, mx: 75, my: 60 },
+    { id: "bad", t: "EC2 · AZ a", s: "عيّان ✗", c: 5, x: 28, y: 85, mx: 50, my: 90 },
+    { id: "asg", t: "Auto Scaling", s: "استبدل + زوّد", c: 4, x: 5, y: 50, mx: 50, my: 76 },
+  ]}
+  edges={[
+    { from: "users", to: "alb", t: "HTTPS", c: 1 },
+    { from: "alb", to: "a1", c: 2 },
+    { from: "alb", to: "b1", c: 2 },
+    { from: "alb", to: "bad", t: "متبعتلوش", c: 5, dash: true },
+    { from: "asg", to: "bad", t: "terminate + بديل", c: 4, dash: true },
+  ]}
+/>
 
-الفصل الجاي هنسيب إدارة السيرفرات ونشغّل أجزاء من الـ workload كـ events على Lambda.
+1. الزبون بيكلم **اسم الـ Load Balancer** (مش IP سيرفر معين).
+2. الـ ALB بيعمل **health check** كل كام ثانية (مثلًا `GET /health`). السيرفر اللي مبيردش صح بيتشال من التوزيع.
+3. الـ **Auto Scaling group** بيشوف إن في سيرفر unhealthy، فيمسحه ويطلّع بداله من الـ **launch template**.
+4. لما الـ CPU يعدّي الهدف، بيطلّع سيرفرات زيادة، ويوزّعها على الـ AZs.
 
-<Checklist id="aws-cp-14" title="خلّصت الفصل لما" items={["تفرق vertical عن horizontal scaling", "تختار ALB للـ HTTP routing وNLB للـ Layer 4", "تشرح min وdesired وmax", "تفرق دور ELB عن Auto Scaling", "تذكر إن التطبيق لازم يستحمل استبدال instances"]} />
+## 🔍 من جوه: الأجزاء والإعدادات
+
+### أنواع الـ Load Balancers
+
+| النوع | بيفهم إيه | مناسب لـ |
+| --- | --- | --- |
+| **Application LB (ALB)** | Layer 7: HTTP/HTTPS، الـ path والـ host والـ headers | مواقع وAPIs، توجيه `/api` لمكان و`/images` لمكان |
+| **Network LB (NLB)** | Layer 4: TCP/UDP | أداء عالي جدًا، latency قليل، IP ثابت، ألعاب وIoT |
+| **Gateway LB (GWLB)** | Layer 3 | تمرير الترافيك على أجهزة أمان (firewalls) من شركات تانية |
+
+### Auto Scaling group: تلات أرقام
+
+- **Minimum:** أقل عدد. حطه `2` على AZين عشان الـ availability.
+- **Desired:** العدد اللي عايزه دلوقتي. الـ scaling بيغيّره.
+- **Maximum:** السقف. **ده حمايتك من الفاتورة** لو حصل حمل غريب أو هجوم.
+
+الـ **launch template** هو الوصفة: AMI، instance type، Security Group، user data، IAM role.
+
+### طرق الـ scaling
+
+| الطريقة | الفكرة | مثال |
+| --- | --- | --- |
+| Target tracking | خلّي metric عند رقم معين | «خلّي متوسط الـ CPU ٥٠٪» (الأسهل والأشهر) |
+| Step scaling | خطوات حسب قد إيه الـ alarm عدّى | CPU فوق ٧٠٪ زوّد ٢، فوق ٩٠٪ زوّد ٤ |
+| Scheduled | في وقت معين | كل يوم في رمضان الساعة ٧ بالليل خلّي الـ minimum ٦ |
+| Predictive | بيتعلم من الأنماط اللي فاتت ويجهز بدري | الزحمة اليومية المتكررة |
+
+<Box type="warn" title="الكود لازم يبقى stateless">
+
+لو الـ session بتاعة الزبون (السلة مثلًا) محفوظة في ذاكرة سيرفر معين، وAuto Scaling مسحه، السلة هتضيع. احفظ الـ sessions في مكان مشترك (ElastiCache أو DynamoDB).
+
+</Box>
+
+## 🛠️ طبّق: دُكّان يستحمل رمضان
+
+⚠️ الـ ALB بيتحاسب بالساعة طول ما هو موجود (مش داخل في كل خطط الـ Free Tier). خلّص في قعدة واحدة وامسح.
+
+1. **Launch template:** `EC2` ← `Launch templates` ← `Create`. نفس إعدادات فصل ١٢ (AMI، `t3.micro`، الـ user data بتاعة nginx). الـ Security Group يسمح بـ HTTP **من Security Group الـ ALB بس** (هتعمله في الخطوة الجاية، أو ابدأ بـ Anywhere وضيّقه بعدين).
+2. **Target group + ALB:** `Load Balancers` ← `Create` ← `Application Load Balancer` ← internet-facing ← اختار **AZين** ← listener `HTTP:80` ← target group جديد بـ health check path `/`.
+3. **Auto Scaling group:** `Auto Scaling Groups` ← `Create` ← الـ launch template ← نفس الـ AZين ← اربطه بالـ target group ← فعّل **ELB health checks** ← `Min 2، Desired 2، Max 4` ← policy: target tracking، CPU `50%`.
+4. **افتح الـ DNS name بتاع الـ ALB** في المتصفح. **المتوقع:** صفحة دُكّان.
+5. **جرّب الـ self-healing:** اعمل terminate لواحدة من الـ instances يدويًا. استنى دقيقتين وبص على `Activity` في الـ ASG. **المتوقع:** instance جديدة بتطلع لوحدها، والموقع مكانش وقع.
+
+🧹 **تنضيف بالترتيب:** امسح الـ Auto Scaling group (هيمسح الـ instances)، بعدين الـ Load Balancer، بعدين الـ target group، بعدين الـ launch template.
+
+## ⚖️ قارن: مين بيعمل إيه؟
+
+| | Load Balancer | Auto Scaling | Route 53 (فصل ٢٤) |
+| --- | --- | --- | --- |
+| بيوزّع الطلبات؟ | **أيوه**، على السيرفرات | لأ | بيوجّه على مستوى DNS (Regions مثلًا) |
+| بيزوّد سيرفرات؟ | لأ | **أيوه** | لأ |
+| بيكشف العيّان؟ | أيوه، ويبطّل يبعتله | أيوه، ويستبدله | health checks للـ endpoints |
+| بيدّي high availability؟ | لما يوزّع على AZs | لما يحافظ على العدد في AZs | بين Regions |
+
+| ALB | NLB |
+| --- | --- |
+| HTTP/HTTPS (Layer 7) | TCP/UDP (Layer 4) |
+| توجيه بالـ path والـ host | أداء عالي جدًا وlatency قليل |
+| مواقع وmicroservices | ألعاب، IoT، IP ثابت |
+
+<Checklist id="aws-cp-14" title="خلّصت الفصل لما" items={["تشرح دور الـ Load Balancer ودور الـ Auto Scaling ومع بعض بيدّوا إيه", "تفرّق ALB وNLB وGWLB", "تشرح min وdesired وmax وليه الـ max حماية للفاتورة", "تعرف target tracking وscheduled وpredictive scaling", "تعرف ليه الكود لازم يبقى stateless"]} />
 
 <Quiz>
-<Q n={1} q="مين يضيف instance جديدة وقت الضغط: ALB ولا Auto Scaling؟">EC2 Auto Scaling. ALB يوزع الترافيك على الـ targets المتاحة.</Q>
-<Q n={2} q="عايز توجّه `/api` و`/admin` لمجموعتين؛ تختار إيه؟">Application Load Balancer لأنه يدعم path-based routing.</Q>
-<Q n={3} q="إيه خطر الاعتماد على session جوّه قرص instance واحدة؟">الطلب التالي قد يروح لinstance تانية أو الأولى تتشال، فتضيع الجلسة؛ الأفضل state مشتركة مناسبة.</Q>
+<Q n={1} q="عايز توجّه `/api` لمجموعة سيرفرات و`/images` لمجموعة تانية. أنهي Load Balancer؟">**Application Load Balancer**.</Q>
+<Q n={2} q="سيرفر في الـ Auto Scaling group فشل في الـ health check. إيه اللي بيحصل؟">الـ ASG بيعمله **terminate** ويطلّع **instance بديلة** من الـ launch template.</Q>
+<Q n={3} q="الحمل بيزيد كل يوم في نفس الوقت بالظبط. أنسب scaling؟">**Scheduled scaling**، أو **predictive scaling** يتعلم النمط.</Q>
+<Q n={4} q="تطبيق محتاج TCP بأداء عالي جدًا وlatency قليل. أنهي Load Balancer؟">**Network Load Balancer**.</Q>
 </Quiz>

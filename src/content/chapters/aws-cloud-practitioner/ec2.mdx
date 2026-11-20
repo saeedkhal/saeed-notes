@@ -4,124 +4,150 @@ short: EC2
 order: 12
 label: فصل ١٢
 badge: Compute · فصل ١٢
-en: AMI · instance types · user data · security groups · lifecycle
-keywords: virtual server · AMI · instance family · purchase options
-goal: تفهم مكوّنات EC2 ودورة حياة الـ instance وتلمّح لاختيارات الشراء من غير ما تلخبطها بالحماية.
+en: AMI · instance type · user data · security group · key pair · Session Manager · instance lifecycle
+keywords: virtual server · AMI · instance family · security group
+goal: تعرف الخمس قرارات اللي بتاخدها وإنت بتشغّل EC2، وتطلّع سيرفر ويب لدُكّان وتمسحه، وتفهم دورة حياة الـ instance وإيه اللي بيتحاسب.
 part: Compute
 color: c2
 ---
 
-## Incident: instance اتبدلت والتطبيق مرجعش
+## 🧠 افهم: سيرفر من غير ما تشتري سيرفر
 
-تطبيق SaaS كان شغال على EC2 واحدة. بعد `Stop/Start` تغير الـ public IPv4، والـ user data القديمة كانت تعتمد على secret مكتوب داخلها، والـ root volume كان إعداد حذفه عند termination غير مفهوم للفريق.
+برنامج المحاسبة بتاع دُكّان محتاج Windows، وإعدادات خاصة، وتحكم كامل. ده محتاج «جهاز». **Amazon EC2 (Elastic Compute Cloud)** بيديك جهاز افتراضي (اسمه **instance**) في دقايق، على أجهزة AWS الحقيقية، وتدفع على وقت تشغيله.
 
-المشكلة كشفت إن الـ instance لازم تتوصف كمجموعة قرارات قابلة للإعادة، مش جهاز يتظبط يدويًا مرة.
+إنت اللي بتختار المواصفات، ونظام التشغيل، ومين يقدر يكلمه. وإنت برضه اللي **مسؤول** عن الـ OS والـ patches والـ software (IaaS، فاكر؟).
 
-## Launch flow من الصفر
+<Hl c="p">EC2 instance = جهاز افتراضي. بتطلّعه من قالب (AMI)، بمقاس (instance type)، ورا firewall (Security Group)، وبتدفع طول ما هو شغال.</Hl>
 
-1. اختار `AMI` تحدد نظام التشغيل ومعلومات الإقلاع.
-2. اختار `instance type` حسب CPU وmemory وnetwork الفعلية.
-3. حدد VPC/subnet وSecurity Group تسمح فقط بالترافيك المطلوب.
-4. اربط IAM role بدل access keys ثابتة.
-5. اربط EBS وحدد `DeleteOnTermination` بوعي.
-6. شغّل bootstrap قابل للإعادة، ثم health check وmonitoring.
+<Box type="story" icon="🚗" title="تأجير عربية">
 
-النجاح إن instance بديلة توصل لنفس الحالة من automation وتدخل الخدمة خلال الهدف. الفشل إن recovery يعتمد على تعديل يدوي أو secret داخل user data.
-
-<Box type="story" icon="🧩" title="أربع قرارات مختلفة">
-
-الـ AMI تحدد البداية البرمجية، والـ instance type يحدد الموارد، والـ Security Group يضبط الترافيك، والـ purchase option يغير نموذج السعر. واحد منهم مش بديل للتاني.
+- **الـ AMI** = موديل العربية بالتجهيزات اللي جواها (نظام التشغيل والبرامج).
+- **الـ instance type** = حجم العربية: ملاكي صغيرة ولا ميكروباص ولا نقل.
+- **الـ Security Group** = مين مسموحله يركب: بوابة بتسمح لناس معينة.
+- **الـ user data** = ورقة تعليمات بتسيبها للسواق: «أول ما تطلع، روح هات كذا».
+- **العداد** شغال من ما تستلم لحد ما ترجّع.
 
 </Box>
 
-## AMI + instance type
+## 👀 تخيّل: من الضغطة لحد ما الصفحة تفتح
 
-الـ <En>Amazon Machine Image</En> قالب فيه نظام التشغيل ومعلومات الإقلاع، وممكن يكون AWS-provided أو من Marketplace أو معمول عندك. الـ AMI مرتبطة بـ Region، وتقدر تنسخها حسب احتياجك.
+<Diagram
+  title="تشغيل instance لموقع دُكّان"
+  height={340}
+  mheight={560}
+  nodes={[
+    { id: "ami", t: "AMI", s: "Amazon Linux 2023", c: 1, x: 88, y: 20, mx: 25, my: 6 },
+    { id: "type", t: "Instance type", s: "t3.micro", c: 2, x: 88, y: 80, mx: 75, my: 6 },
+    { id: "ec2", t: "EC2 instance", s: "+ user data تركّب nginx", c: 3, x: 50, y: 50, mx: 50, my: 45 },
+    { id: "sg", t: "Security Group", s: "يسمح 80 بس", c: 4, x: 18, y: 50, mx: 50, my: 72 },
+    { id: "user", t: "الزبون", s: "يفتح الموقع", c: 5, x: 18, y: 90, mx: 50, my: 95 },
+  ]}
+  edges={[
+    { from: "ami", to: "ec2", t: "القالب", c: 1 },
+    { from: "type", to: "ec2", t: "المقاس", c: 2 },
+    { from: "user", to: "sg", t: "HTTP", c: 5 },
+    { from: "sg", to: "ec2", t: "مسموح ✓", c: 4 },
+  ]}
+/>
 
-عائلات الـ instances بتلمّح لطبيعة الموارد:
+## 🔍 من جوه: الخمس قرارات
 
-- `T` و`M`: استخدام عام؛ بداية منطقية لتطبيقات متنوعة بعد القياس.
-- `C`: compute optimized للحسابات الكثيفة.
-- `R` و`X`: memory optimized للأحمال اللي محتاجة RAM كبيرة.
-- `I` و`D`: storage optimized لأحمال I/O أو تخزين محلي مخصوص.
-- عائلات accelerated computing للـ GPU والـ ML والجرافيكس.
+### ١. AMI (Amazon Machine Image)
 
-<Hl c="g">اختار على قياس الـ workload والـ metrics، مش على أكبر رقم.</Hl>
+القالب اللي الـ instance بتطلع منه: نظام التشغيل وأي برامج متركبة. ممكن تاخدها من AWS (Amazon Linux، Ubuntu، Windows)، أو من **AWS Marketplace**، أو تعمل AMI بتاعتك من instance جاهزة عشان تكرّرها. الـ AMI مربوطة بـ Region، وتقدر تنسخها لـ Region تانية.
 
-## User data والـ bootstrap
+### ٢. Instance type
 
-`User data` تعليمات تتنفذ غالبًا وقت أول إقلاع عشان تثبّت web server أو تنزّل التطبيق. دي مش مكان مناسب لـ passwords أو access keys مكتوبة صراحة.
+الاسم زي `t3.micro` معناه: العائلة `t`، الجيل `3`، الحجم `micro`.
 
-<Box type="tip" title="خلّي البداية قابلة للإعادة">
+| العائلة | متخصصة في | مثال استخدام |
+| --- | --- | --- |
+| `T`, `M` | general purpose، متوازنة | مواقع وتطبيقات عادية |
+| `C` | compute optimized، CPU قوي | معالجة فيديو، ألعاب، حسابات |
+| `R`, `X` | memory optimized، RAM كبيرة | databases في الذاكرة، caches |
+| `I`, `D` | storage optimized، هاردات سريعة محلية | databases بتقرا وتكتب كتير |
+| `P`, `G`, `Inf`, `Trn` | accelerated computing، GPU أو chips خاصة | machine learning، graphics |
 
-لو السيرفر وقع وAuto Scaling عمل واحد جديد، تعليمات الإعداد لازم توصّله لنفس الحالة. خزّن الأسرار في خدمة مخصصة، وادّي الـ instance IAM role بدل credentials ثابتة.
+الحرف `g` بعد الرقم (زي `t4g`) معناه معالج **Graviton** بتاع AWS (ARM)، غالبًا أرخص لنفس الأداء لو البرنامج بيدعم ARM.
 
-</Box>
+### ٣. Security Group
 
-## Security Group
+firewall افتراضي على مستوى الـ instance. بتكتب قواعد **allow** بس (مفيش deny). وهو **stateful**: لو سمحت بطلب داخل، الرد بيطلع لوحده من غير قاعدة.
 
-الـ Security Group firewall افتراضي مرتبط بالـ network interface. قواعده **stateful**: لو سمحت بطلب داخل، الرد مسموح من غير قاعدة عكسية منفصلة.
+### ٤. الدخول للسيرفر
 
-لـ web tier، افتح `HTTPS` من الجمهور، وخلّي الإدارة عبر مسار موثوق عند الضرورة. متفتحش كل البورتات لكل الإنترنت لمجرد إن التجربة «تشتغل».
+- **Key pair (SSH):** مفتاح بتحمّله مرة، ولازم تفتح port `22`.
+- **EC2 Instance Connect** أو **Systems Manager Session Manager:** تدخل من الـ console أو CLI من غير ما تفتح port 22 خالص. Session Manager هو الأأمن عادةً.
 
-## دورة الحياة
+### ٥. User data
+
+script بيشتغل أول ما الـ instance تقوم (مرة واحدة افتراضيًا). بتستخدمه تركّب برامج وتنزل الكود. **متحطش فيه باسوردات أو access keys**، لأن أي حد عنده صلاحية يقرا إعدادات الـ instance هيشوفها. ادّي الـ instance **IAM role** بدلها.
+
+### دورة الحياة وإيه اللي بيتحاسب
 
 <Flow items={[
-  { t: "pending", s: "بيتجهّز", c: 1 },
+  { t: "pending", s: "بتجهز", c: 1 },
   "→",
-  { t: "running", s: "شغّال وبيتحاسب", c: 2 },
+  { t: "running", s: "شغالة: بتتحاسب", c: 2 },
   "→",
-  { t: "stopped", s: "الـ compute واقف", c: 3 },
+  { t: "stopped", s: "الـ compute واقف، الهارد لأ", c: 3 },
   "→",
-  { t: "terminated", s: "اتنهى", c: 5 },
+  { t: "terminated", s: "اتمسحت نهائي", c: 5 },
 ]} />
 
-`Reboot` يعيد تشغيل نفس الـ instance. `Stop/Start` يوقف compute ثم يبدأها، وقد تتغير public IPv4 غير الثابتة. `Terminate` إنهاء، وممكن الـ root EBS يتحذف حسب إعداد `DeleteOnTermination`.
+- **Reboot:** نفس الجهاز بيعمل restart، مفيش حاجة بتتغير.
+- **Stop → Start:** ممكن تتنقل لجهاز تاني، والـ public IP العادي **بيتغير**. لو محتاج IP ثابت استخدم **Elastic IP**.
+- **Terminate:** نهائي. والهارد الأساسي بيتمسح معاها لو `DeleteOnTermination = true` (الافتراضي للـ root volume).
 
-حتى لو instance واقفة، موارد زي EBS volume أو Elastic IP غير مستخدم ممكن تفضل بتتحاسب.
+## 🛠️ طبّق: سيرفر ويب لدُكّان في ١٠ دقايق
 
-## لمحة عن طرق الشراء
+⚠️ `t3.micro` أو `t4g.micro` ممكن تدخل في الـ Free Tier حسب حسابك. كمّل الـ Lab وامسح في نفس القعدة.
 
-<Grid2>
-<Card title="On-Demand" c={1}>
+1. **`EC2` ← `Launch instance`**، الاسم `dukkan-web`، وضيف tag `Project=dukkan-lab`.
+2. **AMI:** Amazon Linux 2023. **Type:** `t3.micro`.
+3. **Key pair:** `Proceed without a key pair` (هندخل بـ Session Manager أو مش هندخل خالص).
+4. **Network settings:** اعمل Security Group جديد، اسمح بـ `HTTP (80)` من `Anywhere`. **متفتحش SSH.**
+5. **Advanced details ← User data:** الصق ده:
 
-مرن ومن غير التزام طويل؛ مناسب لحمل متغيّر أو بداية غير معروفة.
+```bash
+#!/bin/bash
+# بيشتغل مرة واحدة أول ما السيرفر يقوم
+dnf install -y nginx
+echo "<h1>أهلًا من دُكّان 🏪</h1>" > /usr/share/nginx/html/index.html
+systemctl enable --now nginx
+```
 
-</Card>
-<Card title="Savings Plans / Reserved" c={2}>
+6. **Launch**، واستنى الـ `Instance state` يبقى `Running` والـ status checks يعدّوا.
+7. انسخ الـ **Public IPv4 address** وافتحه في المتصفح بـ `http://` (مش https).
 
-خصم مقابل commitment أو خصائص حجز حسب النوع؛ مناسب لاستخدام متوقع، وراجع التفاصيل لأنهم مش نفس المنتج.
+**المتوقع:** صفحة مكتوب فيها «أهلًا من دُكّان».
 
-</Card>
-</Grid2>
+**جرّب:** امسح قاعدة HTTP من الـ Security Group وحدّث الصفحة. هتلاقيها مبتفتحش (بتلف لحد ما تفشل). رجّع القاعدة. كده شفت الـ firewall بعينك.
 
-`Spot` يستغل سعة فائضة بخصم، لكن AWS ممكن تقاطعها بإشعار قصير؛ مناسب لشغل قابل للإعادة، مش نسخة production وحيدة لا تتحمل الانقطاع. `Dedicated Hosts/Instances` للعزل أو متطلبات ترخيص مخصوصة، وتكلفتها أعلى عادةً.
+🧹 **تنضيف:** `Instance state` ← `Terminate`. وبعدين اتأكد في `Volumes` إن مفيش volume فاضل، وفي `Elastic IPs` إن مفيش IP محجوز. امسح الـ Security Group لو مش محتاجه.
 
-## Timeline لدورة الحياة
+## ⚖️ قارن: الحاجات اللي بتتلخبط في EC2
 
-- **pending → running:** الـ instance تتجهز ثم يبدأ compute billing حسب نموذج التسعير.
-- **reboot:** نفس الـ instance تعيد التشغيل.
-- **stop/start:** compute يتوقف ثم يبدأ، وقد تتغير public IPv4 غير الثابتة.
-- **terminate:** instance تنتهي؛ مصير root EBS يعتمد على الإعداد.
+| الحاجة | بتحدد إيه؟ | مش بتحدد إيه |
+| --- | --- | --- |
+| AMI | الـ OS والبرامج المبدئية | المقاس ولا السعر |
+| Instance type | CPU وRAM والشبكة | الـ OS |
+| Security Group | مين يكلم الـ instance على أنهي port | مين يدخل الـ AWS console (ده IAM) |
+| IAM role على الـ instance | الـ instance تكلم أنهي خدمات AWS | الترافيك الداخل |
+| Purchase option (فصل ٣٧) | طريقة الدفع (On-Demand، Spot…) | المواصفات |
 
-Stop مش cleanup كامل: EBS وElastic IP وموارد أخرى ممكن تفضل بتتحاسب.
+| | Stop | Terminate |
+| --- | --- | --- |
+| تقدر ترجعها؟ | أيوه، Start | لأ |
+| الـ compute بيتحاسب؟ | لأ | لأ |
+| الـ EBS volume؟ | موجود وبيتحاسب | بيتمسح لو `DeleteOnTermination` |
+| الـ public IP العادي؟ | بيتغير بعد Start | بيروح |
 
-## 🧪 Lab ورقي آمن
-
-صمم instance لـ API: `AMI: Linux`، family مبدئية، inbound `443` من ALB فقط، role لقراءة object محدد، وuser data بلا secrets. اكتب timeline لاستبدالها بعد failure خلال ١٠ دقائق، وحدد دليل نجاح الـ bootstrap.
-
-مفيش resource هيتعمل. لو طبّقت فعليًا، راجع السعر أولًا، اقفل المنافذ الزيادة، وبعد التجربة اعمل terminate واحذف volumes أو IPs غير المطلوبة.
-
-## متخلطش بينهم
-
-الـ AMI تحدد **البداية البرمجية**، والـ instance type يحدد **الموارد**، والـ purchase option يغيّر **طريقة السعر والتزامك**، والـ Security Group يتحكم في **الترافيك**.
-
-الفصل الجاي هنركّب block storage دائم للـ instance ونفهم EBS والـ snapshots.
-
-<Checklist id="aws-cp-12" title="خلّصت الفصل لما" items={["تفرّق AMI عن instance type", "تشرح user data من غير ما تحط فيها أسرار", "تعرف إن Security Groups stateful", "تميّز On-Demand وSpot والالتزامات على مستوى مبتدئ", "تراجع موارد بتفضل مدفوعة بعد stop"]} />
+<Checklist id="aws-cp-12" title="خلّصت الفصل لما" items={["تعدّ الخمس قرارات: AMI وtype وSecurity Group والدخول وuser data", "تقرا اسم instance type زي t4g.micro", "تعرف إن Security Group stateful وفيه allow بس", "تطلّع instance بـ user data وتفتح الموقع وتمسحها", "تفرّق Stop عن Terminate وإيه اللي بيفضل يتحاسب"]} />
 
 <Quiz>
-<Q n={1} q="إيه اللي يحدد صورة نظام التشغيل عند الإطلاق؟">الـ AMI.</Q>
-<Q n={2} q="Spot مناسبة لنسخة production وحيدة لا تحتمل الانقطاع؟">لأ؛ Spot قابلة للمقاطعة، فتلائم شغل قابل للإعادة أو متحمّل للفشل.</Q>
-<Q n={3} q="وقفت instance؛ هل الفاتورة بقت صفر أكيد؟">لأ. compute المتوقف لا يُحاسب كتشغيل عادةً، لكن EBS وموارد أخرى ممكن تفضل مدفوعة.</Q>
+<Q n={1} q="إيه اللي بيحدد نظام التشغيل اللي الـ instance هتقوم بيه؟">الـ **AMI**.</Q>
+<Q n={2} q="تطبيق محتاج RAM كبيرة جدًا لـ cache في الذاكرة. أنهي عائلة؟">**Memory optimized** (زي `R` أو `X`).</Q>
+<Q n={3} q="سمحت بـ HTTPS داخل في الـ Security Group. لازم تعمل قاعدة outbound للرد؟">**لأ**. الـ Security Group **stateful**، فالرد مسموح أوتوماتيك.</Q>
+<Q n={4} q="عملت Stop ثم Start والـ IP العام اتغير. إزاي تثبته؟">تستخدم **Elastic IP**، أو الأحسن تحط الـ instance ورا **Load Balancer** وتستخدم اسمه.</Q>
 </Quiz>

@@ -4,79 +4,127 @@ short: RDS وAurora
 order: 19
 label: فصل ١٩
 badge: Storage وDatabases · فصل ١٩
-en: RDS · Aurora · Multi-AZ · Read Replica · automated backups
-keywords: relational · SQL · high availability · read scaling · point-in-time restore
-goal: تصمم قاعدة معاملات علائقية وتفصل بين availability وread scaling وrecovery.
+en: Amazon RDS · engines · Multi-AZ · read replicas · automated backups · point-in-time recovery · Amazon Aurora · Aurora Serverless v2
+keywords: relational · managed · Multi-AZ · read replica · Aurora
+goal: تفهم إيه اللي RDS بيشيله عنك، وتفرّق Multi-AZ (عشان متقعش) عن read replicas (عشان القراية تكبر)، وتعرف Aurora بيزود إيه.
 part: Storage وDatabases
 color: c4
 ---
 
-## المثال الأول: Fintech ledger
+## 🧠 افهم: database على EC2 ولا مُدارة؟
 
-منصة مدفوعات تنفذ `250 transaction/s`. تحويل الرصيد لازم يخصم ويضيف في transaction واحدة، والـ RTO لعطل instance هو `5 دقايق`، والـ RPO لحذف منطقي هو `15 دقيقة`.
+طلبات دُكّان لازم تتحفظ في database فيها جداول مترابطة: `customers` و`orders` و`order_items`. ده شغل **relational database** (SQL).
 
-١. API تبدأ SQL transaction وتكتب ledger entry بمفتاح idempotency.
-٢. `RDS PostgreSQL Multi-AZ` ينسخ بشكل متزامن للـ standby حسب نوع deployment.
-٣. لو primary فشلت الساعة `12:00`، AWS تعمل failover والـ app تعيد الاتصال بالـ DNS endpoint.
-٤. لو operator نفذ `DELETE` الساعة `14:10`، الحذف ممكن يتنسخ؛ الفريق يستخدم point-in-time restore إلى وقت قبل الخطأ ثم يسترجع الداتا المطلوبة.
+ممكن تركّب PostgreSQL على EC2 بنفسك. بس ساعتها إنت اللي:
 
-## Managed وحدود المسؤولية
+- بتعمل patches للـ OS ولـ PostgreSQL،
+- بتعمل backups وتختبرها،
+- بتجهّز نسخة احتياطية لو السيرفر وقع،
+- بتكبّر الهارد قبل ما يتملي.
 
-RDS تدير provisioning والـ patching والـ backups والـ failover حسب الإعداد. الفريق مسؤول عن schema والـ indexes والـ queries والـ users والـ secrets والسعة والـ maintenance windows.
+**Amazon RDS (Relational Database Service)** بيعمل كل ده ليك. إنت بتختار الـ engine والحجم، وبتدير الـ schema والـ queries والداتا.
 
-المحركات تشمل PostgreSQL وMySQL وMariaDB وOracle وSQL Server وDb2، مع اختلاف Region والترخيص والخصائص. Relational مناسب للـ transactions والـ constraints والـ joins، مش لمجرد إن الداتا شكلها جداول.
+<Hl c="g">RDS = database علائقية مُدارة: AWS بتعمل الـ patches والـ backups والـ failover. وAurora = نسخة AWS المتطورة المتوافقة مع MySQL وPostgreSQL.</Hl>
 
-## Multi-AZ مش Read Replica
+<Box type="story" icon="📒" title="الدفتر والمحاسب">
 
-<Grid2>
-<Card title="Multi-AZ" c={2}>
+إنك تركّب database على EC2 زي إنك **تمسك دفتر الحسابات بنفسك**: تشتري الدفتر، وتصوّره كل يوم، ولو اتحرق تدور على الصورة.
 
-High availability وfailover. في Multi-AZ DB instance التقليدي، الـ standby مش endpoint للقراءة العادية.
-
-</Card>
-<Card title="Read Replica" c={4}>
-
-Read scaling، وغالبًا replication asynchronous. تقارير متأخرة ثواني قد تقبلها؛ شاشة رصيد لحظية قد لا تقبل stale read.
-
-</Card>
-</Grid2>
-
-فيه كمان `Multi-AZ DB clusters` بreader instances قابلة للقراءة؛ متعممش قاعدة الـ standby التقليدية على كل deployment. اقرأ اسم المنتج والـ architecture الحالية.
-
-## Aurora
-
-Aurora engine من AWS ومتوافق مع MySQL أو PostgreSQL، والـ cluster storage موزع عبر `3 AZs` وبيكبر تلقائيًا ضمن حدود الخدمة. فيه writer وAurora Replicas للقراءة والـ failover.
-
-اختيار Aurora لازم يطلع من throughput والـ failover والـ compatibility والتكلفة. عبارة "Aurora أسرع" وحدها مش business case، والتوافق لا يعني إن كل extension أو behavior مطابق.
-
-## Timeline لتعافي واقعي
-
-- `09:00`: automated backup/PITR شغالين باحتفاظ `7 أيام`.
-- `10:05`: migration script تحذف `18,000` row بالغلط.
-- `10:08`: alarm يكشف هبوط المعاملات؛ الفريق يوقف writes المؤذية.
-- `10:15`: يبدأ restore لقاعدة جديدة عند `10:04:30`.
-- `10:55`: validation تخلص، ثم تُستخرج الصفوف أو يحصل cutover حسب الخطة.
-
-الـ RPO اتحقق لو نقطة الاسترجاع قبل الخطأ متاحة. الـ RTO فشل لو المطلوب `30 دقيقة` والتعافي أخد `50`. Snapshot موجودة مش دليل إن الخطة ناجحة.
-
-<Box type="warn" title="Replica تنقل الخطأ">
-
-Read Replica تحل ضغط القراءة، لكنها مش backup مستقل تلقائيًا. حذف أو corruption منطقي ممكن ينتقل لها. والـ backup مش بديل failover سريع.
+RDS زي **مكتب محاسبة**: إنت بتقول القيود (الداتا)، وهما بيحفظوا الدفتر، ويصوروه كل يوم، وعندهم **نسخة تانية في فرع تاني** بتتكتب في نفس اللحظة. لو الفرع الأول قفل، الفرع التاني يكمل.
 
 </Box>
 
-## أمان وتكلفة
+## 👀 تخيّل: Multi-AZ وread replica
 
-حط database في private subnets، اسمح من app security group فقط، واستخدم Secrets Manager أو حل أسرار مناسب. احسب instances وstorage وI/O والـ backups الزائدة والـ replicas والنقل؛ Multi-AZ وread replicas موارد إضافية.
+<Diagram
+  title="نسخة للأمان، ونسخة للقراية"
+  height={340}
+  mheight={560}
+  nodes={[
+    { id: "app", t: "تطبيق دُكّان", s: "writes + reads", c: 1, x: 90, y: 40, mx: 50, my: 6 },
+    { id: "pri", t: "Primary", s: "AZ a", c: 2, x: 55, y: 40, mx: 50, my: 36 },
+    { id: "stby", t: "Standby", s: "AZ b · Multi-AZ", c: 3, x: 15, y: 15, mx: 25, my: 72 },
+    { id: "rr", t: "Read replica", s: "للتقارير", c: 4, x: 15, y: 75, mx: 75, my: 72 },
+    { id: "rep", t: "تقارير المبيعات", s: "SELECT تقيلة", c: 5, x: 55, y: 92, mx: 75, my: 96 },
+  ]}
+  edges={[
+    { from: "app", to: "pri", t: "INSERT / SELECT", c: 1 },
+    { from: "pri", to: "stby", t: "sync نسخ", c: 3 },
+    { from: "pri", to: "rr", t: "async نسخ", c: 4, dash: true },
+    { from: "rep", to: "rr", t: "يقرا من هنا", c: 5 },
+  ]}
+/>
 
-## 🧪 تمرين: حقق RTO وRPO
+- **Multi-AZ:** نسخة **standby** في AZ تانية، بتتكتب **مع** الـ primary. لو الـ primary وقع، RDS بيحوّل عليها أوتوماتيك (failover) في دقايق، والتطبيق بيكمل على **نفس الـ endpoint**. الهدف: **availability**.
+- **Read replica:** نسخة **للقراية بس**، بتوصلها التغييرات بعد شوية (async). الهدف: **تخفيف القراية** عن الـ primary (تقارير، صفحات كتير).
 
-Checkout database حجمها `2 TB`، عليها `70%` writes و`30%` reads. المتطلب: AZ failure خلال `4 دقايق`، حذف منطقي بفقد أقصى `5 دقايق`، وتقارير متأخرة حتى `60 ثانية`. اختار Multi-AZ وread replica وbackup settings، ثم اكتب timeline لاختبار failover وrestore ومعيار نجاح كل واحد.
+## 🔍 من جوه: RDS بالتفصيل
 
-<Checklist id="aws-cp-19" title="خلّصت الفصل لما" items={["تعرف مسؤوليتك رغم إن RDS managed", "تربط relational بالـ transactions والقيود", "تميز Multi-AZ التقليدي عن Read Replica", "تشرح Aurora وdeployment caveat", "تقيس restore ضد RTO وRPO"]} />
+### الـ engines
+
+PostgreSQL، MySQL، MariaDB، Oracle، Microsoft SQL Server، IBM Db2، و**Aurora** (MySQL وPostgreSQL compatible).
+
+### Backups
+
+- **Automated backups:** snapshot يومي + transaction logs، لمدة لحد **٣٥ يوم**. بتقدر ترجع لأي **ثانية** في المدة دي (**point-in-time recovery**)، والـ restore بيعمل database **جديدة**.
+- **Manual snapshots:** بتفضل لحد ما تمسحها بنفسك.
+
+### Amazon Aurora
+
+- متوافق مع MySQL أو PostgreSQL، فالتطبيق غالبًا مش محتاج يتغيّر.
+- التخزين بيتنسخ **٦ نسخ على ٣ AZs**، وبيكبر لوحده.
+- لحد **١٥ read replica** بـ lag قليل جدًا.
+- **Aurora Serverless v2:** بيكبر ويصغر السعة أوتوماتيك حسب الحمل.
+- **Aurora Global Database:** نسخ في Regions تانية للـ DR والقراية القريبة.
+
+### حاجات بتكمّل الصورة
+
+**RDS Proxy** بيعمل pooling للـ connections (مفيد جدًا مع Lambda). والتشفير بيتفعّل وقت الإنشاء بـ KMS.
+
+<Box type="warn" title="الـ database مكانها private subnet">
+
+متخليش الـ database `Publicly accessible`. خليها في private subnet (فصل ٢٢)، والـ Security Group بتاعها يسمح بس للـ Security Group بتاع التطبيق على port الـ engine.
+
+</Box>
+
+## 🛠️ طبّق: database طلبات دُكّان
+
+⚠️ RDS بيتحاسب بالساعة على الـ instance والـ storage. اختار instance صغيرة (`db.t4g.micro` لو متاحة في الـ Free Tier لحسابك)، **Single-AZ** للتجربة، وامسحها في نفس القعدة.
+
+1. **`RDS` ← `Create database`** ← `Standard create` ← `PostgreSQL` ← Template: `Free tier` أو `Dev/Test`.
+2. **Settings:** الاسم `dukkan-db`، والباسورد خليه **Managed in AWS Secrets Manager** (فصل ٣٠).
+3. **Connectivity:** `Public access = No`، وSecurity Group جديد.
+4. **Additional configuration:** backup retention `1 day`، ولاحظ إن في checkbox اسمه `Enable deletion protection`.
+5. استنى الحالة تبقى `Available` (دقايق). افتح الـ database وبص على:
+   - الـ **Endpoint**: اسم DNS ثابت، ده اللي التطبيق بيكلمه مش IP.
+   - تبويب `Maintenance & backups`: الـ backup window والـ maintenance window.
+6. **جرّب point-in-time:** `Actions` ← `Restore to point in time`. **لاحظ** إنه هيطلب **اسم database جديدة**. ده معناه إن الـ restore مش بيكتب فوق القديمة. (متكملش عشان متدفعش على اتنين.)
+
+🧹 **تنضيف:** `Actions` ← `Delete` ← شيل علامة `Create final snapshot` (للتجربة بس) ← أكّد. واتأكد إن مفيش manual snapshots فاضلة.
+
+## ⚖️ قارن: الفروق اللي بتتسأل
+
+| | Multi-AZ | Read replica |
+| --- | --- | --- |
+| الهدف | high availability / failover | scale للقراية |
+| النسخ | synchronous | asynchronous |
+| بتقرا منها؟ | لأ في الشكل الكلاسيكي (standby) | **أيوه** |
+| لو الـ primary وقع | failover أوتوماتيك | ممكن تعملها promote يدوي |
+| ممكن في Region تانية؟ | لأ (نفس الـ Region) | أيوه (cross-Region) |
+
+| | Database على EC2 | Amazon RDS | Amazon Aurora |
+| --- | --- | --- | --- |
+| Patches للـ OS والـ engine | إنت | AWS | AWS |
+| Backups وPITR | إنت | أوتوماتيك | أوتوماتيك |
+| Failover | إنت تبنيه | Multi-AZ | مدمج، أسرع |
+| أي engine؟ | أي حاجة | ٦ engines + Aurora | MySQL/PostgreSQL compatible |
+| مناسب لـ | engine مش مدعوم، تحكم كامل في الـ OS | معظم التطبيقات | أداء وتوافر أعلى وscale أكبر |
+
+<Checklist id="aws-cp-19" title="خلّصت الفصل لما" items={["تعدّ اللي RDS بيعمله واللي فاضل عليك", "تفرّق Multi-AZ عن read replica في الهدف وطريقة النسخ", "تعرف إن الـ restore بيعمل database جديدة وإن الـ backups لحد ٣٥ يوم", "تعرف مميزات Aurora: ٦ نسخ على ٣ AZs و١٥ replica وServerless v2", "تعمل database في private subnet وتمسحها"]} />
 
 <Quiz>
-<Q n={1} q="AZ فشلت والمطلوب failover تلقائي؛ تختار إيه غالبًا؟">RDS Multi-AZ deployment مناسب، مع اختبار زمن إعادة الاتصال الفعلي.</Q>
-<Q n={2} q="تقرير يقبل تأخير 30 ثانية وبيضغط على الـ primary؛ الحل المرشح؟">Read Replica أو Aurora Replica حسب المحرك والتصميم.</Q>
-<Q n={3} q="ليه Read Replica مش backup؟">لأن الخطأ المنطقي ممكن يتنسخ، بينما PITR أو backup بتاريخ يوفّر نقطة استرجاع مستقلة.</Q>
+<Q n={1} q="عايز الـ database تكمل لو الـ AZ بتاعتها وقعت، من غير ما تغير الـ endpoint. أنهي ميزة؟">**RDS Multi-AZ**.</Q>
+<Q n={2} q="تقارير تقيلة بتبطّأ الـ database الأساسية. الحل؟">**Read replica** وتوجّه التقارير ليها.</Q>
+<Q n={3} q="database متوافقة مع PostgreSQL، بتخزن ٦ نسخ على ٣ AZs. أنهي خدمة؟">**Amazon Aurora**.</Q>
+<Q n={4} q="في RDS، مين بيعمل patching للـ database engine؟">**AWS**، في الـ maintenance window اللي إنت بتحدده.</Q>
 </Quiz>

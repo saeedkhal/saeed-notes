@@ -1,73 +1,152 @@
 ---
 title: أساسيات VPC لتطبيق Production
-short: أساسيات VPC
+short: VPC Basics
 order: 22
 label: فصل ٢٢
 badge: Networking · فصل ٢٢
-en: VPC · CIDR · public subnet · private subnet · route table
-keywords: VPC · CIDR · subnets · route tables
-goal: تقسّم شبكة تطبيق متعدد الـ AZs وتقرأ مسار packet من الـ routes.
+en: Amazon VPC · CIDR · subnet · public subnet · private subnet · route table · internet gateway · NAT gateway
+keywords: VPC · subnet · route table · IGW · NAT
+goal: ترسم VPC فيها public وprivate subnets على AZين، وتفهم إن الـ route table هي اللي بتخلي الـ subnet public أو private، وتعرف IGW وNAT بيعملوا إيه.
 part: Networking
 color: c2
 ---
 
-## المثال الأول: Checkout في 3 tiers
+## 🧠 افهم: سور حوالين موارد دُكّان
 
-المطلوب تطبيق في `2 AZs`: public ALB، app tasks خاصة، وRDS خاصة. الـ CIDR هو `10.20.0.0/16` ولازم نسيب مساحة لتوسع سنة.
+لما بتعمل EC2 أو RDS، لازم يقعدوا في **شبكة**. السؤال: مين يقدر يوصلهم؟
 
-١. public subnets: `10.20.0.0/24` و`10.20.1.0/24`.
-٢. app subnets: `10.20.10.0/24` و`10.20.11.0/24`.
-٣. data subnets: `10.20.20.0/24` و`10.20.21.0/24`.
-٤. كل subnet داخل AZ واحدة فقط؛ توزيع الأزواج يحقق resilience لو AZ تعطلت.
-٥. ALB وحدها تستقبل من الإنترنت؛ app وdatabase بلا route مباشر للـ IGW.
+- الـ Load Balancer لازم الزباين يوصلوله من الإنترنت.
+- السيرفرات المفروض يكلمها الـ Load Balancer بس.
+- الـ database **ممنوع** أي حد من الإنترنت يوصلها.
 
-`Amazon VPC` شبكة افتراضية معزولة منطقيًا. `/16` أكبر من `/24` لأن prefix الأكبر يترك bits أقل للعناوين. خطط CIDRs من غير overlap لو متوقع ربط VPCs أو on-premises لاحقًا.
+**Amazon VPC (Virtual Private Cloud)** هي شبكتك الخاصة المعزولة جوه AWS. إنت بتحدد نطاق الـ IPs، وبتقسّمها لأجزاء (**subnets**)، وبتحدد كل جزء يوصل لإيه.
 
-## Public وPrivate بيتحددوا بالـ route
+<Hl c="u">VPC = شبكتك المعزولة في Region. Subnet = جزء منها في AZ واحدة. والـ subnet بتبقى public لو الـ route table بتاعتها فيها طريق لـ Internet Gateway، وprivate لو مفيش.</Hl>
 
-الـ public subnet عندها route زي `0.0.0.0/0 → Internet Gateway`. المورد نفسه يحتاج public addressing مناسب وقواعد أمان تسمح. الـ private subnet ماعندهاش route مباشر للـ IGW؛ ممكن تخرج عن طريق NAT من غير inbound مباشر من الإنترنت.
+<Box type="story" icon="🏘️" title="كومباوند فيه عمارات">
+
+- **الـ VPC** = الكومباوند كله بسوره.
+- **الـ subnets** = العمارات. كل عمارة في حي (AZ) معين.
+- **الـ public subnet** = العمارة اللي على الشارع وليها باب على الطريق العمومي (Internet Gateway).
+- **الـ private subnet** = العمارة اللي جوه، ملهاش باب على الشارع. سكانها يقدروا يبعتوا جواب برّه عن طريق **مكتب البريد** (NAT Gateway)، بس محدش من برّه يقدر يخبط عليهم.
+- **الـ route table** = اللافتات اللي بتقول «للخروج للشارع، من هنا».
+
+</Box>
+
+## 👀 تخيّل: شبكة دُكّان
+
+<Diagram
+  title="VPC بـ public وprivate subnets على AZين"
+  height={400}
+  mheight={640}
+  nodes={[
+    { id: "net", t: "الإنترنت", c: 1, x: 92, y: 50, mx: 50, my: 4 },
+    { id: "igw", t: "Internet Gateway", s: "باب الـ VPC", c: 2, x: 74, y: 50, mx: 50, my: 18 },
+    { id: "pubA", t: "Public subnet · AZ a", s: "ALB + NAT", c: 3, x: 50, y: 18, mx: 25, my: 38 },
+    { id: "pubB", t: "Public subnet · AZ b", s: "ALB", c: 3, x: 50, y: 82, mx: 75, my: 38 },
+    { id: "appA", t: "Private · AZ a", s: "سيرفرات + RDS", c: 4, x: 14, y: 18, mx: 25, my: 72 },
+    { id: "appB", t: "Private · AZ b", s: "سيرفرات + standby", c: 4, x: 14, y: 82, mx: 75, my: 72 },
+  ]}
+  edges={[
+    { from: "net", to: "igw", c: 1 },
+    { from: "igw", to: "pubA", c: 2 },
+    { from: "igw", to: "pubB", c: 2 },
+    { from: "pubA", to: "appA", t: "ALB → app", c: 3 },
+    { from: "pubB", to: "appB", t: "ALB → app", c: 3 },
+    { from: "appB", to: "pubA", t: "تحديثات عبر NAT", c: 5, dash: true, bend: 0.3 },
+  ]}
+/>
+
+1. الزبون جاي من الإنترنت ← **Internet Gateway** ← **ALB** في الـ public subnets.
+2. الـ ALB بيبعت للسيرفرات في الـ **private subnets**.
+3. السيرفرات بتكلم **RDS** في الـ private subnets برضه.
+4. لو السيرفر محتاج ينزّل تحديثات، بيطلع عن طريق **NAT Gateway** في الـ public subnet. الطريق **طالع بس**، محدش يقدر يبدأ اتصال من برّه للسيرفر.
+
+## 🔍 من جوه: المكونات
+
+### CIDR والـ IPs
+
+الـ VPC بتاخد نطاق IPs زي `10.0.0.0/16` (حوالي ٦٥ ألف عنوان). كل subnet بتاخد حتة منه، زي `10.0.1.0/24` (٢٥٦ عنوان، AWS بتحجز ٥ منهم). الرقم بعد `/` كل ما يصغر، النطاق يكبر.
+
+### Subnets
+
+- كل subnet في **AZ واحدة**. عشان الـ high availability اعمل subnets في AZين على الأقل.
+- **Public:** الـ route table فيها `0.0.0.0/0 → igw-xxxx`.
+- **Private:** مفيش طريق لـ IGW. ممكن يبقى فيها `0.0.0.0/0 → nat-xxxx` للخروج بس.
+
+### Route table
+
+قايمة «لو العنوان كذا، روح من هنا». كل subnet مربوطة بـ route table واحدة.
+
+| Destination | Target | معناها |
+| --- | --- | --- |
+| `10.0.0.0/16` | `local` | أي حاجة جوه الـ VPC، روح مباشرة |
+| `0.0.0.0/0` | `igw-…` | أي حاجة تانية، اطلع للإنترنت (public subnet) |
+| `0.0.0.0/0` | `nat-…` | أي حاجة تانية، اطلع عن طريق NAT (private subnet) |
+
+### Internet Gateway ولا NAT Gateway؟
 
 <Grid2>
-<Card title="Public tier" c={2}>
+<Card title="Internet Gateway (IGW)" c={2}>
 
-Internet-facing ALB أو مكوّن محتاج inbound عام فعلًا. قلّل الموارد العامة.
+باب الـ VPC على الإنترنت، **في الاتجاهين**. واحد لكل VPC. مجاني في نفسه.
 
 </Card>
-<Card title="Private tiers" c={3}>
+<Card title="NAT Gateway" c={5}>
 
-Application وdatabase. افصل route tables وsecurity boundaries حسب الوظيفة.
+بيخلّي موارد الـ private subnet **تطلع** للإنترنت، ومحدش يدخلها من برّه. بيتحاسب **بالساعة + كل GB بيعدي**، فهو من أشهر مفاجآت الفاتورة.
 
 </Card>
 </Grid2>
 
-## Request flow بالأوقات
+<Box type="tip" title="Default VPC">
 
-- `12:00:00.000`: العميل يحل DNS ويصل لعنوان ALB العام.
-- `12:00:00.030`: route والـ IGW يوصلوا packet للـ ALB في public subnet.
-- `12:00:00.045`: ALB يختار healthy app target خاص.
-- `12:00:00.080`: app يفتح اتصال database على private IP.
-- `12:00:00.210`: response يرجع على الاتصالات القائمة.
-
-الـ route table تختار next hop بأكثر route تحديدًا؛ هي مش firewall. Security Groups وNACLs تتحكم في السماح والمنع.
-
-<Box type="warn" title="اسم subnet مش control">
-
-Subnet اسمها `private-db` وعندها route مباشر لـ IGW ليست خاصة وظيفيًا. راجع routes وpublic addressing وقواعد الأمان، مش tags فقط.
+كل Region فيها **default VPC** جاهزة بـ public subnets في كل AZ، عشان تجرب بسرعة. للـ production اعمل VPC بتصميمك.
 
 </Box>
 
-## Tradeoff التخطيط
+## 🛠️ طبّق: اعمل شبكة دُكّان
 
-`/28` صغيرة قد تستنفد IPs وقت autoscaling أو load balancer operations؛ `/20` واسعة قد تهدر address space وتعمل overlap مستقبلًا. اختار مساحة من توقع عدد ENIs والنمو، واعرف إن AWS تحجز عناوين داخل كل subnet.
+⚠️ الـ VPC والـ subnets والـ route tables والـ IGW مجانيين. الـ **NAT Gateway بيتحاسب**، فاختار `None` في الـ Lab ده.
 
-## 🧪 تمرين: صمم شبكة SaaS
+1. **`VPC` ← `Create VPC` ← `VPC and more`.** ده wizard بيعمل كل حاجة مع بعض.
+2. **الإعدادات:**
+   - Name: `dukkan`، و IPv4 CIDR: `10.0.0.0/16`
+   - Number of AZs: `2`
+   - Public subnets: `2`، Private subnets: `2`
+   - NAT gateways: **`None`**
+   - VPC endpoints: `S3 Gateway` (مجاني، هنفهمه في الفصل الجاي)
+3. بص على الـ **Preview** على اليمين قبل ما تضغط Create: هتشوف نفس رسمة الفصل.
+4. بعد الإنشاء، افتح `Route tables`:
+   - الـ public route table فيها `0.0.0.0/0 → igw-…`.
+   - الـ private route tables فيها `local` بس (وطريق الـ S3 endpoint).
 
-عندك `120` app task اليوم وقد تصل `600`، وقاعدتا بيانات، و2 AZs. اقترح VPC/subnet CIDRs، route table لكل tier، ومسار request. بعدها افترض فشل AZ-A: حدد الموارد والمسارات المطلوبة لاستمرار الخدمة، واكتب نقطة فشل لو كل NAT أو app في AZ واحدة.
+**المتوقع:** فهمت إن «public» و«private» مجرد **سطر في route table**، مش إعداد سحري على الـ subnet.
 
-<Checklist id="aws-cp-22" title="خلّصت الفصل لما" items={["تشرح VPC كحد شبكة منطقي", "تعرف إن `/24` أصغر من `/16`", "تميّز public subnet من route للـ IGW", "تعرف إن route table مش firewall", "تقسم production tiers على أكتر من AZ"]} />
+5. **جرّب (اختياري):** شغّل EC2 في private subnet من غير public IP. مش هتقدر توصلها من الإنترنت حتى لو الـ Security Group مفتوح. الطريق نفسه مش موجود.
+
+🧹 **تنضيف:** امسح أي instances جوه الـ VPC الأول، وبعدين `Your VPCs` ← اختار `dukkan` ← `Delete VPC` (بيمسح الـ subnets والـ route tables والـ IGW معاه).
+
+## ⚖️ قارن: الحاجات اللي بتتلخبط
+
+| | Internet Gateway | NAT Gateway |
+| --- | --- | --- |
+| الاتجاه | داخل وخارج | خارج بس (الردود بترجع) |
+| بيتحط فين | على الـ VPC | في public subnet |
+| بيخدم مين | الـ public subnets | الـ private subnets |
+| التكلفة | مجاني | بالساعة + بالـ GB |
+
+| | Public subnet | Private subnet |
+| --- | --- | --- |
+| إيه اللي بيحددها | route لـ IGW | مفيش route لـ IGW |
+| يتحط فيها | Load Balancers، NAT، bastion | سيرفرات التطبيق، databases |
+| يتوصلها من الإنترنت؟ | أيوه لو في public IP والـ Security Group يسمح | لأ |
+
+<Checklist id="aws-cp-22" title="خلّصت الفصل لما" items={["ترسم VPC بـ public وprivate subnets على AZين", "تعرف إن الـ subnet في AZ واحدة والـ VPC في Region", "تشرح إن الـ route table هي اللي بتخلي الـ subnet public", "تفرّق Internet Gateway عن NAT Gateway", "تعرف إن NAT Gateway بيتحاسب بالساعة والـ GB"]} />
 
 <Quiz>
-<Q n={1} q="Subnet اسمها private وعندها `0.0.0.0/0 → IGW`؛ الحكم؟">الاسم لا يهم؛ route تجعلها public من ناحية المسار، مع احتياج public addressing وقواعد سماح.</Q>
-<Q n={2} q="أنهي نطاق أكبر: `/16` ولا `/24`؟">`/16` أكبر، والـ `/24` ممكن تكون subnet داخله.</Q>
-<Q n={3} q="هل route للـ IGW تفتح inbound تلقائيًا؟">لأ؛ routing غير authorization، ولسه public address وSecurity Group/NACL لازم يتراجعوا.</Q>
+<Q n={1} q="سيرفرات في private subnet محتاجة تنزّل تحديثات من الإنترنت من غير ما حد يوصلها من برّه. أنهي خدمة؟">**NAT Gateway**.</Q>
+<Q n={2} q="إيه اللي بيخلي الـ subnet public؟">الـ **route table** بتاعتها فيها route لـ **Internet Gateway**.</Q>
+<Q n={3} q="الـ subnet ممكن تمتد على AZين؟">**لأ**. كل subnet في AZ واحدة. الـ VPC هي اللي بتمتد على الـ AZs.</Q>
+<Q n={4} q="فين تحط الـ RDS database بتاعة التطبيق؟">في **private subnets**، ويفضل في AZين مع Multi-AZ.</Q>
 </Quiz>

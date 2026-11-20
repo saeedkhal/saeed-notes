@@ -1,78 +1,121 @@
 ---
 title: Hybrid Networking للمؤسسات
-short: Hybrid Networking
+short: VPN وDirect Connect
 order: 25
 label: فصل ٢٥
 badge: Networking · فصل ٢٥
-en: Site-to-Site VPN · Client VPN · Direct Connect · PrivateLink · Transit Gateway
-keywords: VPN · Direct Connect · PrivateLink · Transit Gateway
-goal: تختار اتصال مؤسسة حسب الطرفين والـ bandwidth والـ encryption ووقت التجهيز.
+en: AWS Site-to-Site VPN · AWS Client VPN · AWS Direct Connect · virtual private gateway · customer gateway · Transit Gateway · AWS Cloud WAN
+keywords: VPN · Direct Connect · encrypted · dedicated · hybrid
+goal: تختار إزاي توصّل مكتب أو data center أو موظف بالـ VPC، وتفرّق VPN (على الإنترنت ومشفّر وسريع التجهيز) عن Direct Connect (خط خاص وثابت وبياخد وقت).
 part: Networking
 color: c5
 ---
 
-## المثال الأول: ERP بين data center وAWS
+## 🧠 افهم: المخزن عايز يكلم الـ cloud
 
-شركة تنقل ERP تدريجيًا. عندها `12` VPC وdata center يرسل `3 TB/day`. المطلوب encryption، latency مستقرة، وbackup path يشتغل خلال `10 دقايق`.
+دُكّان كبر. بقى عنده **مخزن** في العبور فيه سيستم مخزون قديم على سيرفر محلي، والموقع على AWS محتاج يعرف الكميات كل دقيقة. وكمان المحاسب بيشتغل من البيت ومحتاج يوصل لسيستم داخلي.
 
-١. `Direct Connect` يوفر اتصال مخصص أكثر ثباتًا من internet path.
-٢. لأنه مش encrypted تلقائيًا لمجرد إنه خاص، يتصمم encryption مناسب حسب المتطلب.
-٣. `Site-to-Site VPN` يبقى backup عبر الإنترنت.
-٤. `Transit Gateway` يربط الـ VPCs والاتصالات كـ hub مع route tables للعزل.
-٥. failover test يقيس التحويل والـ routes والـ throughput، مش مجرد إن tunnel حالتها UP.
+الاتصال ده **مينفعش** يبقى مفتوح على الإنترنت للعامة. محتاجين **طريق خاص** بين الشبكتين. ده اسمه **hybrid networking**.
 
-## مين بيتصل بمين؟
+<Hl c="p">Site-to-Site VPN = نفق مشفّر على الإنترنت بين مكتبك والـ VPC، بيتعمل في دقايق. Direct Connect = خط فعلي خاص من مكانك لـ AWS، أداء ثابت وبياخد أسابيع. Client VPN = لكل موظف من جهازه.</Hl>
 
-<Grid2>
-<Card title="Site-to-Site VPN" c={5}>
+<Box type="story" icon="🚚" title="توصيل البضاعة للمخزن">
 
-شبكة كاملة لشبكة AWS عبر tunnels مشفرة فوق الإنترنت. أسرع في التجهيز نسبيًا، لكن الجودة تتأثر بمسار الإنترنت.
-
-</Card>
-<Card title="Client VPN" c={2}>
-
-جهاز مستخدم أو فريق remote يدخل شبكات مسموحة. identity وauthorization والـ routes جزء من التصميم.
-
-</Card>
-</Grid2>
-
-`Direct Connect` يحتاج lead time وتكلفة ومزود/موقع مناسب، لكنه يقدم مسار مخصص. Site-to-Site VPN مفيد كبداية أو backup، لكن قارن bandwidth والـ SLA الفعليين.
-
-## PrivateLink وTransit Gateway
-
-`PrivateLink` يعرّض service محددة من provider VPC لمستهلكين عبر interface endpoints، من غير full network connectivity، ويفيد مع overlapping CIDRs. مناسب لشركة شريكة تحتاج payments API فقط.
-
-`Transit Gateway` راوتر hub يربط VPCs وon-premises. هو full routing fabric حسب route tables، مش بديل PrivateLink لعرض API واحدة بأقل blast radius.
-
-<Flow items={[
-  { t: "Data center", s: "DX + VPN backup", c: 1 }, "→",
-  { t: "Transit Gateway", s: "hub routes", c: 5 }, "→",
-  { t: "12 VPCs", s: "segmented", c: 3 },
-]} />
-
-## Incident timeline
-
-- `02:00`: Direct Connect path يقع.
-- `02:01`: BGP/route behavior يبدأ التحويل حسب التصميم.
-- `02:06`: VPN شغالة، لكن throughput أقل من replication traffic.
-- `02:15`: queue backlog يزيد؛ الـ RTO network اتحقق، لكن capacity objective فشل.
-
-النجاح محتاج test تحت traffic حقيقي: زمن التحويل، packet loss، throughput، وعودة المسار الأساسي من غير route oscillation.
-
-<Box type="warn" title="Overlapping CIDR يقفل اختيارات">
-
-Full routing بين شبكتين بنفس العناوين صعب. خطط IPAM بدري؛ ولو المطلوب service واحدة فقط، PrivateLink قد يتجنب full-network overlap.
+- **Site-to-Site VPN** زي إنك تبعت البضاعة في **عربية مصفّحة على الطريق العام**: الطريق مشترك وفيه زحمة أحيانًا، بس محدش يقدر يفتح العربية. وتقدر تبدأ النهارده.
+- **Direct Connect** زي إنك **تبني طريق خاص** من المخزن لمخزن AWS: مفيش زحمة وسرعة ثابتة، بس البناء بياخد أسابيع وبيتكلف.
+- **Client VPN** زي **كارنيه** لكل موظف يدخل بيه من أي مكان.
 
 </Box>
 
-## 🧪 تمرين: Enterprise cutover
+## 👀 تخيّل: تلات طرق للوصول
 
-ارسم data center و20 VPC و200 remote engineer وشريك يحتاج API واحدة. اختار DX/VPN/Client VPN/TGW/PrivateLink لكل خط. افترض سقوط DX الساعة `11:00` وحمل `800 Mbps`: اكتب timeline، backup capacity، ومعيار نجاح.
+<Diagram
+  title="المخزن والموظف والـ VPC"
+  height={360}
+  mheight={600}
+  nodes={[
+    { id: "wh", t: "مخزن العبور", s: "customer gateway", c: 1, x: 90, y: 22, mx: 25, my: 6 },
+    { id: "home", t: "المحاسب من البيت", s: "laptop", c: 2, x: 90, y: 82, mx: 75, my: 6 },
+    { id: "vpn", t: "Site-to-Site VPN", s: "IPsec على الإنترنت", c: 3, x: 55, y: 10, mx: 25, my: 38 },
+    { id: "dx", t: "Direct Connect", s: "خط خاص", c: 4, x: 55, y: 45, mx: 50, my: 58 },
+    { id: "cvpn", t: "Client VPN", s: "OpenVPN", c: 5, x: 55, y: 85, mx: 75, my: 38 },
+    { id: "vpc", t: "VPC دُكّان", s: "VGW أو Transit Gateway", c: 2, x: 12, y: 50, mx: 50, my: 92 },
+  ]}
+  edges={[
+    { from: "wh", to: "vpn", c: 1 },
+    { from: "wh", to: "dx", c: 1, dash: true },
+    { from: "home", to: "cvpn", c: 2 },
+    { from: "vpn", to: "vpc", c: 3 },
+    { from: "dx", to: "vpc", c: 4 },
+    { from: "cvpn", to: "vpc", c: 5 },
+  ]}
+/>
 
-<Checklist id="aws-cp-25" title="خلّصت الفصل لما" items={["تفرق Site-to-Site عن Client VPN", "متفترضش إن Direct Connect مشفّر تلقائيًا", "تشرح PrivateLink كاتصال بخدمة محددة", "تشرح Transit Gateway كـ hub", "تختبر failover بالزمن والـ throughput"]} />
+## 🔍 من جوه: كل خيار بالتفصيل
+
+### AWS Site-to-Site VPN
+
+- نفق **IPsec مشفّر** على الإنترنت العام.
+- في جهة AWS: **virtual private gateway** على الـ VPC، أو **Transit Gateway**.
+- في جهتك: **customer gateway** (راوتر أو firewall بيدعم IPsec).
+- كل VPN connection فيها **نفقين** لـ high availability.
+- **بيتعمل في دقايق**، وأرخص، بس الأداء بيتأثر بالإنترنت.
+
+### AWS Client VPN
+
+VPN مُدار للمستخدمين الأفراد من أجهزتهم، بيستخدم OpenVPN client، ومتكامل مع Active Directory أو SAML. بتدفع على الـ endpoint والاتصالات.
+
+### AWS Direct Connect
+
+- **اتصال فعلي خاص** من الـ data center بتاعك لـ **Direct Connect location** (داتا سنتر شريك)، ومنه لشبكة AWS.
+- **مبيعدّيش على الإنترنت العام**: latency ثابت، bandwidth عالي (من ٥٠ Mbps لحد ١٠٠ Gbps حسب النوع)، ونقل الداتا لبرّه AWS عليه بسعر أقل غالبًا.
+- **مش مشفّر افتراضيًا.** لو محتاج تشفير، شغّل VPN **فوق** Direct Connect، أو استخدم MACsec على الاتصالات المدعومة.
+- **التجهيز بياخد أسابيع** (لازم كابلات فعلية).
+- للـ high availability: اتصالين في locations مختلفة، أو Direct Connect + VPN احتياطي.
+
+### لما الشبكة تكبر
+
+**Transit Gateway** (فصل ٢٣) بيبقى الـ hub اللي بتوصل فيه كل الـ VPNs والـ Direct Connect وكل الـ VPCs. ولو الشركة عالمية بفروع كتير، في **AWS Cloud WAN** لإدارة شبكة عالمية من مكان واحد.
+
+## 🛠️ طبّق: اختار لكل موقف
+
+الـ Lab ورقي (إنشاء VPN حقيقي محتاج جهاز في جهتك وبيتحاسب بالساعة).
+
+| الموقف | الاختيار | ليه |
+| --- | --- | --- |
+| مخزن دُكّان محتاج يتوصل **الأسبوع ده**، والداتا قليلة | **Site-to-Site VPN** | سريع ورخيص ومشفّر |
+| بعد سنة: المخزن بينقل ٥ TB يوميًا والـ latency لازم يبقى ثابت | **Direct Connect** | أداء ثابت ونقل أرخص للحجم ده |
+| نفس اللي فوق بس محتاجين تشفير | **Direct Connect + VPN فوقه** (أو MACsec) | Direct Connect لوحده مش مشفّر |
+| ١٥ موظف بيشتغلوا من البيت | **Client VPN** | لكل جهاز، مش لمكتب |
+| Direct Connect لسه بيتجهّز ومحتاجين نشتغل | **VPN مؤقت** | بيقوم في دقايق |
+| ١٠ فروع و٨ VPCs | **Transit Gateway** + VPNs/DX | hub واحد بدل وصلات كتير |
+
+**تحدّي:** اكتب خطة failover: الاتصال الأساسي Direct Connect، ولو وقع؟ (VPN احتياطي على الإنترنت، والـ routing بيحوّل لوحده).
+
+## ⚖️ قارن: VPN ضد Direct Connect
+
+| | Site-to-Site VPN | Direct Connect | Client VPN |
+| --- | --- | --- | --- |
+| بيمشي على | الإنترنت العام | خط خاص | الإنترنت العام |
+| مشفّر؟ | **أيوه** (IPsec) | لأ افتراضيًا | أيوه |
+| وقت التجهيز | دقايق | **أسابيع** | دقايق |
+| الأداء | متغير حسب الإنترنت | **ثابت وعالي** | متغير |
+| التكلفة | أقل | أعلى (port + الشريك) | لكل endpoint واتصال |
+| بيوصّل | شبكة بشبكة | شبكة بشبكة | جهاز بشبكة |
+
+<Box type="interview" title="كلمات بتحسم">
+
+«quickly»، «encrypted over the internet»، «low cost» ← **Site-to-Site VPN**.
+«dedicated»، «private connection»، «consistent network performance»، «does not traverse the internet» ← **Direct Connect**.
+«remote employees» ← **Client VPN**.
+
+</Box>
+
+<Checklist id="aws-cp-25" title="خلّصت الفصل لما" items={["تشرح hybrid networking بموقف المخزن", "تفرّق Site-to-Site VPN وDirect Connect وClient VPN", "تعرف إن Direct Connect مش مشفّر افتراضيًا وإزاي تشفّره", "تعرف إن Direct Connect بياخد أسابيع والـ VPN دقايق", "تصمم failover بـ Direct Connect + VPN"]} />
 
 <Quiz>
-<Q n={1} q="مهندس من laptop عايز موارد خاصة؛ أنهي خدمة؟">AWS Client VPN لاتصال المستخدم الفردي.</Q>
-<Q n={2} q="شريك يحتاج API واحدة مع CIDR متداخل؛ المرشح؟">AWS PrivateLink عبر interface endpoint بدل full network routing.</Q>
-<Q n={3} q="Direct Connect وقع وVPN اشتغلت لكن السعة نصف المطلوب؛ هل الخطة نجحت؟">نجح الاتصال جزئيًا لكن capacity objective فشل؛ لازم backup path يتحمل الحمل المطلوب.</Q>
+<Q n={1} q="شركة محتاجة اتصال خاص بأداء ثابت بين الـ data center وAWS ومبيعدّيش على الإنترنت. أنهي خدمة؟">**AWS Direct Connect**.</Q>
+<Q n={2} q="محتاجين اتصال مشفّر بين المكتب والـ VPC النهارده. أسرع خيار؟">**AWS Site-to-Site VPN**.</Q>
+<Q n={3} q="موظفين بيشتغلوا من البيت ومحتاجين يوصلوا لموارد في الـ VPC. أنهي خدمة؟">**AWS Client VPN**.</Q>
+<Q n={4} q="Direct Connect مشفّر افتراضيًا؟">**لأ**. تقدر تشغّل VPN فوقه أو MACsec حسب الاتصال.</Q>
 </Quiz>

@@ -5,61 +5,154 @@ order: 41
 label: الآخر
 badge: التكلفة والامتحان · الآخر
 en: CLF-C02 · Cloud Concepts · Security · Technology · Billing
-keywords: Domains · Comparisons · Architecture · Cost · Final review
-goal: تراجع الفروق الحاسمة والـ architecture والتكلفة في صفحة واحدة قبل الاختبار.
+keywords: مواقف · فروق · أرقام · مراجعة أخيرة
+goal: تراجع الكورس كله في صفحة واحدة بصيغة «لو المشكلة كذا ← فكّر في كذا»، ومعاها الأرقام اللي لازم تفتكرها وخطة آخر يوم.
 part: التكلفة والامتحان
 color: dark
 ---
 
-## راجع بالقرار، مش بالتعريف
+## 🧠 افهم: الصفحة دي بتتقري إزاي
 
-CLF-C02 تقريبًا: Cloud Concepts ٢٤٪، Security ٣٠٪، Technology ٣٤٪، Billing/Support ١٢٪. الأسماء والـ caveats هنا حسب أكتوبر ٢٠٢٦؛ exam guide والـ docs وقت الحجز هم الحكم.
+كل كارت فيه **موقف** (زي ما هيجيلك في السؤال) و**الخدمة أو القرار**. غطّي الجزء التاني وحاول تجاوب. لو كارت وقفك، ارجع لفصله وبص على جزء 👀 تخيّل، مش التعريف.
 
-<Cheat items={[
-  ["Traffic اتضاعف 6× لمدة 20 دقيقة", "Elasticity وAuto Scaling؛ ELB يوزع. متشتريش peak ثابت قبل قياس الحمل"],
-  ["AZ كاملة وقعت", "Multi-AZ للـ availability داخل Region؛ multi-Region للـ DR أعقد وأغلى"],
-  ["RTO 30m وRPO 5m", "RTO وقت رجوع الخدمة؛ RPO أقصى فقد بيانات. اختبر timestamps فعلية"],
-  ["EC2 guest OS محتاج patch", "العميل مسؤول؛ Systems Manager يساعد. AWS مسؤولة عن البنية تحت الـ cloud"],
-  ["App يحتاج AWS access", "IAM role وleast privilege؛ workforce متعدد الحسابات عبر Identity Center؛ app users عبر Cognito"],
-  ["Password بيتغير كل 30 يوم", "Secrets Manager؛ KMS للـ keys؛ ACM لشهادات TLS"],
-  ["SQL injection وDDoS", "WAF للـ web patterns؛ Shield للـ DDoS؛ استخدمهم معًا لو التهديدين موجودين"],
-  ["سلوك مشبوه / CVE / PII", "GuardDuty / Inspector / Macie"],
-  ["CPU عالي / مين غيّر / كان متظبط إزاي", "CloudWatch / CloudTrail / Config؛ trace latency عبر X-Ray"],
-  ["Server / function / container", "EC2 / Lambda / ECS أو EKS؛ Fargate compute مُدار للـ containers"],
-  ["Object / block / shared file", "S3 / EBS / EFS؛ FSx للـ file systems المتخصصة"],
-  ["Relational / key-value / cache", "RDS أو Aurora / DynamoDB / ElastiCache"],
-  ["Failover ولا read scaling", "Multi-AZ للـ availability؛ read replica للقراءة"],
-  ["DNS / CDN / load balancing", "Route 53 / CloudFront / ELB"],
-  ["Private dedicated ولا encrypted internet", "Direct Connect / VPN"],
-  ["Buffer task / fanout / route events", "SQS / SNS / EventBridge"],
-  ["SQL على S3 / ETL / Spark", "Athena / Glue / EMR"],
-  ["Streaming / warehouse / dashboard / search", "Kinesis / Redshift / QuickSight / OpenSearch"],
-  ["Foundation model / custom ML / assistant", "Bedrock / SageMaker AI / Amazon Q"],
-  ["Document fields / image objects", "Textract / Rekognition؛ Polly text→speech وTranscribe العكس"],
-  ["هجرة سريعة ولا تحسين", "Rehost أسرع؛ replatform تعديل محدود؛ refactor قيمة وتعقيد أعلى"],
-  ["Assessment / rehost / database", "Migration Evaluator / MGN / DMS + Schema Conversion"],
-  ["Bulk files / SFTP / hybrid share", "DataSync / Transfer Family / Storage Gateway"],
-  ["حمل جديد / ثابت / قابل للقطع", "On-Demand / commitment مناسب / Spot"],
-  ["خصم ولا ضمان سعة", "Savings Plans وRI pricing؛ Capacity Reservation للسعة"],
-  ["قبل البناء / بعد الصرف / alert / details", "Calculator / Cost Explorer / Budgets / CUR 2.0"],
-  ["60 accounts محتاجة guardrail", "Organizations وSCP؛ SCP لا تمنح permission. Control Tower للـ landing zone"],
-  ["Compliance report / vendor software / consultant", "Artifact / Marketplace / APN"],
-  ["Support في ٢٠٢٦", "Basic · Business Support+ · Enterprise · Unified Operations؛ legacy plans تنتهي ١ يناير ٢٠٢٧"],
-  ["Snow أو Migration Hub ظهروا", "اعرف إجابة المنهج، ومعاها caveat: Snow للعملاء الجدد وMigration Hub تغيروا بحلول ٢٠٢٦"],
+<Hl c="y">الامتحان مش بيسأل «S3 يعني إيه». بيسأل «شركة عايزة كذا، تعمل إيه؟». ذاكر المواقف.</Hl>
+
+## 👀 تخيّل: دُكّان كله في سطر
+
+<Flow items={[
+  { t: "Route 53", s: "الاسم", c: 1 },
+  "→",
+  { t: "CloudFront + WAF", s: "edge", c: 2 },
+  "→",
+  { t: "ALB", s: "يوزّع", c: 3 },
+  "→",
+  { t: "ECS/Lambda", s: "الكود", c: 4 },
+  "→",
+  { t: "Aurora · DynamoDB · S3", s: "الداتا", c: 5 },
+  "→",
+  { t: "SNS → SQS", s: "async", c: 1 },
 ]} />
 
-## Checklist قبل اختيار الإجابة
+وحوالين كل ده: **IAM** (مين)، **KMS** (تشفير)، **CloudWatch/CloudTrail/Config** (مراقبة)، **Budgets/Cost Explorer** (فلوس).
 
-1. حدد المطلوب measurable: latency، RTO، RPO، throughput، compliance أو cost.
-2. حدد data shape: object، block، file، relational، stream.
-3. حدد managed level والـ operational burden المقبول.
-4. استبعد خدمة بتحل مشكلة قريبة لكن مختلفة.
-5. لو السؤال قال most cost-effective، متلغيش availability أو security.
+## 🔍 من جوه: لو المشكلة… فكّر في…
 
-<Checklist id="aws-cp-41" title="جاهز للاختبار لما" items={["تشرح الفروق من production requirement", "ترسم request path وتحدد مسؤولية كل خدمة", "تراجع تغييرات ٢٠٢٦ في migration وtransfer وsupport", "تحل بالاستبعاد وتقرأ كل القيود"]} />
+### Cloud Concepts (٢٤٪)
+
+<Cheat items={[
+  ["الحمل بيزيد ويقل وعايز السعة تمشي معاه", "Elasticity: Auto Scaling + ELB"],
+  ["بدل شراء أجهزة مقدمًا، ادفع على قد الاستخدام", "Trade fixed expense (CapEx) for variable expense (OpEx)"],
+  ["تجربة فكرة في دقايق ورميها", "Speed and agility"],
+  ["التطبيق يستحمل وقوع data center", "أكتر من Availability Zone"],
+  ["يستحمل وقوع منطقة كاملة", "أكتر من Region + خطة DR"],
+  ["أقصى داتا مسموح تضيع / أقصى وقت وقف", "RPO / RTO"],
+  ["أرخص DR وساعات وقف مقبولة", "Backup & restore. الأسرع والأغلى: multi-site active/active"],
+  ["مراجعة تصميم من ٦ زوايا", "Well-Architected Framework (+ Well-Architected Tool)"],
+  ["جاهزية الشركة كلها للتحول", "Cloud Adoption Framework: Business, People, Governance, Platform, Security, Operations"],
+  ["Oracle ← RDS من غير تغيير كود", "Replatform. نفس الشيء على EC2 = Rehost"],
+]} />
+
+### Security and Compliance (٣٠٪)
+
+<Cheat items={[
+  ["patch للـ OS على EC2", "العميل. على RDS وLambda: AWS"],
+  ["الأمن الفعلي للداتا سنتر", "AWS (security OF the cloud)"],
+  ["أول حاجة في حساب جديد", "MFA على الـ root، وهوية تانية للشغل اليومي، ومفيش root access keys"],
+  ["تطبيق على EC2 محتاج S3", "IAM role، مش access keys"],
+  ["موظفين يدخلوا حسابات كتير مرة واحدة", "IAM Identity Center"],
+  ["Allow وDeny على نفس الـ action", "Deny بيكسب. والأصل implicit deny"],
+  ["مين برّه يقدر يوصل لمواردي؟", "IAM Access Analyzer"],
+  ["مفاتيح تشفير / HSM ليك لوحدك", "KMS / CloudHSM"],
+  ["باسورد DB يتغير لوحده", "Secrets Manager"],
+  ["شهادة HTTPS مجانية", "ACM"],
+  ["SQL injection / DDoS", "WAF / Shield (Standard مجاني تلقائي)"],
+  ["سلوك مريب / ثغرة / PII في S3", "GuardDuty / Inspector / Macie"],
+  ["تجميع findings / تحقيق", "Security Hub / Detective"],
+  ["تقرير SOC أو ISO بتاع AWS", "AWS Artifact"],
+  ["سقف صلاحيات على حسابات الشركة", "SCPs في Organizations"],
+]} />
+
+### Cloud Technology and Services (٣٤٪)
+
+<Cheat items={[
+  ["سيرفر بتحكم كامل", "EC2 (AMI + instance type + Security Group)"],
+  ["كود مع event، أقل من ١٥ دقيقة", "Lambda"],
+  ["containers من غير سيرفرات / Kubernetes", "Fargate / EKS. والـ images في ECR"],
+  ["ارفع الكود والمنصة تعمل الباقي", "Elastic Beanstalk"],
+  ["object / block / shared Linux / Windows SMB", "S3 / EBS / EFS / FSx for Windows"],
+  ["مش عارف الملفات هتتقري قد إيه", "S3 Intelligent-Tiering"],
+  ["أرخص أرشيف، الاسترجاع ساعات", "S3 Glacier Deep Archive"],
+  ["داتا مؤقتة سريعة وتضيع عادي", "Instance store"],
+  ["relational / key-value / cache / warehouse", "RDS أو Aurora / DynamoDB / ElastiCache / Redshift"],
+  ["availability للـ DB / scale القراية", "Multi-AZ / read replica"],
+  ["graph / MongoDB / time series", "Neptune / DocumentDB / Timestream"],
+  ["public ولا private subnet؟", "الـ route table: فيها IGW = public"],
+  ["private subnet يطلع للإنترنت", "NAT Gateway (بيتحاسب)"],
+  ["stateful على instance / stateless على subnet", "Security Group / NACL"],
+  ["VPCs كتير + data center", "Transit Gateway"],
+  ["private subnet توصل S3 من غير إنترنت", "Gateway VPC endpoint"],
+  ["مشفّر على الإنترنت بسرعة / خط خاص ثابت", "Site-to-Site VPN / Direct Connect"],
+  ["DNS وrouting policies / CDN / static IPs", "Route 53 / CloudFront / Global Accelerator"],
+  ["queue / pub-sub / event bus / workflow", "SQS / SNS / EventBridge / Step Functions"],
+  ["صحة / مين عمل / الإعدادات مطابقة", "CloudWatch / CloudTrail / Config"],
+  ["infrastructure as code", "CloudFormation (أو CDK)"],
+  ["shell من غير SSH، patches", "Systems Manager"],
+  ["SQL على S3 / ETL / dashboards / stream", "Athena / Glue / QuickSight / Kinesis"],
+  ["صور / مستندات / نص ← صوت / صوت ← نص", "Rekognition / Textract / Polly / Transcribe"],
+  ["generative AI / تدريب model بنفسك", "Bedrock / SageMaker AI"],
+  ["نقل DB شغالة / ملفات online / SFTP", "DMS / DataSync / Transfer Family"],
+  ["نقل سيرفرات زي ما هي", "Application Migration Service (MGN)"],
+]} />
+
+### Billing, Pricing, and Support (١٢٪)
+
+<Cheat items={[
+  ["حمل جديد ومتغير", "On-Demand"],
+  ["baseline ثابت لسنين، مرن بين EC2/Fargate/Lambda", "Compute Savings Plans"],
+  ["batch يستحمل الانقطاع", "Spot (لحد ٩٠٪ خصم، إنذار دقيقتين)"],
+  ["license مربوط بالـ cores", "Dedicated Hosts"],
+  ["ضمان سعة مش خصم", "On-Demand Capacity Reservation"],
+  ["تقدير قبل البناء", "Pricing Calculator"],
+  ["تنبيه على رقم / على صرف غريب", "Budgets / Cost Anomaly Detection"],
+  ["الفلوس راحت فين", "Cost Explorer. كل line item: Data Exports (CUR 2.0)"],
+  ["سيرفر أكبر من اللازم", "Compute Optimizer"],
+  ["فاتورة واحدة لكل الحسابات", "Consolidated billing في Organizations"],
+  ["توصيات تكلفة وأمان وأداء وlimits", "Trusted Advisor"],
+  ["TAM مخصص", "Enterprise Support"],
+  ["سؤال مجاني من المجتمع", "re:Post"],
+  ["software من vendor / شركة consulting", "Marketplace / Partner Network"],
+]} />
+
+## 🛠️ طبّق: خطة آخر ٢٤ ساعة
+
+1. **الصبح:** غطّي الإجابات في الكروت فوق وجاوب. علّم أي كارت غلطت فيه.
+2. **الضهر:** لكل كارت معلّم، افتح الفصل واقرا **👀 تخيّل** و**⚖️ قارن** بس.
+3. **العصر:** حل **الاختبار التجريبي** (الفصل الجاي) في ٣٥ دقيقة.
+4. **بالليل:** راجع الأسئلة اللي غلطت فيها بس. نام بدري.
+5. **في الامتحان:** اقرا آخر السؤال الأول (المطلوب)، لاقي الكلمة اللي بتحسم، استبعد اتنين، وعلّم الصعب وارجعله. **مفيش خصم على الغلط**، فمتسيبش سؤال فاضي.
+
+## ⚖️ قارن: الأرقام اللي تتسأل
+
+| الرقم | معناه |
+| --- | --- |
+| **15 دقيقة** | أقصى مدة لـ Lambda |
+| **5 TB** | أقصى حجم object في S3 |
+| **11 nines** (99.999999999٪) | durability مصممة لـ S3 |
+| **35 يوم** | أقصى retention للـ automated backups في RDS |
+| **6 نسخ / 3 AZs** | تخزين Aurora |
+| **15** | عدد Aurora replicas |
+| **14 يوم** | أقصى retention لرسالة SQS |
+| **90 يوم** | CloudTrail event history |
+| **دقيقتين** | إنذار Spot قبل ما تتاخد |
+| **لحد ٩٠٪** | خصم Spot |
+| **١ أو ٣ سنين** | مدة Savings Plans وRIs |
+| **١ يناير ٢٠٢٧** | نهاية خطط الدعم القديمة (Developer، Business، Enterprise On-Ramp) |
+| **65 سؤال / 90 دقيقة / 700 من 1000** | شكل امتحان CLF-C02 (راجع الصفحة الرسمية وقت الحجز) |
+
+<Checklist id="aws-cp-41" title="خلّصت الفصل لما" items={["تجاوب ٩٠٪ من الكروت وإنت مغطّي الإجابة", "تفتكر جدول الأرقام", "ترسم سطر دُكّان من الذاكرة", "عندك خطة آخر ٢٤ ساعة"]} />
 
 <Quiz>
-<Q n={1} q="API call وCPU alarm؟">CloudTrail للـ API، CloudWatch للـ CPU.</Q>
-<Q n={2} q="Multi-AZ وread replica نفس الهدف؟">لأ؛ availability مقابل read scaling.</Q>
-<Q n={3} q="Budget hard cap؟">لأ؛ alert وبيانات billing قد تتأخر.</Q>
+<Q n={1} q="فرق CloudWatch وCloudTrail في كلمتين؟">CloudWatch = **صحة وأداء**. CloudTrail = **مين عمل إيه**.</Q>
+<Q n={2} q="أقصى مدة تشغيل لـ Lambda؟">**١٥ دقيقة**.</Q>
+<Q n={3} q="Savings Plan بيضمن سعة؟">**لأ**، خصم بس. الضمان = **Capacity Reservation**.</Q>
 </Quiz>

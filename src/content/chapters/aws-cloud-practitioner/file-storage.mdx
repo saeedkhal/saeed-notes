@@ -1,89 +1,129 @@
 ---
 title: File Storage والحلول الهجينة
-short: EFS وFSx وHybrid
+short: EFS وFSx
 order: 18
 label: فصل ١٨
 badge: Storage وDatabases · فصل ١٨
-en: EFS · FSx · Storage Gateway · AWS Backup · Snow Family
-keywords: shared file system · hybrid storage · centralized backup · offline transfer
-goal: تختار block أو file أو object لمتطلبات إنتاجية، وتبني backup وhybrid transfer قابلين للاختبار.
+en: Amazon EFS · Amazon FSx (Windows File Server · Lustre · NetApp ONTAP · OpenZFS) · AWS Storage Gateway · AWS Backup
+keywords: shared files · NFS · SMB · hybrid · gateway
+goal: تعرف إمتى تحتاج «فولدر مشترك» بين سيرفرات كتير، وتختار بين EFS وأنواع FSx، وتفهم Storage Gateway كجسر بين الـ data center وAWS.
 part: Storage وDatabases
 color: c3
 ---
 
-## المثال الأول: Media rendering على Linux
+## 🧠 افهم: ٤ سيرفرات محتاجين نفس الفولدر
 
-شركة فيديو عندها `24` EC2 worker في `3 AZs`. كل worker لازم يشوف نفس project files، ومتوسط المشروع `80 GB`. المطلوب worker جديد يعمل mount خلال دقيقة، والـ filesystem يفضل متاح لو AZ واحدة تعطلت.
+دُكّان دلوقتي شغال على ٤ instances ورا Load Balancer. كل سيرفر بيحفظ ملفات الفواتير اللي بيولّدها في فولدر `/data/invoices` على الـ EBS بتاعه. النتيجة:
 
-١. workers تعمل mount لـ `Amazon EFS` عبر NFS.
-٢. mount targets تتوزع على الـ AZs المستخدمة، وقواعد الشبكة تسمح NFS من workers فقط.
-٣. الملفات النهائية تنتقل إلى S3 للتوزيع والأرشفة؛ EFS يفضل للـ shared working set.
-٤. AWS Backup ينفذ policy، والفريق يعمل restore test ربع سنوي ويقيس الزمن.
+- الزبون طلب فاتورته، والـ Load Balancer وداه لسيرفر تاني، فملقاهاش.
+- الـ EBS متركّب في سيرفر واحد بس.
 
-## اختار interface الأول
+محتاجين **فولدر واحد مشترك** يشوفه كل السيرفرات في نفس الوقت، كأنه هارد على الشبكة. ده اسمه **file storage**.
 
-<Grid2>
-<Card title="Block: EBS" c={1}>
+وفي نفس الوقت، محاسب دُكّان في المكتب عنده file server قديم بـ Windows، وعايز يكمل يشتغل عليه بس يكون الـ backup على AWS.
 
-Disk blocks لسيرفر أو database وfilesystem فوقها. مناسب لـ boot volume وworkload محتاجة block semantics.
+<Hl c="p">EFS = فولدر مشترك لسيرفرات Linux. FSx = file systems جاهزة لأنواع محددة (Windows، HPC، NetApp، ZFS). Storage Gateway = جسر بيوصّل أجهزة الـ data center بتخزين AWS.</Hl>
 
-</Card>
-<Card title="File: EFS / FSx" c={3}>
+<Box type="story" icon="🗄️" title="دولاب الملفات في المكتب">
 
-Paths وdirectories وmount مشترك عبر NFS أو SMB وخصائص filesystem.
-
-</Card>
-</Grid2>
-
-<Card title="Object: S3" c={5}>
-
-API وkeys على scale للـ static assets والـ backups والـ data lakes؛ مش mount تقليدي افتراضيًا.
-
-</Card>
-
-## EFS ولا FSx؟
-
-`EFS` filesystem مُدار ومرن لأحمال Linux/NFS، ويمكن مشاركته بين instances وعبر AZs داخل Region. اختاره لما التطبيق فعلًا محتاج POSIX-like shared file access، مش لمجرد إن المطورين متعودين على folders.
-
-`FSx` عيلة متخصصة:
-
-- `FSx for Windows File Server`: SMB وWindows وActive Directory.
-- `FSx for Lustre`: throughput عالي للـ HPC والـ analytics.
-- `FSx for NetApp ONTAP`: احتياجات NetApp protocols/features.
-- `FSx for OpenZFS`: NFS وخصائص ZFS المُدارة.
-
-لو pipeline تقرأ objects كاملة وتكتب نتائج مستقلة، S3 ممكن يبقى أبسط. لو legacy Windows app محتاجة SMB locks وAD، FSx for Windows أقرب من EFS.
-
-## Hybrid: مصنع لسه on-premises
-
-مصنع ينتج `6 TB` ملفات يوميًا، وعنده WAN `1 Gbps` مشتركة. `AWS Storage Gateway` يوفر interfaces مألوفة وlocal cache لبعض الأنماط، لكنه مش وصلة شبكة ولا backup policy وحده. `AWS DataSync` مناسب لنقل online مُدار وجدولة ومراقبة transfer بين storage systems المدعومة.
-
-احسب قبل النقل: `6 TB` على `1 Gbps` نظريًا أكتر من `13 ساعة` قبل overhead والمنافسة. لو الـ SLA هو `4 ساعات`، لازم bandwidth أعلى أو تقليل/ضغط الداتا أو تغيير العملية.
-
-## Backup بنتيجة قابلة للقياس
-
-AWS Backup توحّد plans وschedules وretention لخدمات مدعومة حسب الـ Region. النجاح مش ظهور job باللون الأخضر؛ النجاح إن restore test يرجع dataset سليمة خلال الـ RTO المطلوب.
-
-الساعة `02:00` backup يومية، الساعة `11:20` ransomware يشفر share، والـ RPO `24 ساعة` يسمح بفقد حتى آخر backup، لكن RTO `2 ساعة` يتطلب قياس restore لحجم حقيقي. لو restore استغرق `5 ساعات`، الخطة فشلت رغم وجود النسخة.
-
-## Snow Family: caveat أكتوبر 2026
-
-مواد قديمة تذكر `AWS Snow Family` للنقل الفيزيائي. حسب AWS Decision Guide المتاح في أكتوبر 2026، Snow Family غير متاحة لعملاء جدد، ودعم Snowball في commercial Regions مقرر ينتهي `31 ديسمبر 2026`. للتصميم الجديد راجع DataSync للنقل online وAWS Data Transfer Terminal أو partner options للنقل الفيزيائي حسب التوفر والـ docs الحالية.
-
-<Box type="warn" title="Managed storage له تكلفة تشغيل">
-
-احسب capacity وthroughput والـ backups والـ requests والـ transfer. امسح filesystems والنسخ التجريبية بعد الاختبار، ومتفترضش Free Tier.
+EBS زي **درج مكتبك**: إنت بس اللي بتفتحه.
+EFS زي **دولاب الأرشيف في نص المكتب**: كل الموظفين بيفتحوه في نفس الوقت، وبيكبر لوحده كل ما تحط ملفات.
+Storage Gateway زي **ساعي** قاعد في مكتبك بيستلم الملفات ويوديها مخزن الشركة الكبير (AWS)، ويحتفظ بالحاجات اللي بتستخدمها كتير قريبة منك.
 
 </Box>
 
-## 🧪 تمرين: Migration وrestore
+## 👀 تخيّل: الفولدر المشترك والجسر
 
-شركة عندها Windows share حجمها `35 TB`، معدل تغيير `400 GB/day`، وRTO `6 ساعات`. اختار FSx أو EFS أو S3 مع السبب، ارسم initial copy ثم incremental sync، وحدد cutover window. بعدها افترض حذف `2 TB`: اكتب restore test بأوقات بداية ونهاية ومعيار نجاح واضح.
+<Diagram
+  title="EFS للسيرفرات، وStorage Gateway للمكتب"
+  height={340}
+  mheight={580}
+  nodes={[
+    { id: "w1", t: "EC2 · AZ a", s: "mount /data", c: 1, x: 88, y: 18, mx: 25, my: 6 },
+    { id: "w2", t: "EC2 · AZ b", s: "mount /data", c: 1, x: 88, y: 55, mx: 75, my: 6 },
+    { id: "efs", t: "Amazon EFS", s: "فولدر واحد مشترك", c: 3, x: 55, y: 36, mx: 50, my: 35 },
+    { id: "office", t: "مكتب المحاسب", s: "SMB share", c: 2, x: 88, y: 90, mx: 50, my: 64 },
+    { id: "sgw", t: "Storage Gateway", s: "cache محلي", c: 4, x: 50, y: 90, mx: 50, my: 82 },
+    { id: "s3", t: "S3", s: "الملفات فعليًا", c: 5, x: 12, y: 90, mx: 50, my: 97 },
+  ]}
+  edges={[
+    { from: "w1", to: "efs", t: "NFS", c: 1 },
+    { from: "w2", to: "efs", t: "NFS", c: 1 },
+    { from: "office", to: "sgw", t: "يحفظ ملف", c: 2 },
+    { from: "sgw", to: "s3", t: "upload", c: 4 },
+  ]}
+/>
 
-<Checklist id="aws-cp-18" title="خلّصت الفصل لما" items={["تفرق block وfile وobject من الـ interface", "تربط EFS بـ Linux NFS المشترك", "تختار FSx لاحتياج filesystem مخصوص", "تحسب hybrid transfer بدل التخمين", "تعرف تحديث Snow Family وتقيس restore فعلي"]} />
+## 🔍 من جوه: الخيارات
+
+### Amazon EFS (Elastic File System)
+
+- File system بـ **NFS** لـ **Linux**.
+- آلاف الـ instances (وcontainers وLambda) تعمله mount في نفس الوقت، من **أكتر من AZ**.
+- **بيكبر ويصغر لوحده**، وبتدفع على اللي مستخدمه.
+- فيه storage classes: Standard، Infrequent Access، Archive، و**lifecycle** بينقل الملفات اللي متلمستش.
+
+### Amazon FSx: file systems متخصصة
+
+| النوع | مناسب لـ |
+| --- | --- |
+| FSx for **Windows File Server** | ملفات Windows بـ **SMB** وActive Directory، برامج Windows |
+| FSx for **Lustre** | **HPC** وmachine learning: أداء رهيب، وبيتربط بـ S3 |
+| FSx for **NetApp ONTAP** | شركات بتستخدم NetApp وعايزة نفس المميزات على AWS |
+| FSx for **OpenZFS** | نقل أحمال ZFS أو Linux محتاجة أداء عالي |
+
+### AWS Storage Gateway
+
+جهاز افتراضي (أو hardware) بتحطه **في الـ data center بتاعك**، بيقدّم تخزين بالـ protocols اللي برامجك فاهماها، والداتا فعليًا بتتخزن في AWS:
+
+- **S3 File Gateway:** فولدر NFS/SMB، والملفات بتتحفظ objects في S3.
+- **FSx File Gateway:** وصول محلي سريع لـ FSx for Windows.
+- **Volume Gateway:** هاردات iSCSI مع backups في AWS.
+- **Tape Gateway:** شرايط backup افتراضية، عشان برامج الـ backup القديمة تكمل من غير شرايط حقيقية.
+
+### AWS Backup
+
+مكان واحد تعمل فيه backup plans لـ EBS وEFS وFSx وRDS وDynamoDB وS3 وغيرهم: جدول، مدة احتفاظ، نسخ لـ Region أو حساب تاني.
+
+## 🛠️ طبّق: فولدر فواتير مشترك لدُكّان
+
+⚠️ EFS بيتحاسب على الـ GB المخزنة. ملفات صغيرة للتجربة تكلفتها قليلة جدًا، بس امسحه.
+
+1. **اعمل EFS:** `EFS` ← `Create file system` ← الاسم `dukkan-invoices` ← نفس الـ VPC بتاعة السيرفرات. AWS بيعمل **mount target** في كل AZ.
+2. **اظبط الـ Security Group:** الـ mount targets لازم تسمح بـ `NFS (2049)` من Security Group السيرفرات.
+3. **اعمله mount** على instance (عن طريق Session Manager مثلًا):
+
+```bash
+sudo dnf install -y amazon-efs-utils
+sudo mkdir -p /data
+# fs-xxxx هو الـ ID بتاع الـ file system
+sudo mount -t efs -o tls fs-0123456789abcdef0:/ /data
+echo "فاتورة رقم 1001" | sudo tee /data/invoice-1001.txt
+```
+
+4. **اعمل mount من instance تانية** في AZ مختلفة واعمل `cat /data/invoice-1001.txt`.
+   **المتوقع:** نفس الملف ظاهر. ده الفولدر المشترك.
+5. **فكّر:** المحاسب في المكتب بـ Windows. هل هيعمل mount لـ EFS؟ (لأ، EFS لـ Linux/NFS. الأنسب FSx for Windows، أو S3 File Gateway لو الهدف backup على S3).
+
+🧹 **تنضيف:** `umount /data`، امسح الـ file system من الـ console، وterminate للـ instances لو بتاعة التجربة.
+
+## ⚖️ قارن: اختار التخزين من السؤال
+
+| السؤال | الإجابة |
+| --- | --- |
+| هارد لـ instance واحدة | EBS |
+| فولدر مشترك بين سيرفرات Linux كتير | **EFS** |
+| file share لبرامج Windows بـ SMB وActive Directory | **FSx for Windows File Server** |
+| HPC أو ML محتاج file system سريع جدًا | **FSx for Lustre** |
+| برامج في الـ data center عايزة تخزّن على AWS بنفس الـ protocols | **Storage Gateway** |
+| مكان واحد لإدارة backups كل الخدمات | **AWS Backup** |
+| objects من الإنترنت أو التطبيقات | S3 |
+
+<Checklist id="aws-cp-18" title="خلّصت الفصل لما" items={["تعرف إمتى تحتاج file storage بدل EBS", "تعرف إن EFS لـ Linux/NFS وبيكبر لوحده ومن أكتر من AZ", "تفرّق أنواع FSx الأربعة", "تشرح Storage Gateway وأنواعه كجسر hybrid", "تعرف إن AWS Backup بيدير backups خدمات كتير من مكان واحد"]} />
 
 <Quiz>
-<Q n={1} q="عشر EC2 Linux في AZs مختلفة محتاجة نفس الـ paths؛ تبدأ بإيه؟">Amazon EFS لو NFS shared filesystem هو الـ requirement الحقيقي.</Q>
-<Q n={2} q="Backup job نجحت لكن restore استغرق 5 ساعات والـ RTO ساعتين؛ النتيجة؟">خطة التعافي فشلت في الـ RTO، ولازم تعديل architecture أو حجم/طريقة الاستعادة.</Q>
-<Q n={3} q="هل تقترح Snowball لعميل جديد في أكتوبر 2026؟">لأ من غير تحقق حديث؛ AWS تقول Snow Family غير متاحة لعملاء جدد، فراجع البدائل الحالية.</Q>
+<Q n={1} q="١٠ سيرفرات Linux في AZين محتاجين يقروا ويكتبوا نفس الملفات. أنهي خدمة؟">**Amazon EFS**.</Q>
+<Q n={2} q="تطبيق Windows محتاج file share بـ SMB ومتكامل مع Active Directory. أنهي خدمة؟">**Amazon FSx for Windows File Server**.</Q>
+<Q n={3} q="شركة عايزة برامج الـ backup القديمة تكمل تكتب على «tapes»، بس فعليًا تتخزن في AWS. أنهي خدمة؟">**AWS Storage Gateway** (Tape Gateway).</Q>
+<Q n={4} q="عايز file system عالي الأداء لتدريب ML ومربوط بداتا في S3. أنهي خدمة؟">**Amazon FSx for Lustre**.</Q>
 </Quiz>

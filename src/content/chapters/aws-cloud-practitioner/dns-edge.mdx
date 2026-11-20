@@ -1,76 +1,131 @@
 ---
 title: DNS والـ Edge لتطبيق عالمي
-short: DNS والـ Edge
+short: Route 53 وCloudFront
 order: 24
 label: فصل ٢٤
 badge: Networking · فصل ٢٤
-en: Route 53 · CloudFront · edge locations · Global Accelerator
-keywords: DNS · CDN · edge · accelerator
-goal: تتبع request عالمي وتختار DNS أو CDN أو network acceleration من الـ SLA.
+en: Amazon Route 53 · DNS · hosted zone · routing policies · health checks · Amazon CloudFront · CDN · origin · OAC · AWS Global Accelerator
+keywords: DNS · routing policy · CDN · cache · edge
+goal: تفهم رحلة الزبون من كتابة dukkan.example لحد ما الصفحة تفتح، وتعرف Route 53 بيوجّه إزاي، وCloudFront بيسرّع إزاي، وإمتى Global Accelerator.
 part: Networking
 color: c4
 ---
 
-## المثال الأول: متجر في 3 قارات
+## 🧠 افهم: من الاسم للصورة
 
-الـ origin في Frankfurt، وصورة المنتج حجمها `1.8 MB`. مستخدم القاهرة يشوف أول تحميل في `420 ms`، والمطلوب أقل من `150 ms` للصور المتكررة، مع تحويل لو الـ Region الأساسية فشلت.
+الزبون بيكتب `dukkan.example` في المتصفح. علشان الصفحة تفتح بسرعة لازم حاجتين:
 
-١. `Route 53` يحل `shop.example.com` إلى CloudFront distribution.
-٢. CloudFront edge تستقبل الطلب؛ cache hit ترجع الصورة من مكان قريب.
-٣. cache miss تذهب للـ origin، تحفظ response حسب cache policy، ثم ترجعها.
-٤. health/routing strategy تتعامل مع origin أو Region failure حسب architecture.
+1. **حد يترجم الاسم لعنوان:** المتصفح مش فاهم أسامي، فاهم IPs. ده شغل **DNS**، وعلى AWS اسمه **Amazon Route 53**.
+2. **المحتوى يبقى قريب من الزبون:** لو الصور في فرانكفورت والزبون في أسوان، كل صورة بتسافر. **Amazon CloudFront** بيحتفظ بنسخ في **edge locations** قريبة من الناس.
 
-## Route 53: DNS وقرارات توجيه
+<Hl c="g">Route 53 = دليل التليفونات: بيقول الاسم ده عنوانه إيه، وممكن يختار العنوان حسب مكان الزبون أو صحة السيرفر. CloudFront = فروع صغيرة قريبة من الزبون فيها نسخ من المحتوى.</Hl>
 
-Route 53 تدير records وhealth checks وسياسات:
+<Box type="story" icon="📞" title="دليل التليفونات والكشك">
 
-- Simple لوجهة عادية.
-- Weighted لتوزيع `95/5` في canary مثلًا.
-- Latency-based لاختيار Region بأقل latency قياسية.
-- Failover لـ primary/secondary مع health evaluation.
-- Geolocation لقرار حسب موقع المستخدم.
+- **Route 53** زي **الاستعلامات**: تسأله «رقم دُكّان كام؟» فيديك الرقم. والاستعلامات الشاطرة تقولك «فرع مدينة نصر أقرب ليك» أو «فرع المعادي مقفول النهارده، كلّم الزمالك».
+- **CloudFront** زي إن دُكّان يحط **كشك صغير في كل حي** فيه أكتر الحاجات اللي بتتطلب. لو طلبت حاجة مش في الكشك، الكشك يجيبها من المخزن الكبير ويحتفظ بنسخة للي بعدك.
 
-DNS لا ينقل ملف ولا يضمن instant failover؛ resolvers قد تحتفظ بالإجابة حسب TTL، والـ health check لازم يقيس حاجة تمثل صحة التطبيق.
+</Box>
 
-## CloudFront: cache وسياسة محتوى
+## 👀 تخيّل: رحلة الطلب
 
-`CloudFront` CDN للـ HTTP/HTTPS. cache key وTTL وheaders/cookies/query strings بيحددوا hit ratio وصحة المحتوى. لو ضفت user token كامل للـ cache key بلا داعٍ، hit ratio ممكن ينهار؛ ولو cached response خاص غلط، ممكن تعمل data exposure.
+<Diagram
+  title="الاسم → أقرب edge → الـ origin لو لزم"
+  height={340}
+  mheight={580}
+  nodes={[
+    { id: "user", t: "الزبون", s: "dukkan.example", c: 1, x: 90, y: 50, mx: 50, my: 5 },
+    { id: "r53", t: "Route 53", s: "alias → CloudFront", c: 2, x: 62, y: 15, mx: 50, my: 28 },
+    { id: "cf", t: "CloudFront edge", s: "cache hit؟", c: 3, x: 62, y: 85, mx: 50, my: 52 },
+    { id: "s3", t: "S3", s: "الصور والـ JS", c: 4, x: 15, y: 20, mx: 25, my: 90 },
+    { id: "alb", t: "ALB", s: "الـ API", c: 5, x: 15, y: 80, mx: 75, my: 90 },
+  ]}
+  edges={[
+    { from: "user", to: "r53", t: "١. الاسم ده فين؟", c: 1 },
+    { from: "user", to: "cf", t: "٢. GET /", c: 1 },
+    { from: "cf", to: "s3", t: "miss: /images/*", c: 4 },
+    { from: "cf", to: "alb", t: "/api/*", c: 5 },
+  ]}
+/>
 
-Edge location نقطة حضور لخدمات edge، مش Region كاملة لتشغيل أي AWS service.
+1. المتصفح بيسأل **Route 53**: `dukkan.example` فين؟ الرد: عنوان CloudFront.
+2. الطلب بيروح لأقرب **edge location**.
+3. لو الصورة موجودة في الـ cache (**hit**)، بترجع فورًا.
+4. لو مش موجودة (**miss**)، الـ edge بيجيبها من الـ **origin** (S3)، ويرجّعها، ويحتفظ بيها لمدة (TTL).
+5. طلبات `/api/*` مبتتكيّشش، فبتعدي للـ ALB.
 
-## Global Accelerator
+## 🔍 من جوه: Route 53 وCloudFront وGlobal Accelerator
 
-`AWS Global Accelerator` يوفّر static anycast IPs ويوجه TCP/UDP إلى healthy regional endpoints عبر شبكة AWS العالمية. لا يعمل content cache.
+### Route 53
 
-<Grid2>
-<Card title="CloudFront" c={4}>
+- **Domain registration:** تشتري الدومين نفسه.
+- **Hosted zone:** المكان اللي فيه records الدومين.
+- **Records:** `A` (اسم ← IPv4)، `AAAA` (← IPv6)، `CNAME` (اسم ← اسم تاني)، و**Alias** (خاص بـ AWS: يشاور على ALB أو CloudFront أو S3، وينفع على الدومين الرئيسي).
+- **Health checks:** بيراقب الـ endpoint، ولو وقع يبطّل يرجّعه.
 
-HTTP/HTTPS، cache، static/dynamic web delivery، وتقليل origin load.
+### Routing policies
 
-</Card>
-<Card title="Global Accelerator" c={5}>
+| الـ policy | بتختار إزاي | مثال لدُكّان |
+| --- | --- | --- |
+| Simple | عنوان واحد | موقع صغير |
+| Weighted | نسب | ١٠٪ من الزباين على النسخة الجديدة (canary) |
+| Latency | الـ Region الأسرع للزبون | نسخة في أوروبا ونسخة في الخليج |
+| Failover | primary، ولو وقع secondary | موقع احتياطي في Region تانية |
+| Geolocation | حسب بلد أو قارة الزبون | محتوى وأسعار مختلفة لكل بلد |
+| Geoproximity | حسب المسافة مع إمكانية تحريك الحدود | توزيع حمل بين Regions |
+| Multivalue answer | كذا عنوان سليم | توزيع بسيط مع health checks |
 
-TCP/UDP، static global IPs، وتحسين network path وregional endpoint routing من غير cache.
+### CloudFront
 
-</Card>
-</Grid2>
+- **CDN** بيستخدم مئات الـ edge locations.
+- **Origins:** S3، ALB، EC2، أو أي HTTP server.
+- **Cache behaviors:** قواعد حسب الـ path (`/images/*` يتكيّش يوم، `/api/*` ميتكيّشش).
+- **OAC (Origin Access Control):** يخلّي الـ S3 bucket **private**، وCloudFront بس هو اللي يقرا منه.
+- HTTPS مجاني بشهادة من **AWS Certificate Manager**، وحماية **Shield Standard** تلقائي، وتقدر تربط **WAF** (فصل ٣١).
+- **CloudFront Functions** و**Lambda@Edge** لكود صغير بيشتغل على الـ edge.
 
-## Production incident
+### AWS Global Accelerator
 
-- `18:00`: release تضبط TTL للصورة على `24 ساعة` رغم إن الأسعار مضمّنة داخل الصورة.
-- `18:20`: origin اتصلح، لكن edge ما زالت تعرض النسخة القديمة.
-- الحل: versioned filenames أفضل للمحتوى المتغير، أو invalidation مدروسة؛ invalidations والـ cache policy لهم تكلفة وأثر تشغيل.
+بيديك **٢ static IPs (anycast)** ثابتين عالميًا، والترافيك بيدخل شبكة AWS من أقرب edge ويمشي جواها لحد الـ Region. **مبيعملش caching.** مناسب لـ TCP/UDP (ألعاب، VoIP)، أو لما محتاج IPs ثابتة، أو failover سريع بين Regions.
 
-<Hl c="y">Route 53 يحل الاسم، CloudFront يكيّش ويوزع HTTP، وGlobal Accelerator يحسن مسار TCP/UDP.</Hl>
+## 🛠️ طبّق: CloudFront قدام صور دُكّان
 
-## 🧪 تمرين: اختار واثبت
+⚠️ CloudFront ليه Free Tier شهري للـ data transfer والطلبات، والتجربة دي صغيرة. الـ distribution بياخد دقايق عشان يتعمل ويتمسح.
 
-عندك static images، API personalized لا تُكيّش، ولعبة realtime UDP في Regions متعددة. ارسم flow لكل واحد، وحدد TTL/cache key، وفشل Region الساعة `10:00`. اكتب إمتى المستخدمين يتحولوا، وإيه اللي ممكن يتأخر بسبب DNS caching.
+1. **عندك bucket** من فصل ١٧ فيه `products/bread.jpg`، والـ Block Public Access **مفعّل**.
+2. **`CloudFront` ← `Create distribution`:**
+   - Origin: الـ S3 bucket.
+   - Origin access: **Origin access control settings (recommended)** ← `Create new OAC`.
+   - Viewer protocol policy: `Redirect HTTP to HTTPS`.
+3. بعد الإنشاء، CloudFront هيقولك **انسخ الـ bucket policy** وحطها في الـ bucket. الـ policy دي بتسمح لـ CloudFront (الـ distribution دي بس) يقرا.
+4. افتح `https://<xxxx>.cloudfront.net/products/bread.jpg`.
+   **المتوقع:** الصورة تفتح. ولو فتحت لينك S3 المباشر: `AccessDenied`.
+5. **شوف الـ cache:** افتح Developer Tools ← Network ← اعمل refresh مرتين. في الـ response header `x-cache` هتلاقي أول مرة `Miss from cloudfront`، وبعدها `Hit from cloudfront`.
 
-<Checklist id="aws-cp-24" title="خلّصت الفصل لما" items={["تعرف إن Route 53 DNS مش CDN", "تتبع cache hit وmiss في CloudFront", "تعرف إن edge location مش Region", "تقول Global Accelerator لا يكيّش", "تربط الاختيار بالـ protocol والـ SLA"]} />
+🧹 **تنضيف:** `Disable` للـ distribution، استنى لحد ما تخلص، وبعدين `Delete`. ورجّع الـ bucket policy زي ما كانت.
+
+## ⚖️ قارن: التلاتة اللي بيتلخبطوا
+
+| | Route 53 | CloudFront | Global Accelerator |
+| --- | --- | --- | --- |
+| بيعمل إيه | DNS: اسم ← عنوان | CDN: caching على الـ edge | static IPs + طريق سريع في شبكة AWS |
+| بيكيّش؟ | لأ | **أيوه** | لأ |
+| Protocols | DNS | HTTP/HTTPS | TCP/UDP |
+| مناسب لـ | دومينات، توجيه بين Regions، failover | مواقع وصور وفيديو وAPIs | ألعاب، IoT، IPs ثابتة، failover سريع |
+
+<Box type="interview" title="الكلمات المفتاحية">
+
+«domain registration»، «DNS»، «routing policy»، «latency-based routing» ← **Route 53**.
+«CDN»، «cache static content at edge locations»، «reduce latency for global users» ← **CloudFront**.
+«static IP addresses»، «non-HTTP (UDP)»، «improve availability & performance using AWS global network» ← **Global Accelerator**.
+
+</Box>
+
+<Checklist id="aws-cp-24" title="خلّصت الفصل لما" items={["تشرح رحلة الطلب من الاسم للـ edge للـ origin", "تعدّ الـ routing policies وتدي مثال لكل واحدة", "تعرف cache hit وmiss والـ TTL", "تخلّي S3 private وCloudFront بس يقرا بالـ OAC", "تفرّق Route 53 وCloudFront وGlobal Accelerator"]} />
 
 <Quiz>
-<Q n={1} q="صور عامة متكررة لازم تتحمل قريب من المستخدم؛ المرشح؟">CloudFront قدام origin زي S3.</Q>
-<Q n={2} q="تطبيق UDP محتاج static IPs عالمية وmulti-Region routing؟">AWS Global Accelerator.</Q>
-<Q n={3} q="ليه Route 53 failover ممكن مايبقاش لحظي لكل عميل؟">بسبب DNS TTL والـ resolver caching، بجانب وقت اكتشاف الصحة.</Q>
+<Q n={1} q="عايز توجّه كل زبون للـ Region اللي بترد عليه أسرع. أنهي routing policy؟">**Latency-based routing** في Route 53.</Q>
+<Q n={2} q="عايز ١٠٪ من الترافيك يروح للنسخة الجديدة من الموقع. أنهي policy؟">**Weighted routing**.</Q>
+<Q n={3} q="لعبة online بـ UDP محتاجة IPs ثابتة وlatency أقل لكل العالم. أنهي خدمة؟">**AWS Global Accelerator**.</Q>
+<Q n={4} q="صور الموقع بتحمل ببطء للزباين البعيدين عن الـ Region. الحل؟">**Amazon CloudFront** قدام الـ S3 bucket.</Q>
 </Quiz>

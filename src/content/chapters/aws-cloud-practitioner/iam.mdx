@@ -1,117 +1,166 @@
 ---
 title: مين يعمل إيه على أنهي مورد؟
-short: أساس IAM
+short: أساسيات IAM
 order: 7
 label: فصل ٧
 badge: الأمان والحساب · فصل ٧
-en: IAM user · group · role · policy · identity-based policy · resource-based policy
-keywords: users · groups · roles · policies · allow · deny
-goal: تفهم مكونات IAM وتقرأ قرار صلاحية بسيط من الهوية والفعل والمورد.
+en: IAM · users · groups · roles · policies · IAM Identity Center · authentication · authorization
+keywords: user · group · role · policy · Identity Center
+goal: تفهم IAM كإجابة على سؤال «مين، يعمل إيه، على أنهي مورد»، وتفرّق بين user وgroup وrole وpolicy، وتقرا policy بسيطة.
 part: الأمان والحساب
 color: c2
 ---
 
-## Request حقيقي: خدمة الفواتير تقرأ ملفًا
+## 🧠 افهم: كل واحد ياخد مفتاح اللي محتاجه بس
 
-خدمة `invoice-api` على EC2 محتاجة تقرأ template من bucket اسمه `company-invoices-prod`، لكن ممنوع تحذف ملفات أو تلمس buckets تانية. المطلوب مش «ادّيها S3 access»؛ المطلوب قرار دقيق على كل request.
+دُكّان بقى فيه فريق: سارة المطوّرة، كريم المحاسب، وتطبيق الموقع نفسه اللي محتاج يحفظ صور. لو إدّيت الكل الـ root، كريم ممكن يمسح سيرفر بالغلط، والتطبيق لو اتخترق هياخد كل حاجة.
 
-AWS Identity and Access Management يحدد **مين** يعمل **إيه** على **أنهي resource** وتحت **أنهي conditions**. IAM خدمة عالمية للحساب، لكن الموارد المتحكم فيها قد تكون إقليمية.
+**IAM (Identity and Access Management)** هي الخدمة اللي بتجاوب على سؤالين في كل request لـ AWS:
 
-## Request flow في ٦ خطوات
+1. **إنت مين؟** (authentication = إثبات الهوية)
+2. **مسموحلك تعمل ده؟** (authorization = الصلاحية)
 
-1. EC2 بتاخد role اسمها `InvoiceReaderRole`.
-2. التطبيق يحصل على temporary credentials للجلسة، من غير key مخزنة في الكود.
-3. يطلب action اسمها `s3:GetObject`.
-4. المورد المطلوب object تحت prefix محدد في `company-invoices-prod`.
-5. AWS تجمع السياسات والحدود المؤثرة وتبدأ من implicit deny.
-6. `Allow` مطابق يمرر الطلب ما لم يوجد `Explicit Deny` مؤثر.
+<Hl c="g">IAM بتربط هوية (user أو role) بـ policy بتقول: مسموح أو ممنوع، أنهي action، على أنهي resource.</Hl>
 
-طلب `s3:DeleteObject` يفشل، وقراءة bucket تانية تفشل. ده نجاح للـ least privilege، مش عطلًا في IAM.
+<Box type="story" icon="🏨" title="فندق وكروت الأوض">
 
-## أربع قطع أساسية
+- **User:** نزيل في الفندق، ليه اسم وكارت دائم.
+- **Group:** «نزلاء الدور التالت»، أي حد يتضاف للجروب ياخد نفس الصلاحيات.
+- **Role:** كارت **مؤقت** بيتدّى لعامل الصيانة يدخل أوضة معينة ساعة ويرجّعه. محدش «بيبقى» الـ role، الشخص أو البرنامج **بيلبسه** شوية.
+- **Policy:** الورقة المكتوب فيها الكارت ده يفتح أنهي أبواب.
+
+</Box>
+
+## 👀 تخيّل: سارة عايزة ترفع صورة
+
+<Diagram
+  title="كل request بيعدّي على IAM"
+  height={320}
+  mheight={540}
+  nodes={[
+    { id: "sara", t: "سارة", s: "user في group Developers", c: 1, x: 88, y: 50, mx: 50, my: 6 },
+    { id: "auth", t: "إنتي مين؟", s: "باسورد + MFA", c: 2, x: 62, y: 20, mx: 50, my: 32 },
+    { id: "pol", t: "مسموح؟", s: "يقرا الـ policies", c: 3, x: 35, y: 80, mx: 50, my: 60 },
+    { id: "s3", t: "S3 bucket", s: "dukkan-images", c: 4, x: 10, y: 50, mx: 50, my: 92 },
+  ]}
+  edges={[
+    { from: "sara", to: "auth", t: "PutObject", c: 1 },
+    { from: "auth", to: "pol", t: "هي سارة ✓", c: 2 },
+    { from: "pol", to: "s3", t: "Allow ✓", c: 3 },
+  ]}
+/>
+
+قاعدة IAM لما تقرر:
+
+1. **الأصل إن كل حاجة ممنوعة** (implicit deny). من غير policy بتسمح، مفيش حاجة.
+2. لو في policy فيها `Allow` للـ action ده → مسموح.
+3. لو في **أي** policy فيها `Deny` صريح → ممنوع، حتى لو في Allow. **الـ Deny بيكسب دايمًا.**
+
+## 🔍 من جوه: المكونات الأربعة
 
 <Grid2>
-<Card title="User" c={1}>
+<Card title="IAM User" c={1}>
 
-هوية طويلة العمر داخل IAM لشخص أو حالة خاصة. AWS حاليًا توصي البشر بالاتحاد وtemporary credentials بدل تكثير IAM users.
-
-</Card>
-<Card title="Group" c={2}>
-
-تجميع IAM users لتسهيل منح policy مشتركة، زي مجموعة دعم. الـ group مش بيتعمل له sign-in ومش بيحتوي groups تانية.
+هوية دايمة لشخص أو برنامج، ليها باسورد للـ console و/أو access keys. **النهارده** الأفضل للبشر يدخلوا عن طريق IAM Identity Center بدل users كتير.
 
 </Card>
-<Card title="Role" c={3}>
+<Card title="IAM Group" c={2}>
 
-هوية بصلاحيات قابلة للـ assume. ملهاش password أو long-term access key خاص بيها؛ الجلسة تاخد temporary credentials.
+مجموعة users. بتحط الـ policy على الجروب مرة واحدة. group مش بيتعمله login، ومينفعش group جوه group.
+
+</Card>
+<Card title="IAM Role" c={3}>
+
+هوية **من غير باسورد ولا access keys دايمة**. اللي بيستخدمها بياخد **credentials مؤقتة** بتنتهي لوحدها. للسيرفرات والـ Lambda والدخول من حساب تاني.
 
 </Card>
 <Card title="Policy" c={4}>
 
-وثيقة JSON بتوصف Effect وAction وResource وقد تحتوي Condition. تتربط بهوية أو resource حسب النوع.
+ملف JSON بيقول `Effect` (Allow/Deny) و`Action` و`Resource`. بتتحط على user أو group أو role (identity-based)، أو على المورد نفسه زي bucket (resource-based).
 
 </Card>
 </Grid2>
 
-<Box type="story" icon="🔐" title="صيغة أي قرار وصول">
+### شكل الـ policy
 
-`Principal + Action + Resource + Condition`. مثال: role التطبيق تقرأ objects محددة من bucket الإنتاج عبر اتصال يحقق الشروط. أي كلمة عامة في الجملة ممكن توسع الخطر.
+<File name="dukkan-images-read.json">
 
-</Box>
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::dukkan-images/*"
+    }
+  ]
+}
+```
 
-## Identity-based policy
+</File>
 
-تتربط بـ user أو group أو role، وتقول الهوية دي تقدر تعمل إيه. مثلًا role خدمة الفواتير تقرأ templates من bucket محدد.
+اقراها كجملة: **«مسموح** تقرا وترفع objects **في** bucket اسمه dukkan-images». أي حاجة تانية ممنوعة لأنها مش مذكورة. الـ `Version` ده تاريخ ثابت لصيغة اللغة، مش تاريخ إنت كتبت فيه الـ policy.
 
-الـ managed policy كيان مستقل ممكن يتربط بأكتر من هوية. الـ inline policy جزء مباشر من هوية واحدة. الاختيار له أثر في الإدارة وإعادة الاستخدام.
+الـ **ARN** (Amazon Resource Name) هو العنوان الكامل لأي مورد في AWS، زي `arn:aws:s3:::dukkan-images`.
 
-## Resource-based policy
+### IAM Identity Center
 
-تتربط بالمورد نفسه وتحدد مين يقدر يوصل له، زي S3 bucket policy. مفيدة خصوصًا للوصول بين حسابات أو لتجميع قواعد المورد في مكانه.
+خدمة لإدارة دخول **البشر** لحساب أو حسابات كتير من مكان واحد، مع single sign-on. الموظف بيدخل مرة، يختار الحساب والـ permission set، وياخد credentials مؤقتة. وتقدر تربطها بـ Microsoft Entra ID أو Google Workspace أو أي مزود هوية.
 
-مش كل خدمة تدعم resource-based policies، وسلوك جمع السياسات يختلف مع cross-account وOrganizations. للمبتدئ: اجمع كل السياسات المؤثرة قبل ما تحكم.
+<Box type="tip" title="IAM نفسها global ومجانية">
 
-## منطق القرار ببساطة
-
-<Flow items={[
-  { t: "Default", s: "Implicit deny", c: 4 },
-  "→",
-  { t: "Allow مناسب", s: "هوية أو مورد", c: 3 },
-  "→",
-  { t: "Explicit deny؟", s: "يكسب", c: 5 },
-]} />
-
-الأصل إن الطلب مرفوض. يحتاج `Allow` ينطبق عليه، وأي `Deny` صريح مؤثر يغلب الـ allow. بعد كده فيه طبقات إضافية زي permissions boundaries وSCPs.
-
-<Hl c="b">Policy مش معناها مستخدم؛ هي ورقة قواعد. والـ role مش group؛ هو هوية بتتعمل لها جلسة مؤقتة.</Hl>
-
-## قارن القطع القريبة
-
-- **User:** هوية طويلة العمر داخل IAM لحالة محددة؛ البشر يفضل لهم federation حاليًا.
-- **Group:** يجمع IAM users لتطبيق policies؛ لا يعمل له sign-in أو assume.
-- **Role:** هوية تُفترض وتنتج temporary session.
-- **Identity-based policy:** تبدأ من الهوية وتصف المسموح لها.
-- **Resource-based policy:** تتعلق بالمورد وتحدد principals المسموحين.
-- **Explicit deny:** يغلب allow مؤثرًا على نفس الطلب.
-
-## 🧪 تمرين آمن: حلل request
-
-اكتب request لخدمة media تقرأ object تحت `uploads/processed/` فقط. حدد principal وaction وARN المورد وcondition محتملة. بعدين اختبر على الورق ٣ طلبات: قراءة صحيحة، حذف object، وقراءة prefix مختلف. اشرح success أو AccessDenied لكل واحدة.
-
-<Box type="warn" title="Console access غير API access">
-
-Password للـ Console وaccess keys للـ API نوعان مختلفان من credentials. وجود واحد لا يعني وجود التاني، والأفضل تجنب الطويلة العمر متى توفر role.
+IAM مش مربوطة بـ Region: الـ user اللي تعمله بيشتغل في كل الـ Regions. وIAM نفسها مش بتتحاسب، بتدفع على الموارد اللي الهويات بتستخدمها.
 
 </Box>
 
-## قبل الفصل الجاي
+## 🛠️ طبّق: صلاحيات فريق دُكّان
 
-عرفنا قطع IAM. الفصل الجاي هنضيق الصلاحيات عمليًا: temporary credentials وIAM Identity Center وpermissions boundaries.
+⚠️ IAM مجانية. الخطوات من الـ console بهوية admin (مش الـ root لو عملت واحدة).
 
-<Checklist id="aws-cp-07" title="خلّصت الفصل لما" items={["تفرّق بين user وgroup وrole", "تعرف مكونات policy الأساسية", "تفرّق بين identity-based وresource-based policy", "تفهم implicit deny وexplicit deny"]} />
+1. **اعمل group** اسمه `Developers`: `IAM` ← `User groups` ← `Create group`.
+2. **اعمل policy** بالـ JSON اللي فوق: `Policies` ← `Create policy` ← تبويب `JSON` ← الصق ← سميها `DukkanImagesReadWrite`.
+3. **اربط الـ policy بالـ group.**
+4. **اعمل user** لسارة وضيفها للـ group، وفعّل لها MFA.
+5. **جرّب:** ادخل كسارة وحاول تفتح EC2. **المتوقع:** رسالة زي `You are not authorized to perform this operation`. ده معناه إن الـ implicit deny شغال.
+
+نفس الفكرة بالـ CLI:
+
+```bash
+aws iam create-group --group-name Developers
+aws iam create-policy --policy-name DukkanImagesReadWrite \
+  --policy-document file://dukkan-images-read.json
+# حط الـ ARN اللي رجع من الأمر اللي فوق
+aws iam attach-group-policy --group-name Developers \
+  --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/DukkanImagesReadWrite
+```
+
+🧹 **تنضيف:** امسح الـ user ثم الـ group ثم الـ policy لو كانت تجربة.
+
+**وكريم المحاسب؟** متدّيلوش access لـ S3 خالص. AWS عندها policy جاهزة اسمها `Billing` (job function) لصلاحيات الفواتير.
+
+## ⚖️ قارن: User ولا Group ولا Role؟
+
+| السؤال | الإجابة |
+| --- | --- |
+| موظف جديد محتاج يدخل الـ console | Identity Center (أو IAM user بـ MFA في حساب صغير) |
+| ١٠ مطورين محتاجين نفس الصلاحيات | **Group** وحط الـ policy عليه |
+| سيرفر EC2 محتاج يقرا من S3 | **Role** (instance profile)، مش access keys على السيرفر |
+| Lambda محتاجة تكتب في DynamoDB | **Role** للـ Lambda |
+| حساب AWS تاني محتاج يدخل مؤقتًا | **Role** بيعمله assume |
+| تحدد مين يقرا bucket من على الـ bucket نفسه | **Resource-based policy** (bucket policy) |
+
+<Box type="interview" title="الفرق اللي بيتسأل كتير">
+
+**User** = credentials دايمة لهوية معينة. **Role** = credentials مؤقتة لأي حد مسموح له «يلبسها». لو السؤال فيه «application» أو «EC2» أو «Lambda» أو «temporary» أو «another account»، الإجابة غالبًا **Role**.
+
+</Box>
+
+<Checklist id="aws-cp-07" title="خلّصت الفصل لما" items={["تشرح الفرق بين authentication وauthorization", "تفرّق user وgroup وrole بتشبيه الفندق", "تقرا policy JSON كجملة: Effect وAction وResource", "تعرف إن الأصل deny وإن Deny الصريح بيكسب", "تختار role مش access keys للتطبيقات"]} />
 
 <Quiz>
-<Q n={1} q="هل IAM group يقدر التطبيق يعمل له assume؟">لأ. الـ role هو الهوية القابلة للـ assume؛ group مجرد تجميع users.</Q>
-<Q n={2} q="Allow وexplicit Deny بينطبقوا على نفس الطلب. النتيجة؟">الطلب مرفوض، لأن الـ explicit deny يغلب الـ allow.</Q>
-<Q n={3} q="Bucket policy نوعها إيه؟">Resource-based policy لأنها متعلقة بالـ S3 bucket نفسه.</Q>
+<Q n={1} q="تطبيق على EC2 محتاج يرفع ملفات على S3. أأمن طريقة؟">**IAM role** مربوط بالـ instance، بيدي credentials مؤقتة بتتجدد لوحدها. مش access keys محطوطة في الكود.</Q>
+<Q n={2} q="user عنده policy فيها Allow على s3:DeleteObject، وgroup بتاعه عليه policy فيها Deny لنفس الـ action. النتيجة؟">**ممنوع**. الـ Deny الصريح بيكسب أي Allow.</Q>
+<Q n={3} q="user جديد ملوش أي policy. يقدر يعمل إيه؟">**ولا حاجة** تقريبًا، لأن الأصل implicit deny.</Q>
+<Q n={4} q="شركة عندها ٢٠ حساب AWS وعايزة الموظفين يدخلوا مرة واحدة ويختاروا الحساب. أنهي خدمة؟">**AWS IAM Identity Center**.</Q>
 </Quiz>

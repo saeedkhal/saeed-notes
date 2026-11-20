@@ -5,120 +5,114 @@ order: 5
 label: فصل ٥
 badge: البداية · فصل ٥
 en: Well-Architected Framework · operational excellence · security · reliability · performance efficiency · cost optimization · sustainability
-keywords: six pillars · tradeoffs · review · improvement
-goal: تستخدم أركان Well-Architected كأسئلة مراجعة وتفهم إن القرارات المعمارية فيها tradeoffs.
+keywords: six pillars · tradeoffs · Well-Architected Tool · review
+goal: تحفظ الست أركان بمعناها مش باسمها، وتستخدمهم كأسئلة مراجعة لأي تصميم، وتفهم إن كل قرار ليه تمن في ركن تاني.
 part: البداية
 color: c5
 ---
 
-## سيناريو مراجعة قبل موسم البيع
+## 🧠 افهم: إزاي تعرف إن تصميمك كويس؟
 
-منصة e-commerce داخلة على موسم يمثل `35%` من مبيعات السنة. آخر incident استمر `42 دقيقة`، مفيش restore test من ٨ شهور، والـ compute شغالة على سعة الذروة طول الوقت. بدل سؤال «الـ architecture كويسة؟» الفريق عمل review بأدلة.
+المهندس اللي عمل دُكّان قال «الموقع شغال». بس «شغال» دي مش كفاية. هل لو حد سرق باسورد هيدخل على كل حاجة؟ هل لو سيرفر وقع هنعرف؟ هل بندفع ضعف اللي محتاجينه؟
 
-AWS Well-Architected Framework مجموعة مبادئ وأسئلة لمراجعة workload. مش شهادة جودة، ومش قالب واحد، ومش خدمة تصلح التصميم تلقائيًا.
+AWS جمعت خبرة آلاف المشاريع في **Well-Architected Framework**: ست زوايا (pillars) تبص منها على أي تصميم، وكل زاوية فيها أسئلة. هو مش قانون ولا خدمة بتشغّلها، هو **قائمة مراجعة** بتكشف النقط العمياء.
 
-## Timeline للمراجعة
+<Hl c="u">Well-Architected = ست أسئلة كبيرة لأي نظام: بنشغّله صح؟ آمن؟ بيستحمل؟ سريع بكفاءة؟ مش بيهدر فلوس؟ مش بيهدر طاقة؟</Hl>
 
-1. **09:00:** يتحدد scope: checkout والـ database والـ deployment path.
-2. **10:00:** كل ركن يتراجع بدليل: metrics، policies، incident report، restore result، وcost data.
-3. **13:00:** الفريق يسجل المخاطر حسب أثرها واحتمالها، مش حسب سهولة النقاش.
-4. **15:00:** أعلى ٣ إجراءات: تفعيل MFA، اختبار restore، وإضافة deployment rollback.
-5. **بعد أسبوعين:** يعاد القياس؛ إغلاق finding يحتاج دليل، مش وعد.
+<Box type="story" icon="🏗️" title="مهندس بيعاين عمارة">
 
-النجاح إن المخاطر بقت معروفة ولها owner وdeadline ودليل تحقق. الفشل إن المراجعة تتحول checklist شكلية أو محاولة تعظيم ركن واحد على حساب الباقي.
-
-## الأركان الستة
-
-<Grid2>
-<Card title="Operational Excellence" c={1}>
-
-شغّل وراقب وحسّن باستمرار. اعمل تغييرات صغيرة، وثّق الإجراءات، واتعلم من الحوادث.
-
-</Card>
-<Card title="Security" c={2}>
-
-احمِ الداتا والأنظمة: هوية قوية، أقل صلاحية، تتبع، حماية في كل طبقة، واستعداد للحوادث.
-
-</Card>
-<Card title="Reliability" c={3}>
-
-نفّذ الوظيفة المطلوبة، تعافَ من الأعطال، اختبر الاستعادة، ووسّع السعة حسب الاحتياج.
-
-</Card>
-<Card title="Performance Efficiency" c={4}>
-
-استخدم الموارد بكفاءة، اختار التقنية المناسبة، وراجع الاختيار مع تغير الحمل والخدمات.
-
-</Card>
-<Card title="Cost Optimization" c={5}>
-
-افهم الإنفاق، شيل الهدر، اختار نموذج السعر المناسب، واربط التكلفة بالقيمة.
-
-</Card>
-<Card title="Sustainability" c={1}>
-
-قلل الموارد والطاقة اللازمة لكل وحدة عمل، وارفع الاستفادة بدل تشغيل سعة فاضية.
-
-</Card>
-</Grid2>
-
-## Tradeoff مش إجابة غلط
-
-تشغيل checkout في أكتر من AZ يحسن reliability، لكنه يزيد موارد وتشغيل. ضغط صور المنتجات يقلل نقل البيانات ويحسن الأداء والتكلفة والاستدامة، لكنه يستهلك compute أثناء المعالجة.
-
-<Hl c="o">القرار الصح هو اللي يحقق احتياج العمل بمخاطر معروفة، مش اللي يكسب ركنًا واحدًا بأقصى درجة.</Hl>
-
-<Box type="story" icon="📋" title="أسئلة الـ review">
-
-مين يتصرف وقت incident؟ مين يقدر يغيّر بيانات الدفع؟ آخر restore نجح إمتى؟ الـ p95 latency وقت الذروة كام؟ تكلفة كل `1,000 orders` كام؟ وإيه السعة الفاضية؟ دي أسئلة قابلة للإثبات عبر الأركان الستة.
+قبل ما تشتري شقة، المهندس بيبص من كذا زاوية: الأساسات، الكهربا، السباكة، مخارج الطوارئ، العزل، وفاتورة الصيانة. ممكن العمارة شكلها حلو وفيها مشكلة في الأساسات. كل زاوية بتكشف حاجة الزاوية التانية مش شايفاها.
 
 </Box>
 
-## Request flow للمراجعة
+## 👀 تخيّل: الست أركان حوالين دُكّان
 
-<Flow items={[
-  { t: "افهم الـ workload", s: "مستخدمين وداتا وأهداف", c: 1 },
-  "→",
-  { t: "اسأل بالأركان", s: "مخاطر وأدلة", c: 3 },
-  "→",
-  { t: "رتّب التحسينات", s: "أثر ومجهود", c: 5 },
-  "→",
-  { t: "راجع تاني", s: "بعد كل تغيير كبير", c: 2 },
-]} />
+<Diagram
+  title="كل ركن بيسأل سؤال مختلف عن نفس النظام"
+  height={380}
+  mheight={600}
+  nodes={[
+    { id: "app", t: "دُكّان", s: "التصميم", c: 3, x: 50, y: 50, mx: 50, my: 50 },
+    { id: "ops", t: "Operational Excellence", s: "بنشغّل ونتحسن إزاي؟", c: 1, x: 85, y: 15, mx: 22, my: 8 },
+    { id: "sec", t: "Security", s: "مين يقدر يوصل لإيه؟", c: 5, x: 85, y: 85, mx: 78, my: 8 },
+    { id: "rel", t: "Reliability", s: "بنستحمل الفشل؟", c: 2, x: 15, y: 15, mx: 22, my: 30 },
+    { id: "perf", t: "Performance Efficiency", s: "الموارد مناسبة للحمل؟", c: 4, x: 15, y: 85, mx: 78, my: 30 },
+    { id: "cost", t: "Cost Optimization", s: "بندفع على قيمة؟", c: 3, x: 50, y: 6, mx: 22, my: 92 },
+    { id: "sus", t: "Sustainability", s: "بنهدر طاقة؟", c: 2, x: 50, y: 94, mx: 78, my: 92 },
+  ]}
+  edges={[
+    { from: "ops", to: "app", dash: true },
+    { from: "sec", to: "app", dash: true },
+    { from: "rel", to: "app", dash: true },
+    { from: "perf", to: "app", dash: true },
+    { from: "cost", to: "app", dash: true },
+    { from: "sus", to: "app", dash: true },
+  ]}
+/>
 
-مثال تحسينات: فعّل MFA أولًا لأن أثره الأمني كبير ومجهوده صغير. بعده اختبر restore للداتا. متبدأش إعادة بناء كاملة لمجرد إن خدمة أحدث ظهرت.
+<Box type="tip" title="طريقة تحفظهم">
 
-## أدوات تساعد، والقرار عندك
-
-AWS Well-Architected Tool يقدر يسجل المراجعات والمخاطر وخطة التحسين. استخدامه مش معناه إن AWS صادقت على النظام، ومش بديل عن فهم سياق العمل.
-
-## قارن بين الركن والدليل
-
-- **Security:** policy وMFA ونتيجة فحص، مش «الوصول مقفول».
-- **Reliability:** restore test وfailure test، مش مجرد وجود backup.
-- **Performance Efficiency:** latency وthroughput تحت حمل معروف.
-- **Cost Optimization:** تكلفة مرتبطة بوحدة عمل، مش فاتورة إجمالية بس.
-- **Operational Excellence:** runbook وrollback وpost-incident actions.
-- **Sustainability:** utilization وموارد أقل لكل request مع تحقيق باقي المتطلبات.
-
-## 🧪 تمرين آمن: مراجعة مصغرة
-
-راجع API دفع افتراضية بالأركان الستة. لكل ركن اكتب سؤالًا، دليلًا، risk، owner، وموعد تحقق. رتب أول ٣ تحسينات بالأثر والمجهود، وحدد tradeoff واحد. مفيش حساب AWS مطلوب.
-
-<Box type="tip" title="جاوب بدليل">
-
-«إحنا آمنين» مش إجابة. سياسة IAM، نتيجة test، metric، وbudget متراجع أمثلة على أدلة ممكن تتفحص.
+افتكر الجملة: **«نشغّل بأمان، نستحمل، بسرعة، برخص، ومن غير هدر»**. كل كلمة ركن بالترتيب: Operational excellence، Security، Reliability، Performance efficiency، Cost optimization، Sustainability.
 
 </Box>
 
-## قبل الفصل الجاي
+## 🔍 من جوه: كل ركن بيطلب منك إيه؟
 
-خلصنا أساس الـ Cloud. هنبدأ جزء الأمان والحساب بأعلى هوية صلاحية: root user، وإزاي نحميه ونستخدمه فقط للمهام اللي محتاجاه.
+| الركن | السؤال | أمثلة ممارسات |
+| --- | --- | --- |
+| **Operational Excellence** | بنشغّل النظام ونطوره إزاي؟ | التغييرات بالكود (infrastructure as code)، تغييرات صغيرة كتير، runbooks، نتعلم من كل عطل |
+| **Security** | بنحمي الداتا والحسابات إزاي؟ | least privilege، تشفير، تتبّع كل حاجة (logs)، أمان في كل طبقة |
+| **Reliability** | بنستحمل الفشل ونرجع إزاي؟ | Multi-AZ، recovery أوتوماتيك، نختبر الـ restore، scaling أفقي |
+| **Performance Efficiency** | بنستخدم الموارد المناسبة للحمل؟ | نختار النوع الصح، serverless لو مناسب، نقيس ونجرب |
+| **Cost Optimization** | بندفع على حاجة ليها قيمة؟ | نقفل اللي مش مستخدم، نختار نموذج الدفع الصح، نقيس التكلفة لكل مشروع |
+| **Sustainability** | بنقلل الطاقة والهدر؟ | نستخدم بس اللي محتاجينه، managed services، نختار Region وأجهزة أكفأ |
 
-<Checklist id="aws-cp-05" title="خلّصت الفصل لما" items={["تسمي الأركان الستة وتشرح هدف كل واحد", "تدي مثال tradeoff بين ركنين", "تعامل الـ Framework كمراجعة مستمرة", "تطلب دليلًا بدل ادعاء عام"]} />
+### الـ tradeoffs: مفيش تصميم «كامل»
+
+كل قرار بيكسّب ركن وممكن يخسّر ركن تاني:
+
+- نسخة في Region تانية → **Reliability** أعلى، و**Cost** أعلى.
+- سيرفرات أكبر من اللازم «عشان الأمان» → **Performance** مريح، و**Cost** و**Sustainability** أسوأ.
+- مراجعة يدوية لكل تغيير → ممكن **Security** أحسن، و**Operational excellence** أبطأ.
+
+الشطارة إنك **تختار التمن بوعي** وتكتبه، مش إنك تتجاهله.
+
+### AWS Well-Architected Tool
+
+خدمة مجانية في الـ console بتسألك أسئلة الأركان الست عن workload معين، وتطلعلك قائمة مخاطر (high / medium) وخطة تحسين. ليها كمان **Lenses** لأنواع معينة (serverless، SaaS…).
+
+## 🛠️ طبّق: راجع دُكّان بنفسك
+
+الـ Lab ورقي، ولو عندك حساب تقدر تفتح **Well-Architected Tool** وتعمل workload اسمه `dukkan` (الأداة نفسها مش بتتحاسب).
+
+**الوضع الحالي لدُكّان:** سيرفر واحد، باسورد الـ admin مكتوب في ملف على السيرفر، مفيش alarms، السيرفر أكبر بـ ٤ مرات من المحتاج، ومفيش backup.
+
+1. لكل ركن اكتب **مشكلة واحدة** شايفها:
+   - Reliability: سيرفر واحد ومفيش backup.
+   - Security: باسورد في ملف.
+   - Operational excellence: مفيش alarms، هنعرف من الزباين.
+   - Cost: سيرفر أكبر من اللازم.
+   - Performance: مفيش قياس أصلًا، فمش عارفين الحجم الصح.
+   - Sustainability: طاقة مهدرة على سعة مش مستخدمة.
+2. رتّبهم حسب **الخطر** على الشغل. الأمان والـ backup غالبًا الأول.
+3. اكتب لكل واحدة **أول خطوة صغيرة** (هتتعلمها في الفصول الجاية).
+
+**النتيجة:** قائمة تحسين مرتبة، وده بالظبط اللي الـ Tool بيطلعه.
+
+## ⚖️ قارن: الأركان اللي بتتلخبط
+
+| بيتلخبط مع | الفرق |
+| --- | --- |
+| Reliability ↔ Performance Efficiency | Reliability = **يفضل شغال ويرجع**. Performance = **بيستخدم موارد مناسبة بكفاءة**. |
+| Cost Optimization ↔ Sustainability | Cost = **فلوس**. Sustainability = **طاقة وأثر بيئي**. غالبًا بيمشوا مع بعض، بس السؤال مختلف. |
+| Operational Excellence ↔ Reliability | Operational = **إزاي الفريق بيشغّل ويغيّر ويتعلم**. Reliability = **النظام نفسه بيستحمل**. |
+| Well-Architected ↔ Cloud Adoption Framework | Well-Architected بيراجع **workload**. الـ CAF بيساعد **الشركة كلها** تنقل للـ cloud (فصل ٣٥). |
+
+<Checklist id="aws-cp-05" title="خلّصت الفصل لما" items={["تعدّ الست أركان بالترتيب", "تدي سؤال وممارسة لكل ركن", "تدي مثال tradeoff بين ركنين", "تعرف إن Well-Architected Tool بيعمل مراجعة لـ workload ويطلع مخاطر", "تفرّق بين Reliability وPerformance Efficiency"]} />
 
 <Quiz>
-<Q n={1} q="تقليل سعة فاضية يخدم أنهي ركنين غالبًا؟">Cost Optimization وSustainability، وقد يساعد الكفاءة عمومًا.</Q>
-<Q n={2} q="هل Well-Architected Tool يضمن إن التصميم سليم؟">لأ. يساعد في المراجعة والتوثيق، لكن الفريق مسؤول عن صحة الإجابات والقرارات.</Q>
-<Q n={3} q="ليه Multi-AZ يعتبر tradeoff؟">يحسن reliability، لكنه يضيف موارد وتكلفة وتعقيد تشغيل محتمل.</Q>
+<Q n={1} q="فريق بيعمل تغييرات صغيرة كتير ويكتب runbooks ويراجع كل عطل عشان يتعلم. أنهي ركن؟">**Operational Excellence**.</Q>
+<Q n={2} q="شركة عايزة تقلل استهلاك الطاقة والأثر البيئي لـ workloads بتاعتها. أنهي ركن؟">**Sustainability**.</Q>
+<Q n={3} q="التطبيق بيرجع أوتوماتيك بعد وقوع AZ. أنهي ركن؟">**Reliability**.</Q>
+<Q n={4} q="أداة مجانية تراجع workload ضد أفضل ممارسات AWS وتطلع مخاطر؟">**AWS Well-Architected Tool**.</Q>
 </Quiz>

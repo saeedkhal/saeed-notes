@@ -4,99 +4,155 @@ short: Least Privilege
 order: 8
 label: فصل ٨
 badge: الأمان والحساب · فصل ٨
-en: least privilege · temporary credentials · IAM Identity Center · permissions boundary
-keywords: temporary credentials · federation · Identity Center · boundary
-goal: تقلل الصلاحية ومدة الـ credentials، وتفهم دور Identity Center والـ permissions boundary.
+en: least privilege · temporary credentials · AWS STS · IAM Access Analyzer · credential report · last accessed
+keywords: least privilege · STS · مؤقت · Access Analyzer · credential report
+goal: تطبّق مبدأ «أقل صلاحية تكفي الشغل»، وتفهم ليه الـ credentials المؤقتة أأمن، وتستخدم أدوات AWS اللي بتكشف الصلاحيات الزيادة.
 part: الأمان والحساب
 color: c3
 ---
 
-## Incident: key اتسربت في repository
+## 🧠 افهم: الضرر على قد الصلاحية
 
-فريق SaaS اكتشف الساعة `11:05` إن developer رفع access key إلى repository عامة. الـ key كانت long-term وعليها `AdministratorAccess`، فالفريق اضطر يتعامل مع أسوأ احتمال: قراءة الداتا أو تغيير أي resource.
+سارة كانت مستعجلة، فإدّت تطبيق دُكّان policy فيها `"Action": "*"` و`"Resource": "*"`. الموقع اشتغل. بعد شهر حد لقى ثغرة في مكتبة رفع الصور ووصل للتطبيق. ولأن التطبيق عنده كل الصلاحيات، المهاجم:
 
-لو نفس المهمة كانت role session مدتها ساعة، تسمح فقط بـ `s3:GetObject` على prefix محدد، أثر التسريب كان أصغر زمنيًا ووظيفيًا.
+- مسح الـ database،
+- وشغّل سيرفرات تعدين عملات بـ ٤ آلاف دولار في يومين.
 
-<Hl c="g">Least privilege يضيّق الـ action والـ resource والـ condition والمدة؛ مش مجرد اسم policy.</Hl>
+لو التطبيق كان مسموحله **بس** يرفع صور في bucket واحد، أقصى ضرر كان صور زيادة في الـ bucket.
 
-## Timeline للاستجابة والتصحيح
+<Hl c="p">Least privilege = كل هوية تاخد أقل صلاحيات تكفي شغلها، على أقل موارد، لأقل وقت. الاختراق هيحصل، المهم الضرر يبقى صغير.</Hl>
 
-1. **11:05:** secret scanning يكتشف الـ key.
-2. **11:08:** الفريق يعطل credential ويبحث في CloudTrail عن استخدامها.
-3. **11:20:** workload تنتقل إلى IAM role بtemporary credentials.
-4. **12:00:** policy تبدأ بأفعال وموارد محددة في بيئة test.
-5. **بعد ٧ أيام:** last accessed وAccess Analyzer يساعدوا في إزالة صلاحيات غير مستخدمة.
+<Box type="story" icon="🧹" title="مفتاح عامل النظافة">
 
-النجاح إن workload تكمل المهمة من غير credential ثابتة ومن غير صلاحيات جانبية. الفشل إن `AccessDenied` يتصلح بـ `Action: *` أو إن session قصيرة تفضل بصلاحيات إدارية.
+عامل النظافة في الشركة محتاج يدخل المكاتب بعد الساعة ٥. مش محتاج مفتاح الخزنة، ولا يدخل الساعة ٢ الفجر، ولا ياخد المفتاح معاه البيت. لو كارته ضاع، أقصى حاجة حد يدخل مكتب فاضي بالليل.
 
-## Temporary credentials أفضل
-
-الـ role session بتطلع access key وsecret وsession token لهم مدة صلاحية. لما المدة تنتهي، البيانات تبطل حتى لو نسخة منها اتسربت.
-
-ده يقلل الخطر مقارنة بـ long-term access keys، لكنه مش يلغيه: session مسروقة تشتغل لحد انتهاءها، فلازم صلاحياتها محدودة ومدة الجلسة مناسبة.
-
-للـ workloads على AWS، اربط role بالخدمة بدل تخزين keys في الكود أو ملف `.env`. للبشر، استخدم federation ومسار دخول مركزي.
-
-## IAM Identity Center للبشر
-
-AWS IAM Identity Center يدي إدارة مركزية لوصول workforce لأكتر من AWS account وتطبيق. تقدر تستخدم مخزن هويات داخلي أو تربطه بمزود هوية خارجي، وتوزع permission sets على users وgroups وحسابات.
-
-<Flow items={[
-  { t: "المستخدم", s: "دخول مركزي + MFA", c: 1 },
-  "→",
-  { t: "Identity Center", s: "Permission set", c: 2 },
-  "→",
-  { t: "Role session", s: "Credentials مؤقتة", c: 3 },
-  "→",
-  { t: "AWS account", s: "مهمة محددة", c: 4 },
-]} />
-
-Identity Center مش بديل عن تصميم الصلاحيات؛ هو ينظم الدخول والتوزيع. Permission set واسع يفضل واسع.
-
-## Permissions boundary: سقف مش منحة
-
-Permissions boundary هي managed policy بتحط **الحد الأقصى** اللي identity-based policies تقدر تمنحه لـ IAM user أو role. هي لا تمنح permission لوحدها.
-
-مثال: platform team تسمح لفريق منتج ينشئ roles لتطبيقاته، لكن boundary تمنع أي role جديد من تجاوز خدمات أو حدود معينة. ده يفيد تفويض إدارة الصلاحيات.
-
-<Hl c="g">لو identity policy قالت Allow والـ boundary مش سامحة بالنطاق، الصلاحية الفعلية مش هتتمنح.</Hl>
-
-وفيه طبقات تانية زي AWS Organizations SCPs. الـ SCP يحدد أقصى صلاحيات متاحة لحسابات المؤسسة؛ مش هو كمان grant مباشر.
-
-## دورة تضييق الصلاحية بالأدلة
-
-1. ابدأ من task واضحة وصلاحيات قليلة.
-2. اختبر في بيئة غير إنتاجية.
-3. راقب الاستخدام والطلبات المرفوضة.
-4. استخدم أدوات زي IAM Access Analyzer ومعلومات last accessed كأدلة مساعدة.
-5. شيل الصلاحيات غير المستخدمة وراجع دوريًا.
-
-<Box type="warn" title="متصلحش AccessDenied بـ wildcard">
-
-إضافة `Action: *` و`Resource: *` سريعة، لكنها تخفي السبب وتوسع أثر أي اختراق. اقرأ الحدث وحدد action وresource وcondition المطلوبة.
+**أقل أبواب، أقل ساعات، والكارت بيترجع.** ده بالظبط least privilege + temporary credentials.
 
 </Box>
 
-## قارن الأدوات
+## 👀 تخيّل: مفتاح دايم ضد مفتاح مؤقت
 
-- **Temporary credentials:** تقلل عمر السر؛ لا تضيق الصلاحية تلقائيًا.
-- **IAM Identity Center:** ينظم workforce access وpermission sets عبر حسابات؛ لا يجعل الـ permission set ضيقة تلقائيًا.
-- **Permissions boundary:** سقف لصلاحيات user أو role؛ لا تمنح access وحدها.
-- **SCP:** سقف على حسابات أو OUs في Organizations؛ ليست grant.
-- **Access Analyzer / last accessed:** أدلة للمراجعة، وليست قرارًا آليًا كامل السياق.
+<Diagram
+  title="المفتاح المسرّب بيعيش قد إيه؟"
+  height={320}
+  mheight={540}
+  nodes={[
+    { id: "app", t: "تطبيق دُكّان", s: "على EC2", c: 1, x: 88, y: 50, mx: 50, my: 6 },
+    { id: "sts", t: "AWS STS", s: "يدي credentials مؤقتة", c: 3, x: 55, y: 18, mx: 50, my: 36 },
+    { id: "s3", t: "S3", s: "dukkan-images بس", c: 4, x: 15, y: 18, mx: 50, my: 64 },
+    { id: "leak", t: "لو اتسرّبت", s: "تنتهي لوحدها خلال ساعات", c: 5, x: 35, y: 85, mx: 50, my: 93 },
+  ]}
+  edges={[
+    { from: "app", to: "sts", t: "assume role", c: 1 },
+    { from: "sts", to: "s3", t: "صلاحية ضيقة", c: 3 },
+    { from: "sts", to: "leak", t: "مدة محدودة", c: 5, dash: true },
+  ]}
+/>
 
-## 🧪 Lab آمن: صغّر صلاحية incident responder
+- **Access key دايمة:** لو اتسرّبت في GitHub، شغالة لحد ما حد ياخد باله ويمسحها. ممكن شهور.
+- **Credentials مؤقتة من STS:** بتنتهي لوحدها، وAWS بتجددها للتطبيق أوتوماتيك. المسرّب منها بيموت بسرعة.
 
-صمم جلسة مدتها `45 دقيقة` لمهندس يحتاج يقرأ logs ويعيد تشغيل service واحدة في staging. حدد actions وresources وcondition، واكتب ٣ أشياء ممنوعة. بعدين وضح ماذا يحدث لو identity policy تسمح بفعل والـ boundary لا تسمح به.
+## 🔍 من جوه: إزاي تضيّق الصلاحية؟
 
-## قبل الفصل الجاي
+### خمس أسئلة لكل policy
 
-ضيّقنا الوصول، لكن مين مسؤول عن patching والتشفير والحماية؟ الفصل الجاي يقسم المسؤولية بين AWS والعميل حسب نوع الخدمة.
+1. **مين؟** هوية واحدة محددة، مش «الكل».
+2. **إيه الـ actions؟** `s3:PutObject` بس، مش `s3:*`.
+3. **على إيه؟** `arn:aws:s3:::dukkan-images/*`، مش `*`.
+4. **بشروط إيه؟** `Condition` زي إن الطلب لازم يكون من شبكة معينة أو عليه MFA.
+5. **لحد إمتى؟** credentials مؤقتة بدل دايمة.
 
-<Checklist id="aws-cp-08" title="خلّصت الفصل لما" items={["تطبق least privilege على action وresource والمدة", "تشرح ميزة temporary credentials وحدودها", "تعرف دور IAM Identity Center للبشر", "تعرف إن permissions boundary سقف وليست grant"]} />
+### مثال: ضيّق الـ policy
+
+<File name="before-vs-after.json">
+
+```jsonc
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      // @diff -
+      "Action": "*",
+      // @diff +
+      "Action": ["s3:PutObject"],
+      // @diff -
+      "Resource": "*"
+      // @diff +
+      "Resource": "arn:aws:s3:::dukkan-images/uploads/*"
+    }
+  ]
+}
+```
+
+</File>
+
+### أدوات بتساعدك تلاقي الزيادة
+
+<Grid2>
+<Card title="IAM Access Analyzer" c={1}>
+
+بيكشف الموارد اللي **متشاركة برّه** حسابك (bucket مفتوح لحساب غريب مثلًا)، وبيلاقي صلاحيات **مش مستخدمة**، ويقدر **يولّد policy** من الاستخدام الفعلي المسجّل في CloudTrail.
+
+</Card>
+<Card title="Last accessed" c={2}>
+
+في صفحة أي user أو role، تبويب `Last Accessed` بيقولك أنهي خدمات استخدمها وإمتى. خدمة متلمستش من ٩٠ يوم؟ غالبًا مش محتاجها.
+
+</Card>
+<Card title="Credential report" c={3}>
+
+ملف CSV بكل الـ users: آخر دخول، الـ MFA مفعّل ولا لأ، عمر الـ access keys. مفيد للمراجعة الدورية.
+
+</Card>
+<Card title="Password policy" c={4}>
+
+بتفرض طول وتعقيد الباسورد للـ IAM users في الحساب.
+
+</Card>
+</Grid2>
+
+<Box type="warn" title="مش «اقفل كل حاجة وخلاص»">
+
+لو ضيّقت زيادة، الشغل هيقف والناس هتلف حوالين القواعد (يشاركوا باسوردات مثلًا). ابدأ بالصلاحيات المعقولة، **قيس الاستخدام**، وبعدين ضيّق بالأدلة.
+
+</Box>
+
+## 🛠️ طبّق: نضّف صلاحيات دُكّان
+
+⚠️ كل الأدوات دي مجانية (Access Analyzer للـ external access مجاني، وبعض أنواع التحليل المتقدمة ليها سعر، راجع الـ docs).
+
+1. **طلّع credential report:**
+
+```bash
+aws iam generate-credential-report
+aws iam get-credential-report --query Content --output text | base64 -d > report.csv
+```
+
+افتح الملف ودوّر على: users من غير MFA، أو access keys عمرها أكبر من ٩٠ يوم.
+
+2. **افحص Last accessed** للـ role بتاع التطبيق. لو ظاهر إنه بيستخدم `S3` بس، امسح أي صلاحية تانية.
+3. **فعّل IAM Access Analyzer** في الـ Region: `IAM` ← `Access analyzer` ← `Create analyzer` ← zone of trust = حسابك. **المتوقع:** قايمة findings لو في bucket أو role متاح من برّه.
+4. **حوّل التطبيق لـ role:** لو في access keys محطوطة في ملف `.env` على السيرفر، استبدلها بـ instance role (فصل ١٢)، وبعدين عطّل الـ keys القديمة.
+
+🧹 لو عملت analyzer للتجربة بس، امسحه.
+
+## ⚖️ قارن: مين بيعمل إيه؟
+
+| الأداة | بتجاوب على | مثال |
+| --- | --- | --- |
+| IAM policies | مسموح ولا لأ؟ | Allow `s3:PutObject` |
+| AWS STS | إزاي آخد credentials مؤقتة؟ | `AssumeRole` |
+| IAM Access Analyzer | مين برّه يقدر يوصل؟ وإيه الصلاحيات اللي مش مستخدمة؟ | bucket متشارك مع حساب غريب |
+| Last accessed | الهوية دي استخدمت الخدمة دي إمتى؟ | آخر استخدام لـ EC2 من ٢٠٠ يوم |
+| Credential report | حالة كل الـ users | مين من غير MFA |
+| CloudTrail (فصل ٢٩) | مين عمل إيه وإمتى فعلًا؟ | سارة مسحت bucket الساعة ٣ |
+
+<Checklist id="aws-cp-08" title="خلّصت الفصل لما" items={["تشرح least privilege بالخمس أسئلة: مين، إيه، على إيه، بشروط إيه، لحد إمتى", "تعرف ليه الـ credentials المؤقتة من STS أأمن من الـ access keys الدايمة", "تضيّق policy من * لـ action وresource محددين", "تعرف Access Analyzer بيكشف إيه", "تطلّع credential report وتعرف تقراه"]} />
 
 <Quiz>
-<Q n={1} q="ليه temporary credentials أقل خطورة من key دائمة؟">لأنها تنتهي تلقائيًا، مع ضرورة تقييد صلاحياتها وحماية الجلسة أثناء عمرها.</Q>
-<Q n={2} q="هل permissions boundary تمنح قراءة S3 وحدها؟">لأ. هي تحدد الحد الأقصى؛ لازم policy أخرى تمنح القراءة.</Q>
-<Q n={3} q="Identity Center حل مشكلة الصلاحيات الواسعة تلقائيًا؟">لأ. ينظم الدخول والجلسات، لكن لازم permission sets نفسها تتصمم بأقل صلاحية.</Q>
+<Q n={1} q="مبدأ إن كل مستخدم ياخد الصلاحيات اللي محتاجها لشغله بس اسمه إيه؟">**Principle of least privilege**.</Q>
+<Q n={2} q="أنهي خدمة بتدي credentials مؤقتة لما حد يعمل assume لـ role؟">**AWS STS (Security Token Service)**.</Q>
+<Q n={3} q="عايز تعرف لو في S3 bucket أو role متاح لحساب برّه شركتك. أنهي أداة؟">**IAM Access Analyzer**.</Q>
+<Q n={4} q="عايز تراجع كل الـ IAM users ومين منهم مفعّلش MFA. أسرع طريقة؟">**IAM credential report**.</Q>
 </Quiz>

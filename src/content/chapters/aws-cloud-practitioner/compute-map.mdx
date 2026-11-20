@@ -4,104 +4,145 @@ short: خريطة الـ Compute
 order: 11
 label: فصل ١١
 badge: Compute · فصل ١١
-en: EC2 · Lightsail · Elastic Beanstalk · Lambda
-keywords: virtual machine · simple platform · managed deployment · serverless
-goal: تختار بين EC2 وLightsail وElastic Beanstalk وLambda حسب التحكم والتشغيل وشكل الحمل.
+en: EC2 · Elastic Beanstalk · Lambda · ECS · EKS · Fargate · Lightsail · AWS Batch
+keywords: VM · containers · serverless · managed platform
+goal: تشوف خريطة خدمات الـ compute كلها مرة واحدة، وتختار بينها بسؤالين، عايز تدير قد إيه؟ والشغل شكله إيه؟
 part: Compute
 color: c1
 ---
 
-## سيناريو: ٤ workloads في شركة media
+## 🧠 افهم: «فين الكود هيشتغل؟»
 
-الفريق عنده برنامج transcoding قديم محتاج packages على Linux، موقع حملة صغير، API ويب عادية، وfunction تعمل thumbnail كل ما فيديو يترفع. كلهم «compute»، لكن شكل الحمل ومسؤولية التشغيل مختلفين.
+كود دُكّان لازم يشتغل على حاجة. بس دُكّان فيه أنواع شغل مختلفة:
 
-<Hl c="y">قبل اسم الخدمة اسأل: محتاج OS كامل؟ الحمل مستمر ولا event؟ مين هيدير النشر والـ scaling؟</Hl>
+- **الموقع:** شغال ٢٤ ساعة ومستني زباين.
+- **تصغير الصور:** بيحصل بس لما حد يرفع صورة، ثواني وخلاص.
+- **تقرير المبيعات:** مرة في الليلة، بياخد ساعة.
 
-## Timeline للقرار
+لو حطيتهم كلهم على سيرفر شغال ٢٤ ساعة، هتدفع على وقت فاضي كتير. AWS عندها أكتر من طريقة لتشغيل الكود، والفرق بينها هو **إنت بتدير قد إيه** و**بتدفع إمتى**.
 
-1. **برنامج قديم:** يحتاج root access وdaemon مستمرة؛ يبدأ التقييم من `EC2`.
-2. **موقع حملة:** فريق صغير واحتياج بسيط وباقة واضحة؛ `Lightsail` مرشح.
-3. **API ويب:** الفريق يريد رفع الكود مع إدارة environment؛ `Elastic Beanstalk` مرشح.
-4. **Thumbnail:** حدث قصير ومتقطع عند upload؛ `Lambda` مرشحة.
-5. قبل production، الفريق يقارن quotas والتكلفة والـ observability وخطة الفشل.
+<Hl c="y">الـ compute على AWS ٣ عائلات: سيرفرات (EC2)، containers (ECS/EKS/Fargate)، وserverless (Lambda). كل ما تطلع لفوق بتدير أقل وتتحكم أقل.</Hl>
 
-النجاح إن الخدمة توافق شكل التشغيل ويعرف الفريق ما يديره. الفشل إن Lambda تختار لمهمة طويلة لا تناسب limits، أو Beanstalk تتعامل كأن الموارد تحتها مجانية.
+<Box type="story" icon="🍳" title="تعمل أكل إزاي؟">
 
-<Box type="story" icon="🧭" title="الاختيار مش ترتيب جودة">
-
-الخدمات مش مستويات من «ضعيف» إلى «قوي». EC2 تعطي تحكمًا أكبر مقابل تشغيل أكبر، وLambda تقلل إدارة السيرفر مقابل constraints مختلفة.
+- **EC2** = تأجر مطبخ فاضي. تجيب حلل وتوابل وتطبخ اللي إنت عايزه، وإنت اللي بتنضف.
+- **Containers** = علب أكل جاهزة للتسخين. أي مطبخ فيه ميكروويف يسخّنها بنفس الطعم. **ECS/EKS** هما المسؤول عن ترتيب المطابخ، و**Fargate** إن المطبخ نفسه مش شغلتك.
+- **Lambda** = دليفري. بتطلب الوجبة لما تجوع، وتدفع على الوجبة، ومفيش مطبخ خالص.
 
 </Box>
 
-## الخريطة السريعة
-
-<Grid2>
-<Card title="EC2: تحكّم كامل" c={1}>
-
-اختاره لما تحتاج نظام تشغيل، إعدادات شبكة، software مخصوص، أو workload شغّالة باستمرار. إنت مسؤول عن الـ OS والـ patching والـ scaling اللي ما عملتلوش automation.
-
-</Card>
-<Card title="Lightsail: بداية أبسط" c={2}>
-
-مناسب لموقع بسيط أو prototype بواجهة موحّدة وباقات شهرية متوقعة نسبيًا. مرونته وتكاملاته أقل من تصميم AWS متقدم.
-
-</Card>
-</Grid2>
-
-<Grid2>
-<Card title="Elastic Beanstalk: ارفع التطبيق" c={3}>
-
-لـ web app تقليدية: ترفع الكود، والخدمة تنشئ وتدير موارد زي EC2 والـ load balancing والـ scaling. لسه بتدفع ثمن الموارد اللي تحتها.
-
-</Card>
-<Card title="Lambda: شغّل عند الحدث" c={4}>
-
-لكود قصير يبدأ بسبب request أو ملف أو message، من غير ما تدير server. الدفع حسب الاستخدام، لكن فيه quotas وحد أقصى للتنفيذ.
-
-</Card>
-</Grid2>
-
-## امشِ بالأسئلة دي
+## 👀 تخيّل: من «إنت بتدير كل حاجة» لـ «ولا حاجة»
 
 <Flow items={[
-  { t: "محتاج OS كامل؟", s: "EC2", c: 1 },
+  { t: "EC2", s: "سيرفر كامل: OS + كل حاجة", c: 1 },
   "→",
-  { t: "موقع بسيط بسرعة؟", s: "Lightsail", c: 2 },
+  { t: "ECS / EKS على EC2", s: "containers وإنت بتدير السيرفرات", c: 2 },
   "→",
-  { t: "Web app والكود هو همّك؟", s: "Beanstalk", c: 3 },
+  { t: "Fargate", s: "containers من غير سيرفرات", c: 3 },
   "→",
-  { t: "حدث قصير ومتقطع؟", s: "Lambda", c: 4 },
+  { t: "Lambda", s: "function تشتغل مع الحدث", c: 4 },
 ]} />
 
-دي نقطة بداية، مش قانون. مثلًا Beanstalk نفسه بيستخدم موارد AWS تحت الغطا، وLambda ممكن تقف قدام API عن طريق API Gateway.
+<Diagram
+  title="كل جزء من دُكّان على الـ compute المناسب"
+  height={320}
+  mheight={540}
+  nodes={[
+    { id: "site", t: "الموقع", s: "شغال ٢٤ ساعة", c: 1, x: 85, y: 20, mx: 25, my: 8 },
+    { id: "img", t: "تصغير الصور", s: "ثواني مع كل رفع", c: 4, x: 85, y: 80, mx: 75, my: 8 },
+    { id: "rep", t: "تقرير الليل", s: "ساعة مرة في اليوم", c: 2, x: 50, y: 50, mx: 50, my: 45 },
+    { id: "ecs", t: "Fargate / EC2", s: "container دايم", c: 3, x: 15, y: 20, mx: 25, my: 90 },
+    { id: "lam", t: "Lambda", s: "بالطلب", c: 5, x: 15, y: 80, mx: 75, my: 90 },
+  ]}
+  edges={[
+    { from: "site", to: "ecs", t: "دايم", c: 1 },
+    { from: "img", to: "lam", t: "حدث قصير", c: 4 },
+    { from: "rep", to: "ecs", t: "task مجدول", c: 2, dash: true },
+  ]}
+/>
 
-## قارن القريب
+## 🔍 من جوه: كل خدمة في سطرين
 
-- **EC2:** OS كامل، workloads مستمرة أو خاصة، وأنت تدير patching والتوسع اللي لم تؤتمته.
-- **Lightsail:** تجربة مبسطة وباقات لمشاريع مباشرة؛ تكاملات ومرونة أقل من تصميم AWS أوسع.
-- **Elastic Beanstalk:** platform لنشر web apps وتنسيق موارد مثل EC2 وELB وAuto Scaling؛ الموارد نفسها تُحاسب.
-- **Lambda:** تنفيذ event-driven من غير إدارة servers، بمدة وquotas ونموذج تكلفة مختلف.
+<Grid2>
+<Card title="Amazon EC2" c={1}>
 
-<Box type="warn" title="Managed مش معناها مجاني">
+سيرفر افتراضي. تحكم كامل في الـ OS والـ software. إنت مسؤول عن الـ patches والـ scaling. **فصل ١٢.**
 
-راجع صفحة التسعير والـ Region قبل أي تجربة. Beanstalk ملوش رسم خدمة منفصل عادةً، لكن EC2 والـ load balancer وباقي موارده بتتحاسب. Lightsail له bundles، وLambda لها حساب طلبات ومدة وموارد. مفيش هنا وعد بـ Free Tier.
+</Card>
+<Card title="AWS Lambda" c={4}>
+
+بترفع function، وبتشتغل لما حدث يحصل (request، ملف اترفع، رسالة). أقصى مدة للتشغيل الواحد **١٥ دقيقة**. بتدفع على عدد المرات والوقت. **فصل ١٥.**
+
+</Card>
+<Card title="ECS / EKS" c={2}>
+
+بيشغّلوا ويرتبوا containers. **ECS** بتاع AWS وأبسط. **EKS** هو Kubernetes مُدار، لو فريقك بيستخدم Kubernetes أصلًا. **فصل ١٦.**
+
+</Card>
+<Card title="AWS Fargate" c={3}>
+
+مكان تشغيل الـ containers **من غير ما تدير سيرفرات**، بيشتغل مع ECS أو EKS. بتدفع على CPU وmemory الـ container.
+
+</Card>
+<Card title="Elastic Beanstalk" c={5}>
+
+PaaS: ترفع الكود (Node، Python، Java…) وهو بيعمل السيرفرات والـ load balancer والـ scaling ليك. وإنت لسه شايفهم وتقدر تعدّلهم.
+
+</Card>
+<Card title="Amazon Lightsail" c={1}>
+
+سيرفر بسيط بسعر شهري ثابت ومعاه حاجات جاهزة (WordPress مثلًا). للمواقع الصغيرة والناس اللي عايزة بداية سهلة.
+
+</Card>
+</Grid2>
+
+وفي كمان **AWS Batch** للشغل الـ batch الكبير (آلاف الـ jobs)، بيرتّب التشغيل على EC2 أو Fargate لوحده.
+
+### سؤالين بيحسموا
+
+1. **الشغل شكله إيه؟** شغال دايمًا؟ ولا بيحصل مع حدث وبيخلص بسرعة؟ ولا batch كبير؟
+2. **الفريق عايز يدير قد إيه؟** محتاج OS معين؟ عندكم Kubernetes؟ ولا عايزين ترفعوا الكود وخلاص؟
+
+## 🛠️ طبّق: وزّع شغل دُكّان
+
+الـ Lab ورقي. اختار الخدمة لكل حالة، واكتب **ليه مش البديل**:
+
+| الشغل | الاختيار | ليه مش البديل؟ |
+| --- | --- | --- |
+| الموقع (Node.js، ٢٤ ساعة) | Fargate (ECS) | Lambda ممكن، بس الموقع شغال دايمًا فمش هتوفر كتير، والفريق عنده Docker |
+| تصغير صورة بعد الرفع | Lambda | سيرفر ٢٤ ساعة عشان شغل ٣ ثواني = هدر |
+| تقرير الليل (ساعة) | ECS task مجدول على Fargate | Lambda أقصاها ١٥ دقيقة |
+| برنامج المحاسبة (Windows + license) | EC2 | محتاج OS معين وتحكم كامل |
+| مدونة عم حسن (WordPress) | Lightsail | سعر ثابت وبسيط، مش محتاج تعقيد |
+
+**جرّب لوحدك:** لو التقرير بقى ٥ دقايق بس، هل Lambda بقت مناسبة؟ (أيوه، وغالبًا أرخص).
+
+## ⚖️ قارن: الخريطة في جدول واحد
+
+| | EC2 | Elastic Beanstalk | ECS/EKS + Fargate | Lambda | Lightsail |
+| --- | --- | --- | --- | --- | --- |
+| بتدير الـ OS؟ | **أيوه** | جزئيًا (هو بيظبطه) | لأ | لأ | أيوه (بسيط) |
+| وحدة التشغيل | سيرفر | تطبيق | container | function | سيرفر |
+| بتدفع على | وقت تشغيل السيرفر | الموارد اللي اتعملت | CPU/memory للـ task | المرات × المدة | شهري ثابت |
+| أطول تشغيل | مفيش حد | مفيش حد | مفيش حد | ١٥ دقيقة | مفيش حد |
+| مناسب لـ | تحكم كامل، legacy | رفع كود بسرعة | microservices، Docker | events، شغل متقطع | مواقع صغيرة |
+
+<Box type="interview" title="كلمات بتشاور على الإجابة">
+
+«run code without provisioning or managing servers» ← **Lambda**.
+«containers without managing servers» ← **Fargate**.
+«Kubernetes» ← **EKS**.
+«upload code and AWS handles deployment, capacity, load balancing» ← **Elastic Beanstalk**.
+«full control over the operating system» ← **EC2**.
+«simple, predictable monthly price» ← **Lightsail**.
 
 </Box>
 
-## 🧪 تمرين ورقة: أربع كروت
-
-شركة SaaS عندها worker مستمر، microsite، API، ومعالجة PDF عند الرفع. لكل workload سجل مدة التنفيذ، pattern الحمل، احتياج OS، مسؤولية patching، وطريقة scaling، ثم اختار خدمة وعلامة نجاح بعد أسبوع. التمرين بلا resources.
-
-## قرار الامتحان
-
-لو السؤال شدّد على full control فالمرشح `EC2`. لو قال simple bundled experience فكر في `Lightsail`. لو قال deploy web code مع إدارة البنية فكر في `Elastic Beanstalk`. لو قال event-driven ومن غير servers فكر في `Lambda`.
-
-في الفصل الجاي هنفتح اختيار `EC2` ونفهم الـ AMI والـ instance من جوّه.
-
-<Checklist id="aws-cp-11" title="خلّصت الفصل لما" items={["تربط كل خدمة بمستوى التحكم المناسب", "تعرف إن Beanstalk بيدير موارد مدفوعة تحت الغطا", "تميّز workload مستمرة عن حدث قصير", "تختار خدمة لكل سيناريو production"]} />
+<Checklist id="aws-cp-11" title="خلّصت الفصل لما" items={["ترتب EC2 والـ containers وLambda من تحكم كامل لإدارة أقل", "تعرف إن Lambda أقصاها ١٥ دقيقة للتشغيل الواحد", "تفرّق ECS وEKS وFargate", "تعرف Elastic Beanstalk وLightsail بيحلوا إيه", "تختار compute لشغل من نوعه ومن احتياج الفريق"]} />
 
 <Quiz>
-<Q n={1} q="برنامج قديم محتاج إعدادات OS خاصة؛ تبدأ بإيه؟">EC2، لأن المطلوب تحكّم مباشر في نظام التشغيل والـ software stack.</Q>
-<Q n={2} q="مين الأنسب لمعالجة صورة كل ما تترفع؟">Lambda، لأن الرفع event يشغّل كود قصير عند الحاجة.</Q>
-<Q n={3} q="Elastic Beanstalk مجاني بالكامل؟">لأ. الخدمة تدير النشر، لكن الموارد اللي بتنشئها تحتها ليها تكلفة.</Q>
+<Q n={1} q="عايز تشغّل كود لما ملف يترفع على S3، من غير سيرفرات، وبتدفع على وقت التشغيل بس. أنهي خدمة؟">**AWS Lambda**.</Q>
+<Q n={2} q="فريق عنده Kubernetes manifests وعايز يكمل بيها على AWS. أنهي خدمة؟">**Amazon EKS**.</Q>
+<Q n={3} q="عايز تشغّل containers ومش عايز تدير أي EC2 instances. أنهي خيار؟">**AWS Fargate** (مع ECS أو EKS).</Q>
+<Q n={4} q="مطور عايز يرفع تطبيق Java وAWS تعمل السيرفرات والـ load balancing والـ scaling. أنهي خدمة؟">**AWS Elastic Beanstalk**.</Q>
 </Quiz>

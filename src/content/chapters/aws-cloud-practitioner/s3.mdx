@@ -4,76 +4,158 @@ short: S3
 order: 17
 label: فصل ١٧
 badge: Storage وDatabases · فصل ١٧
-en: object storage · bucket · key · versioning · lifecycle · replication
-keywords: S3 · storage classes · static assets · CRR · SRR
-goal: تصمم تخزين objects إنتاجي بسياسة وصول ونسخ واحتفاظ قابلة للقياس.
+en: bucket · object · key · storage classes · lifecycle · versioning · Block Public Access · bucket policy · static website · presigned URL
+keywords: object storage · storage class · lifecycle · versioning · public access
+goal: تفهم S3 كمخزن ملفات لا نهائي بالـ bucket والـ key، وتختار storage class حسب مرات القراية، وتحمي الـ bucket من إنه يبقى public بالغلط.
 part: Storage وDatabases
 color: c2
 ---
 
-## المثال الأول: صور منتجات متجر
+## 🧠 افهم: فين نحط ١٠٠ ألف صورة منتج؟
 
-متجر عنده `8 مليون` صورة، ويضيف `120 GB` يوميًا. صور آخر `30 يوم` عليها traffic عالي، وبعد `180 يوم` نادرًا ما تُطلب، لكن فريق compliance محتاج يحتفظ بالأصل `7 سنين`.
+دُكّان عنده صور منتجات، وفواتير PDF، وbackups. لو حطيتهم على هارد EBS:
 
-١. التطبيق يرفع الأصل إلى bucket خاصة تحت key زي `products/tenant-42/2026/11/id.jpg`.
-٢. S3 event يبدأ thumbnail pipeline؛ الناتج يتكتب في prefix مختلف.
-٣. CloudFront يقدّم النسخ العامة، والـ bucket نفسها تفضل مع Block Public Access وسياسة origin مناسبة.
-٤. Lifecycle تنقل objects حسب العمر، وretention policy المعتمدة تمنع الحذف المبكر لو المتطلب قانوني.
-٥. Versioning وreplication يتصمموا للفشل المطلوب، مش يتفعلوا كبديل تلقائي للـ backup.
+- الهارد ليه حجم، ولازم تكبّره كل شوية.
+- مربوط بسيرفر واحد في AZ واحدة.
+- عشان الزبون يشوف الصورة لازم السيرفر يقدّمها.
 
-## نموذج الداتا
+**Amazon S3 (Simple Storage Service)** حاجة مختلفة: مخزن **objects** (ملفات) من غير حد للحجم الكلي، بتوصله بـ HTTP من أي مكان بالصلاحيات، والداتا بتتنسخ أوتوماتيك على أكتر من AZ. بتدفع على اللي خزّنته فعلًا، وعلى الطلبات، وعلى الداتا اللي بتخرج.
 
-S3 <En>object storage</En>: الـ object عبارة عن bytes وmetadata داخل bucket وتحت key فريد. `assets/2026/logo.png` key واحدة؛ الـ slash مش folder حقيقية. S3 إقليمي، واسم bucket فريد عالميًا داخل AWS partition.
+<Hl c="y">S3 = buckets جواها objects. كل object ليه key (اسمه الكامل) وداتا وmetadata. مصمم لمتانة عالية جدًا (11 nines)، والأصل إن كل حاجة فيه private.</Hl>
 
-تعديل جزء صغير من object مش زي block storage؛ غالبًا تكتب object جديدة. عشان كده S3 ممتاز للصور، logs، backups، static assets وdata lakes، لكنه مش disk لنظام تشغيل.
+<Box type="story" icon="📦" title="مخزن الأمانات">
 
-## Versioning وقت incident
+S3 زي **مخزن أمانات** ضخم. بتسلّم الشنطة (object) وتاخد إيصال عليه رقم (key)، وتحطها في دولاب باسمك (bucket). مش بتفتح الشنطة وتعدّل حاجة جواها، لو عايز تغير بتسلم شنطة جديدة بنفس الرقم.
 
-الساعة `10:00` deployment غلط overwrite لـ `50,000` object. مع Versioning، كل overwrite يعمل version جديدة. الساعة `10:08` الفريق يوقف الكاتب، يحدد version IDs السابقة، ويبدأ restore منظم. Delete عادي على bucket versioned يضيف delete marker بدل إزالة كل versions.
-
-النجاح: تقدر ترجع نسخة سابقة. المقابل: كل version تستهلك storage، وحذف bucket يتطلب تنظيف versions وdelete markers. Lifecycle للـ noncurrent versions لازم يطابق retention المطلوب.
-
-## Storage class قرار اقتصادي
-
-- `S3 Standard`: access متكرر وresilience عبر عدة AZs.
-- `S3 Intelligent-Tiering`: نمط غير متوقع؛ automation مع رسوم/شروط راجعها.
-- `Standard-IA`: access قليل مع retrieval سريع، لكن minimum duration/size ورسوم retrieval ممكن تأثر.
-- `One Zone-IA`: AZ واحدة؛ مناسب فقط لداتا قابلة لإعادة الإنشاء.
-- فئات `S3 Glacier`: archive من instant retrieval لمدد أبطأ في Flexible Retrieval وDeep Archive.
-
-لو `10 TB` تُسترجع بالكامل كل شهر، سعر التخزين الأقل ممكن يخسر قدام retrieval. احسب storage + requests + retrieval + transfer، وراجع أسعار أكتوبر 2026 للـ Region.
-
-## Lifecycle مش Replication
-
-`Lifecycle` تغيّر class أو تنهي objects حسب قواعد زمنية. `SRR` تنسخ داخل Region، و`CRR` إلى Region أخرى. Replication تحتاج Versioning على المصدر والوجهة وصلاحيات مناسبة، وقد يكون لها lag وتكلفة.
-
-<Grid2>
-<Card title="Lifecycle" c={2}>
-
-حل إدارة عمر وتكلفة: بعد `30 يوم` إلى IA، وبعد `180 يوم` إلى archive، مثلًا.
-
-</Card>
-<Card title="Replication" c={4}>
-
-نسخة مستقلة لاحتياج resilience أو compliance. مش كل delete أو historical object يتنسخ تلقائيًا بنفس توقعاتك؛ راجع الإعدادات.
-
-</Card>
-</Grid2>
-
-<Box type="warn" title="Encryption لا تصلّح policy مفتوحة">
-
-التشفير يحمي الداتا وفق نموذج المفاتيح، لكنه لا يمنع principal مصرح له غلط من القراءة. اجمع Block Public Access وleast privilege وlogging ومراجعة bucket policy.
+والدواليب أنواع: دولاب قريب على الباب للحاجات اللي بتطلبها كل يوم (غالي شوية)، ومخزن في البدروم للحاجات اللي بتطلبها مرة في السنة (رخيص، بس بياخد وقت عشان يطلّعها).
 
 </Box>
 
-## 🧪 تمرين: retention وتكلفة وفشل
+## 👀 تخيّل: حياة صورة منتج
 
-صمم bucket لفيديوهات حجمها `40 TB`: `15%` عليها مشاهدة يومية، `70%` لا تُطلب بعد شهر، و`15%` لازم تفضل قابلة للاسترجاع خلال ساعات لمدة `5 سنين`. اكتب lifecycle، أثر versioning، وهل تحتاج CRR. بعدها افترض إن operator حذف prefix الساعة `09:30`: اكتب timeline للاستعادة ونقطة تمنع تكرار الحذف.
+<Flow items={[
+  { t: "اترفعت", s: "S3 Standard: بتتشاف كتير", c: 1 },
+  "→",
+  { t: "بعد ٩٠ يوم", s: "Standard-IA: بتتشاف قليل", c: 2 },
+  "→",
+  { t: "بعد سنة", s: "Glacier: أرشيف", c: 3 },
+  "→",
+  { t: "بعد ٥ سنين", s: "تتمسح", c: 5 },
+]} />
 
-<Checklist id="aws-cp-17" title="خلّصت الفصل لما" items={["تشرح bucket وkey وobject", "تتبع overwrite وحذف في bucket versioned", "تختار storage class من access pattern والتكلفة", "تفرق lifecycle عن replication", "تحمي origin خاصة وتكتب recovery flow"]} />
+<Diagram
+  title="الزبون بيشوف الصورة، بس الـ bucket مش public"
+  height={300}
+  mheight={520}
+  nodes={[
+    { id: "user", t: "الزبون", s: "يفتح صفحة المنتج", c: 1, x: 90, y: 50, mx: 50, my: 6 },
+    { id: "cf", t: "CloudFront", s: "OAC: مسموح يقرا", c: 4, x: 55, y: 50, mx: 50, my: 38 },
+    { id: "s3", t: "S3 bucket", s: "dukkan-images · private", c: 2, x: 15, y: 25, mx: 50, my: 70 },
+    { id: "bpa", t: "Block Public Access", s: "مفعّل ✓", c: 5, x: 15, y: 82, mx: 50, my: 95 },
+  ]}
+  edges={[
+    { from: "user", to: "cf", t: "GET /products/42.jpg", c: 1 },
+    { from: "cf", to: "s3", t: "signed request", c: 4 },
+    { from: "bpa", to: "s3", t: "يحمي", c: 5, dash: true },
+  ]}
+/>
+
+## 🔍 من جوه: الحاجات اللي لازم تعرفها
+
+### Bucket وobject وkey
+
+- **Bucket:** اسمه **unique على مستوى العالم كله** (مش حسابك بس)، وبيتعمل في Region.
+- **Object:** ملف لحد **5 TB**. فوق ١٠٠ ميجا استخدم multipart upload.
+- **Key:** الاسم الكامل زي `products/2026/42.jpg`. الـ `/` بتبان كـ folders في الـ console، بس فعليًا هي جزء من الاسم.
+
+### Storage classes
+
+| الـ class | مناسب لـ | ملاحظة |
+| --- | --- | --- |
+| S3 Standard | داتا بتتقري كتير | الافتراضي |
+| S3 Intelligent-Tiering | مش عارف الـ pattern | بينقل الـ objects بين tiers لوحده حسب الاستخدام |
+| S3 Standard-IA | بتتقري قليل بس محتاجها فورًا | تخزين أرخص، والقراية عليها رسوم |
+| S3 One Zone-IA | زي IA بس في AZ واحدة | أرخص، لداتا تقدر تعيد عملها |
+| S3 Express One Zone | أسرع أداء ممكن | AZ واحدة، لأحمال محتاجة latency قليل جدًا |
+| S3 Glacier Instant Retrieval | أرشيف بتحتاجه فورًا نادرًا | مللي ثواني |
+| S3 Glacier Flexible Retrieval | أرشيف | الاسترجاع من دقايق لساعات |
+| S3 Glacier Deep Archive | أرشيف طويل جدًا | أرخص حاجة، الاسترجاع ساعات |
+
+**Lifecycle rules** بتنقل الـ objects بين الـ classes أو تمسحها أوتوماتيك بعد مدة.
+
+### الحماية
+
+- **Block Public Access:** مفعّل افتراضيًا على الـ buckets الجديدة. سيبه مفعّل إلا لو عندك سبب واضح جدًا.
+- **Bucket policy:** resource-based policy على الـ bucket نفسه بتحدد مين يعمل إيه.
+- **Encryption:** كل الـ objects الجديدة بتتشفّر افتراضيًا (SSE-S3)، وتقدر تستخدم مفاتيح KMS.
+- **Versioning:** بيحتفظ بكل نسخة من الـ object. لو حد مسح أو كتب فوق ملف بالغلط، ترجع للنسخة القديمة.
+- **Presigned URL:** لينك مؤقت بيسمح لحد يرفع أو ينزّل object معين لمدة محددة من غير ما يبقى عنده صلاحيات AWS.
+
+### حاجات تانية مفيدة
+
+**Static website hosting** (موقع HTML/CSS/JS من غير سيرفر)، **Replication** لـ bucket في Region تانية، **S3 Transfer Acceleration** لرفع أسرع من مسافات بعيدة، و**S3 Object Lock** لملفات ممنوع تتمسح لمدة (compliance).
+
+## 🛠️ طبّق: bucket لصور دُكّان
+
+⚠️ S3 بيتحاسب على التخزين والطلبات. ملفات صغيرة للتجربة تكلفتها شبه صفر، بس امسحها.
+
+1. **اعمل bucket** (الاسم لازم يبقى unique، ضيف رقم):
+
+```bash
+aws s3 mb s3://dukkan-images-<رقم-عشوائي> --region eu-central-1
+```
+
+2. **ارفع صورة** وجرب تفتحها من لينكها المباشر:
+
+```bash
+aws s3 cp ./bread.jpg s3://dukkan-images-<رقم>/products/bread.jpg
+```
+
+افتح `Object URL` من الـ console. **المتوقع:** `AccessDenied`. ده كويس: الـ bucket private.
+
+3. **اعمل لينك مؤقت** لمدة ٥ دقايق:
+
+```bash
+aws s3 presign s3://dukkan-images-<رقم>/products/bread.jpg --expires-in 300
+```
+
+افتح اللينك. **المتوقع:** الصورة تفتح. استنى ٥ دقايق وافتحه تاني: هيرفض.
+
+4. **فعّل versioning** وارفع نفس الملف تاني بصورة مختلفة. من `Show versions` هتلاقي النسختين.
+5. **اعمل lifecycle rule:** `Management` ← `Create lifecycle rule` ← prefix `invoices/` ← انقل لـ `Standard-IA` بعد ٣٠ يوم، و`Glacier Flexible Retrieval` بعد ١٨٠ يوم.
+
+🧹 **تنضيف:** فضّي الـ bucket (بكل الـ versions) وامسحه:
+
+```bash
+aws s3 rb s3://dukkan-images-<رقم> --force
+```
+
+لو الـ versioning مفعّل، `--force` ممكن مايمسحش الـ versions القديمة. امسحها من الـ console بـ `Empty`.
+
+## ⚖️ قارن: S3 ضد باقي التخزين
+
+| | S3 | EBS | EFS |
+| --- | --- | --- | --- |
+| النوع | object | block | file |
+| بتوصله إزاي | HTTP API | متركّب كهارد في instance | متركّب كفولدر في سيرفرات كتير |
+| الحجم | مفيش حد كلي | بتحجز حجم | بيكبر لوحده |
+| مناسب لـ | صور، فيديو، backups، data lake، static sites | OS وdatabase على EC2 | ملفات مشتركة |
+| بتعدّل جزء من الملف؟ | لأ، بترفع object كامل | أيوه | أيوه |
+
+<Box type="interview" title="أسئلة الـ storage classes">
+
+«access patterns unknown or changing» ← **Intelligent-Tiering**.
+«infrequently accessed but needs millisecond access» ← **Standard-IA** (أو Glacier Instant Retrieval لو أرشيف).
+«lowest cost, retrieval within hours is fine» ← **Glacier Deep Archive**.
+«can be recreated, single AZ is fine» ← **One Zone-IA**.
+
+</Box>
+
+<Checklist id="aws-cp-17" title="خلّصت الفصل لما" items={["تشرح bucket وobject وkey وإن اسم الـ bucket unique عالميًا", "تختار storage class من مرات القراية وسرعة الاسترجاع", "تعمل lifecycle rule تنقل وتمسح", "تعرف Block Public Access وversioning وpresigned URLs بيحموا من إيه", "تفرّق S3 عن EBS وEFS"]} />
 
 <Quiz>
-<Q n={1} q="هل `reports/a.pdf` folder وملف داخل filesystem؟">لأ؛ ده object key، والـ slash جزء من الاسم.</Q>
-<Q n={2} q="Object عمرها 180 يوم لازم تنتقل تلقائيًا للأرشيف؛ تستخدم إيه؟">S3 Lifecycle transition rule.</Q>
-<Q n={3} q="فعّلت CRR؛ هل ده يضمن RPO صفر واسترجاع أي حذف؟">لأ. replication لها زمن وسلوك إعداد، وقد تنقل تغييرات غير مرغوبة؛ صمم versioning وbackup/retention واختبر recovery.</Q>
+<Q n={1} q="شركة عايزة أرخص تخزين لـ backups بتتطلب مرة في السنة، ومش مشكلة تستنى ١٢ ساعة. أنهي class؟">**S3 Glacier Deep Archive**.</Q>
+<Q n={2} q="موظف مسح ملف مهم من S3 بالغلط. إيه الميزة اللي كانت هتنقذنا؟">**Versioning**، (ومعاها MFA Delete أو Object Lock لحماية أكبر).</Q>
+<Q n={3} q="عايز زبون يرفع صورة مباشرة لـ S3 لمدة ١٠ دقايق من غير ما تديله صلاحيات AWS. إزاي؟">**Presigned URL**.</Q>
+<Q n={4} q="مش عارف الملفات دي هتتقري قد إيه، وعايز التكلفة تتظبط لوحدها. أنهي class؟">**S3 Intelligent-Tiering**.</Q>
 </Quiz>

@@ -4,56 +4,139 @@ short: AI Services
 order: 34
 label: فصل ٣٤
 badge: Data وAI والهجرة · فصل ٣٤
-en: SageMaker AI · Bedrock · Amazon Q · Rekognition · Textract · Comprehend · Lex · Polly · Transcribe · Translate
-keywords: ML مخصص · Generative AI · مساعد · صورة · مستند · نص · Bot · صوت · ترجمة
-goal: تختار خدمة AI من نوع المدخل والمخرج، وتفرق Bedrock عن SageMaker AI.
+en: Amazon Bedrock · Amazon SageMaker AI · Amazon Q · Rekognition · Textract · Comprehend · Lex · Polly · Transcribe · Translate · Kendra · Personalize
+keywords: generative AI · ML مخصص · صورة · مستند · نص · صوت · ترجمة
+goal: تقسّم خدمات الـ AI لتلات مستويات (خدمة جاهزة، منصة generative AI، بناء model بنفسك)، وتختار الخدمة من نوع المدخل والمخرج.
 part: Data وAI والهجرة
 color: c4
 ---
 
-## Claims workflow في شركة تأمين
+## 🧠 افهم: عايز AI، بس قد إيه؟
 
-كل يوم بيوصل 12,000 claim: PDF وصور ومكالمة صوتية. المطلوب رد أولي خلال دقيقتين مع human review للقرارات الحساسة.
+دُكّان عنده أفكار AI:
 
-1. `Transcribe` يحول المكالمة من speech إلى text.
-2. `Textract` يستخرج fields وtables من الفاتورة.
-3. `Rekognition` يحلل صور الضرر.
-4. `Comprehend` يستخرج entities وsentiment من النص.
-5. تطبيق مبني على `Bedrock` يلخص الملف ويولد draft، مع Guardrails وRAG من policies.
-6. reviewer يوافق أو يعدل؛ `Polly` يقدر ينطق الرد، و`Translate` يغير اللغة.
+- يقرا **الفواتير الورق** من الموردين ويطلّع الأرقام.
+- يعرف **تقييمات الزباين** إيجابية ولا سلبية.
+- **chatbot** يرد على «طلبي فين؟» بكلام طبيعي.
+- **model** بيتوقع المنتجات اللي هتخلص الأسبوع الجاي من داتا دُكّان نفسها.
 
-نجاح الـ workflow يتقاس بالدقة والlatency والتكلفة ونسبة الحالات اللي احتاجت مراجعة، مش بمجرد إن model رجع إجابة. Low-confidence أو high-value claim لازم يتحول لإنسان.
+كل فكرة محتاجة مستوى مختلف من الشغل. مش محتاج تبني model عشان تقرا فاتورة، فيه خدمة جاهزة. بس عشان تتوقع مبيعات دُكّان بالذات ممكن تحتاج تبني.
 
-## Bedrock ولا SageMaker AI ولا Q؟
+<Hl c="u">٣ مستويات: خدمات AI جاهزة (API بتنادي عليه: صور، نصوص، صوت). Bedrock لبناء تطبيقات generative AI على foundation models جاهزة. SageMaker AI لبناء وتدريب ونشر models بنفسك.</Hl>
 
-`Amazon Bedrock` منصة fully managed لبناء generative AI apps باستخدام foundation models، مع Knowledge Bases وGuardrails وAgents وevaluation.
+<Box type="story" icon="🍰" title="عايز تورتة">
 
-`Amazon SageMaker AI`—الاسم الحالي للخدمة القديمة SageMaker قبل ديسمبر ٢٠٢٤—لبناء وتدريب وتخصيص ونشر ML models وإدارة lifecycle أعمق.
+- **خدمة AI جاهزة** = تشتري **تورتة جاهزة** من الحلواني. سريع وسهل، بس الطعم زي ما هو.
+- **Bedrock** = تشتري **عجينة ممتازة جاهزة** وتزوّد عليها الحشو والزينة اللي تعجبك (بياناتك، تعليماتك).
+- **SageMaker AI** = تعمل التورتة **من الدقيق والبيض**: تحكم كامل، وشغل ووقت أكتر.
 
-`Amazon Q` assistant جاهز للعمل؛ `Q Developer` يساعد فرق software وAWS. Q منتج للمستخدم، Bedrock منصة تبني فوقها منتج.
+</Box>
 
-- chatbot من foundation model من غير training infrastructure → Bedrock.
-- fraud model مخصص على labeled transactions وpipelines/endpoints → SageMaker AI.
-- assistant جاهز للمطورين → Amazon Q.
+## 👀 تخيّل: من نوع المدخل للخدمة
 
-## APIs متخصصة
+<Diagram
+  title="المدخل إيه؟ عايز تطلع بإيه؟"
+  height={400}
+  mheight={640}
+  nodes={[
+    { id: "img", t: "صورة / فيديو", c: 1, x: 90, y: 10, mx: 25, my: 5 },
+    { id: "doc", t: "مستند / فاتورة", c: 1, x: 90, y: 36, mx: 75, my: 5 },
+    { id: "txt", t: "نص", c: 1, x: 90, y: 63, mx: 25, my: 30 },
+    { id: "voice", t: "صوت", c: 1, x: 90, y: 90, mx: 75, my: 30 },
+    { id: "rek", t: "Rekognition", s: "وشوش، أشياء", c: 2, x: 30, y: 10, mx: 25, my: 60 },
+    { id: "tex", t: "Textract", s: "نص + جداول + forms", c: 3, x: 30, y: 36, mx: 75, my: 60 },
+    { id: "comp", t: "Comprehend / Translate", s: "مشاعر، ترجمة", c: 4, x: 30, y: 63, mx: 25, my: 90 },
+    { id: "tr", t: "Transcribe / Polly", s: "صوت ↔ نص", c: 5, x: 30, y: 90, mx: 75, my: 90 },
+  ]}
+  edges={[
+    { from: "img", to: "rek", c: 1 },
+    { from: "doc", to: "tex", c: 1 },
+    { from: "txt", to: "comp", c: 1 },
+    { from: "voice", to: "tr", c: 1 },
+  ]}
+/>
 
-`Rekognition` للصور والفيديو؛ `Textract` للمستندات والـ forms/tables؛ `Comprehend` لـ NLP؛ `Lex` لإدارة conversational bot؛ `Polly` text→speech؛ `Transcribe` speech→text؛ `Translate` لغة→لغة.
+## 🔍 من جوه: التلات مستويات
 
-صورة invoice: Textract لو المطلوب amount وtable، وRekognition لو المطلوب objects داخل الصورة. ممكن تستخدم الاتنين.
+### ١. خدمات AI جاهزة (مفيش ML محتاج تعرفه)
 
-## Tradeoffs إنتاجية
+| الخدمة | بتعمل إيه | مثال في دُكّان |
+| --- | --- | --- |
+| **Rekognition** | تحليل صور وفيديو: أشياء، وشوش، محتوى غير لائق، نص في صورة | تتأكد صورة المنتج مفيهاش محتوى ممنوع |
+| **Textract** | يطلّع نص **وجداول وforms** من مستندات ممسوحة | فواتير الموردين |
+| **Comprehend** | تحليل نص: مشاعر، كيانات (أسماء، أماكن)، مواضيع، PII | تقييمات الزباين |
+| **Translate** | ترجمة | وصف المنتجات بالإنجليزي |
+| **Transcribe** | **صوت ← نص** | مكالمات خدمة العملاء |
+| **Polly** | **نص ← صوت** | رسالة صوتية «طلبك في الطريق» |
+| **Lex** | chatbots بالصوت والنص (نفس تقنية Alexa) | بوت «طلبي فين؟» |
+| **Kendra** | بحث ذكي في مستندات الشركة | الموظفين يدوروا في السياسات |
+| **Personalize** | recommendations | «ممكن يعجبك كمان» |
 
-Foundation model أسرع في البداية، لكن لازم تختبر hallucination وprivacy وprompt injection والتكلفة per token. Custom model يدي تحكم أعلى لكنه يحتاج data وMLOps ومراقبة drift. API جاهزة تقلل الإدارة، لكنها مش مناسبة لكل domain أو قرار حساس.
+### ٢. Amazon Bedrock: generative AI
 
-## 🧪 Lab ورقي
+- منصة **fully managed** بتديك **foundation models** من Amazon وشركات تانية عن طريق API واحد، من غير ما تدير infrastructure.
+- **Knowledge Bases:** **RAG** = الـ model يجاوب من مستنداتك إنت (سياسة الاسترجاع مثلًا).
+- **Guardrails:** يمنع مواضيع، يفلتر محتوى، يخبّي PII.
+- **Agents:** الـ model ينفّذ خطوات ويكلم APIs (يدور على الطلب في الـ database).
+- داتاك **مش بتستخدم** في تدريب الـ models الأساسية (راجع الـ docs للتفاصيل).
 
-ارسم request فيه صوت ومستند وصورة. لكل خطوة اكتب input/output، latency budget من إجمالي 120 ثانية، confidence threshold، ومتى تعمل human escalation.
+### ٣. Amazon SageMaker AI: ابني بنفسك
 
-<Checklist id="aws-cp-34" title="خلّصت الفصل لما" items={["تفرق بين Bedrock وSageMaker AI وAmazon Q", "تختار Rekognition أو Textract من نوع الصورة", "تحفظ اتجاه Polly وTranscribe وتعرف دور Lex"]} />
+منصة لكل مراحل ML: تجهيز الداتا، **تدريب** models، tuning، **deploy** لـ endpoints، ومراقبة. مناسب لما المشكلة **خاصة بداتاك** ومفيش خدمة جاهزة (توقع مخزون دُكّان، كشف احتيال). (الاسم الحالي **SageMaker AI**، والاسم «SageMaker» لوحده بقى بيشير لمنصة data وAI أوسع.)
+
+### وAmazon Q؟
+
+**مساعد AI جاهز** للموظفين: **Q Business** يجاوب من بيانات الشركة وأنظمتها، و**Q Developer** يساعد المطورين في الكود وAWS. الفرق: Q **منتج تستخدمه**، Bedrock **منصة تبني عليها منتجك**. (المنتجات دي بتتطور بسرعة، راجع الـ docs.)
+
+## 🛠️ طبّق: افهم تقييمات الزباين
+
+⚠️ Comprehend وTranslate بيتحاسبوا بعدد الحروف، وفي Free Tier للحسابات الجديدة. جملتين للتجربة تكلفتها شبه صفر.
+
+1. **حلّل مشاعر تقييم:**
+
+```bash
+aws comprehend detect-sentiment --language-code ar \
+  --text "التوصيل اتأخر ساعتين والعيش وصل بارد"
+```
+
+**المتوقع:** `"Sentiment": "NEGATIVE"` ومعاه نسب لكل نوع.
+
+2. **جرّب تقييم إيجابي:** `"الجبنة طازة والمندوب محترم جدًا"`. **المتوقع:** `POSITIVE`.
+3. **ترجم وصف منتج:**
+
+```bash
+aws translate translate-text --source-language-code ar --target-language-code en \
+  --text "عيش بلدي طازة من الفرن كل يوم الصبح"
+```
+
+4. **فكّر في الـ chatbot:** عم حسن عايز بوت يجاوب أسئلة عن سياسة الاسترجاع **من ملف PDF بتاعه**. خدمة جاهزة؟ Bedrock؟ SageMaker؟ (**Bedrock + Knowledge Base**: model جاهز، بيجاوب من مستنداتك، من غير تدريب.)
+5. **وتوقع المخزون؟** مفيش API جاهز يعرف دُكّان. محتاج model متدرب على داتا دُكّان ← **SageMaker AI**.
+
+🧹 مفيش موارد اتعملت.
+
+## ⚖️ قارن: التلاتة الكبار
+
+| | خدمات AI جاهزة | Amazon Bedrock | Amazon SageMaker AI |
+| --- | --- | --- | --- |
+| بتعمل إيه | مهمة واحدة محددة بـ API | تطبيقات generative AI على foundation models | تبني وتدرّب وتنشر models |
+| محتاج خبرة ML؟ | لأ | قليل | **أيوه** |
+| بتدرّب model؟ | لأ | لأ (ممكن تخصيص) | **أيوه** |
+| مثال | Textract للفواتير | chatbot من مستنداتك | توقع مبيعات دُكّان |
+
+| بيتلخبطوا | الفرق |
+| --- | --- |
+| Polly ↔ Transcribe | **Polly** = نص ← **صوت** (بيتكلم). **Transcribe** = صوت ← **نص** (بيكتب) |
+| Textract ↔ Rekognition | **Textract** = مستندات وجداول وforms. **Rekognition** = صور عامة (وشوش وأشياء) |
+| Comprehend ↔ Kendra | **Comprehend** = يحلل النص. **Kendra** = يبحث في المستندات |
+| Lex ↔ Bedrock | **Lex** = بوت بـ intents محددة. **Bedrock** = generative AI أوسع (وممكن مع بعض) |
+| Bedrock ↔ Amazon Q | **Bedrock** = منصة تبني عليها. **Q** = مساعد جاهز تستخدمه |
+
+<Checklist id="aws-cp-34" title="خلّصت الفصل لما" items={["تقسّم خدمات AI لتلات مستويات وتختار المستوى", "تطابق كل خدمة جاهزة مع نوع المدخل", "تفرّق Polly عن Transcribe وTextract عن Rekognition", "تفرّق Bedrock عن SageMaker AI عن Amazon Q", "تعرف RAG وGuardrails في Bedrock"]} />
 
 <Quiz>
-<Q n={1} q="Foundation model مُدار لتطبيق generative AI؟">Amazon Bedrock.</Q>
-<Q n={2} q="Scan لفاتورة وعايز الجداول والخانات؟">Textract.</Q>
-<Q n={3} q="النص داخل والصوت خارج؟">Polly؛ Transcribe يعمل العكس.</Q>
+<Q n={1} q="عايز تطلّع جداول وبيانات forms من فواتير ممسوحة ضوئيًا. أنهي خدمة؟">**Amazon Textract**.</Q>
+<Q n={2} q="عايز تحوّل تسجيلات مكالمات لنص. أنهي خدمة؟">**Amazon Transcribe**.</Q>
+<Q n={3} q="عايز تبني chatbot بـ generative AI يجاوب من مستندات الشركة من غير ما تدرّب model. أنهي خدمة؟">**Amazon Bedrock** (مع Knowledge Bases).</Q>
+<Q n={4} q="data scientists عايزين يدرّبوا model مخصص على داتا الشركة وينشروه. أنهي خدمة؟">**Amazon SageMaker AI**.</Q>
+<Q n={5} q="عايز تحلل مشاعر آلاف تقييمات العملاء. أنهي خدمة؟">**Amazon Comprehend**.</Q>
 </Quiz>

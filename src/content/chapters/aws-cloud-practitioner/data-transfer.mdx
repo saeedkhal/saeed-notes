@@ -1,55 +1,135 @@
 ---
 title: نقل الـ Databases والملفات والـ Hybrid Storage
-short: Data Transfer
+short: نقل الداتا
 order: 36
 label: فصل ٣٦
 badge: Data وAI والهجرة · فصل ٣٦
-en: DMS · DMS Schema Conversion · SCT · DataSync · Transfer Family · Storage Gateway · Snow Family
-keywords: Database · Schema · Online files · SFTP · Hybrid · Offline device
-goal: تختار أداة النقل من نوع الداتا والبروتوكول والاتصال، وتعرف الخدمات القديمة.
+en: AWS DMS · DMS Schema Conversion · SCT · CDC · AWS DataSync · AWS Transfer Family · AWS Snow Family · AWS Data Transfer Terminal
+keywords: database · schema · online · SFTP · offline
+goal: تختار أداة نقل الداتا من نوعها (database ولا ملفات)، وطريقتها (online ولا offline)، وتحسب إمتى الشبكة متكفيش.
 part: Data وAI والهجرة
 color: c1
 ---
 
-## نقل data platform من غير downtime طويل
+## 🧠 افهم: الداتا تقيلة
 
-المؤسسة عندها Oracle 12 TB، NAS حجمه 300 TB، partner يبعت SFTP يوميًا، وbackup application محتاج tape interface.
+خطة نقل «الأمانة» من الفصل اللي فات فيها ٣ أنواع داتا:
 
-1. `DMS Schema Conversion` يقيّم Oracle schema ويحول المدعوم لـ Aurora PostgreSQL.
-2. الفريق يصلح procedures غير المدعومة ويعمل tests.
-3. `DMS` يعمل full load ثم CDC؛ lag ينزل من 40 دقيقة لأقل من دقيقتين.
-4. `DataSync` ينقل NAS إلى S3 على waves ويتحقق من النقل.
-5. `Transfer Family` يوفر SFTP endpoint للـ partner من غير تغيير برنامجه.
-6. `Tape Gateway` يحافظ على virtual tape workflow.
+1. **database Oracle** فيها ١٠ سنين حسابات، وبتتكتب كل ثانية. مينفعش نقفل السوبر ماركت يومين عشان ننقلها.
+2. **٥٠ TB ملفات** (صور، فواتير ممسوحة) على file server.
+3. **موردين** بيبعتوا ملفات أسعار كل يوم بـ **SFTP**، ومش هيغيّروا طريقتهم.
 
-## Database: data غير schema
+كل نوع ليه أداة. والسؤال الأول دايمًا: **هل الشبكة تكفي؟**
 
-`DMS` ينقل ويكرر rows بين مصادر وtargets مدعومة، one-time أو CDC. `DMS Schema Conversion` يحول schema والكود المدعوم؛ و`SCT` اسم أقدم قد يظهر في CLF-C02.
+<Hl c="b">DMS بينقل databases وهي شغالة. DataSync بينقل ملفات على الشبكة بسرعة. Transfer Family بيستقبل SFTP/FTP ويحط في S3. ولو الشبكة مش كفاية، النقل بيبقى offline بأجهزة.</Hl>
 
-Cutover الساعة 02:00 ينجح لو CDC lag صفر، row counts/checksums مقبولة، والتطبيق يكتب على target. لو rows اتنقلت لكن stored procedure حرجة فشلت، migration فشلت وظيفيًا.
+<Box type="story" icon="🚛" title="نقل محل وهو فاتح">
 
-## Files والبروتوكول والـ hybrid
+- **DMS** = إنك تنقل البضاعة للمحل الجديد **والمحل القديم لسه بيبيع**: تنقل الأساس الأول، وكل حاجة بتتباع أو تتضاف بتتسجل وتتنقل وراها، ولما الاتنين يبقوا متطابقين تقفل القديم في دقايق.
+- **DataSync** = **عربية نقل** سريعة ومنظمة بتنقل الكراتين على الطريق وتتأكد إن كل كرتونة وصلت سليمة.
+- **Snow / الأجهزة** = لما البضاعة كتيرة جدًا والطريق ضيق، **تملا شاحنة** وتبعتها بدل ألف مشوار.
 
-- `DataSync`: bulk أو scheduled online transfer لـ file/object data بين on-prem وAWS أو خدمات مدعومة.
-- `Transfer Family`: endpoints مُدارة لـ SFTP/FTPS/FTP إلى S3 أو EFS.
-- `Storage Gateway`: integration مستمر؛ S3 File Gateway، FSx File Gateway، Volume Gateway، Tape Gateway.
+</Box>
 
-DataSync مشروع copy/sync؛ Storage Gateway interface مستمرة مع cache محلي؛ Transfer Family يحافظ على بروتوكول شريك.
+## 👀 تخيّل: نقل الـ database وهي شغالة
 
-## لما الشبكة متكفيش
+<Diagram
+  title="full load وبعدين CDC لحد الـ cutover"
+  height={320}
+  mheight={540}
+  nodes={[
+    { id: "src", t: "Oracle القديمة", s: "لسه شغالة", c: 1, x: 90, y: 50, mx: 50, my: 6 },
+    { id: "sc", t: "Schema Conversion", s: "Oracle → PostgreSQL", c: 2, x: 62, y: 15, mx: 50, my: 32 },
+    { id: "dms", t: "AWS DMS", s: "full load + CDC", c: 3, x: 62, y: 85, mx: 50, my: 58 },
+    { id: "tgt", t: "Aurora PostgreSQL", s: "الجديدة", c: 4, x: 12, y: 50, mx: 50, my: 92 },
+  ]}
+  edges={[
+    { from: "src", to: "sc", t: "١. حوّل الـ schema", c: 2 },
+    { from: "sc", to: "tgt", c: 2 },
+    { from: "src", to: "dms", t: "٢. انسخ الصفوف", c: 3 },
+    { from: "dms", to: "tgt", t: "٣. كمّل التغييرات", c: 3 },
+  ]}
+/>
 
-300 TB على وصلة فعلية 1 Gbps تحتاج نظريًا حوالي 28 يوم نقل متواصل قبل overhead، فممكن physical transfer يبقى أنسب.
+1. **حوّل الـ schema:** الجداول والـ procedures من Oracle لـ PostgreSQL (DMS Schema Conversion أو SCT). ده بس لو الـ engine هيتغير.
+2. **Full load:** DMS ينسخ كل الصفوف الموجودة.
+3. **CDC (Change Data Capture):** DMS يفضل ينقل كل insert وupdate بيحصل في القديمة وهي شغالة.
+4. **Cutover:** لما الاتنين متطابقين، توجّه التطبيق للجديدة. الـ downtime دقايق.
 
-في **أكتوبر ٢٠٢٦**، Snow Family غير متاح لعملاء commercial جدد، ودعم Snowball في commercial Regions مقرر ينتهي **٣١ ديسمبر ٢٠٢٦**. الاتجاه الحالي `AWS Data Transfer Terminal` وحلول partners حسب البلد والسعة. الامتحان المنشور قد يسأل Snow Family تاريخيًا، فاعرف الغرض والـ caveat.
+### والملفات: الشبكة تكفي؟
 
-## 🧪 Lab ورقي
+| الحجم | على 100 Mbps | على 1 Gbps |
+| --- | --- | --- |
+| 1 TB | حوالي يوم | حوالي ٢-٣ ساعات |
+| 50 TB | حوالي ٤٥ يوم | حوالي ٥ أيام |
+| 500 TB | سنة+ | حوالي ٤٥ يوم |
 
-احسب زمن 50 TB على 500 Mbps، ثم اختار DMS أو DataSync أو Transfer Family أو Gateway لكل requirement، واكتب validation وrollback.
+(تقريب بفرض إن الخط مستخدم بالكامل، والواقع غالبًا أبطأ.)
 
-<Checklist id="aws-cp-36" title="خلّصت الفصل لما" items={["تفرق بين نقل data وتحويل schema", "تختار DataSync أو Transfer Family من البروتوكول", "تفهم Storage Gateway كحل hybrid", "تذكر caveat Snow Family في ٢٠٢٦"]} />
+## 🔍 من جوه: كل أداة
+
+### AWS DMS (Database Migration Service)
+
+- بينقل داتا بين databases (و S3 وغيرها) **والـ source شغالة**.
+- **Homogeneous** (MySQL ← MySQL): DMS لوحده (أو أدوات الـ engine نفسه).
+- **Heterogeneous** (Oracle ← PostgreSQL): محتاج تحويل الـ schema الأول بـ **DMS Schema Conversion** (أو **AWS SCT**، الأداة الأقدم اللي ممكن تظهر في الأسئلة).
+- ممكن يفضل شغال للـ **replication المستمر** مش للهجرة بس.
+
+### AWS DataSync
+
+- نقل **ملفات online** من NFS/SMB/HDFS/object storage لـ S3 أو EFS أو FSx (وبين خدمات AWS).
+- أسرع بكتير من scripts بإيدك، بيتحقق من سلامة الملفات، وبيجدول، وبيشفّر.
+- محتاج **agent** في الـ data center للمصادر اللي عندك.
+
+### AWS Transfer Family
+
+server مُدار لـ **SFTP وFTPS وFTP وAS2**، والملفات بتتحفظ في **S3 أو EFS**. الموردين بيكملوا بنفس طريقتهم، وإنت مش بتدير سيرفر.
+
+### النقل offline
+
+**AWS Snow Family** (Snowball Edge) كانت الأجهزة اللي AWS بتبعتهالك تملاها وترجّعها. **انتبه:** Snow Family **مش متاحة لعملاء commercial جدد**، ودعم Snowball في الـ commercial Regions مقرر ينتهي **٣١ ديسمبر ٢٠٢٦**. البديل الحالي **AWS Data Transfer Terminal** (أماكن فعلية تروح لها بأجهزتك وترفع بسرعة عالية) وحلول الشركاء. الامتحان ممكن يسأل عن Snow Family بالاسم، فاعرف **فكرتها**: «داتا ضخمة + شبكة ضعيفة أو مفيش = جهاز».
+
+### والـ hybrid الدائم؟
+
+لو مش «نقل مرة واحدة» لكن برامج محلية لازم تفضل تكتب على AWS: **Storage Gateway** (فصل ١٨).
+
+## 🛠️ طبّق: خطة نقل داتا «الأمانة»
+
+الـ Lab ورقي. الشركة عندها خط **200 Mbps**.
+
+| الداتا | الأداة | السبب |
+| --- | --- | --- |
+| Oracle حسابات ← Aurora PostgreSQL | **DMS Schema Conversion** ثم **DMS** (full load + CDC) | engine مختلف، والسوبر ماركت مش هيقفل |
+| MySQL الموقع ← RDS MySQL | **DMS** (أو native dump/replication) | نفس الـ engine |
+| ٥٠ TB صور وفواتير | **DataSync** على أكتر من أسبوع، أو **Data Transfer Terminal** لو مستعجلين | احسب: 50 TB على 200 Mbps ≈ ٢٣ يوم في أحسن الأحوال |
+| ملفات أسعار من الموردين بـ SFTP | **Transfer Family** ← S3 | الموردين مش هيغيروا |
+| برنامج backup قديم لازم يكمل | **Storage Gateway** (Tape) | hybrid دائم مش نقل |
+
+**احسب بنفسك:** 50 TB = 400,000,000 Mb. على 200 Mbps = 2,000,000 ثانية ≈ **٢٣ يوم** لو الخط فاضي للنقل بس. هل الشركة تستحمل ده؟ لو لأ، حل offline.
+
+## ⚖️ قارن: اختار من نوع الداتا وطريقتها
+
+| | DMS | DataSync | Transfer Family | Storage Gateway | Data Transfer Terminal / Snow |
+| --- | --- | --- | --- | --- | --- |
+| بينقل | **databases** | **ملفات** | ملفات من شركاء | ملفات/volumes/tapes | أحجام ضخمة |
+| online؟ | أيوه | أيوه | أيوه | أيوه | **offline / فعلي** |
+| مرة ولا دايم؟ | الاتنين (CDC) | مرة أو مجدول | دايم | **دايم (hybrid)** | مرة |
+| protocol | database engines | NFS، SMB، HDFS، S3 | SFTP، FTPS، FTP، AS2 | NFS، SMB، iSCSI | أجهزة |
+
+<Box type="interview" title="كلمات بتحسم">
+
+«migrate database with minimal downtime» ← **DMS**. «different database engine» ← **Schema Conversion / SCT** + DMS.
+«move files online quickly from on-premises NFS/SMB» ← **DataSync**.
+«SFTP into S3» ← **Transfer Family**.
+«petabytes»، «limited bandwidth»، «offline» ← **Snow Family** (فكرة تاريخية) / Data Transfer Terminal.
+
+</Box>
+
+<Checklist id="aws-cp-36" title="خلّصت الفصل لما" items={["تشرح full load وCDC والـ cutover", "تفرّق نقل الداتا (DMS) عن تحويل الـ schema", "تختار DataSync أو Transfer Family من البروتوكول", "تحسب وقت نقل حجم على سرعة خط", "تعرف وضع Snow Family في ٢٠٢٦ والبديل"]} />
 
 <Quiz>
-<Q n={1} q="Oracle إلى Aurora PostgreSQL مع downtime قليل؟">DMS للبيانات وCDC، وDMS Schema Conversion أو SCT للـ schema.</Q>
-<Q n={2} q="Partner لازم يفضل يبعت SFTP؟">AWS Transfer Family.</Q>
-<Q n={3} q="File share محلي مستمر يمتد لـ S3؟">S3 File Gateway.</Q>
+<Q n={1} q="نقل database من Oracle لـ Aurora PostgreSQL والسيستم شغال. إيه الأدوات؟">**DMS Schema Conversion** (أو SCT) للـ schema، و**DMS** للداتا مع CDC.</Q>
+<Q n={2} q="نقل ٢٠ TB من NAS بـ NFS لـ S3 على الشبكة بأسرع طريقة مُدارة. أنهي خدمة؟">**AWS DataSync**.</Q>
+<Q n={3} q="شركاء بيرفعوا ملفات بـ SFTP، وعايزها تتحط في S3 من غير ما تدير سيرفر. أنهي خدمة؟">**AWS Transfer Family**.</Q>
+<Q n={4} q="ليه DMS بيقلل الـ downtime؟">لأنه بيعمل **CDC**: بينقل التغييرات والـ source لسه شغالة، فالـ cutover بياخد دقايق.</Q>
 </Quiz>

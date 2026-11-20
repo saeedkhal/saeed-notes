@@ -4,97 +4,127 @@ short: Database Chooser
 order: 21
 label: فصل ٢١
 badge: Storage وDatabases · فصل ٢١
-en: SQL · NoSQL · cache · graph · warehouse · access patterns
-keywords: decision tree · RDS · DynamoDB · ElastiCache · Neptune · Redshift
-goal: تحول متطلبات production وأرقامها لقرار database موثّق وقابل للاختبار.
+en: purpose-built databases · access patterns · relational vs NoSQL · managed vs self-managed · Redshift
+keywords: شكل الداتا · شكل السؤال · consistency · scale
+goal: تختار database من أربع أسئلة عن الداتا وطريقة استخدامها، مش من الاسم المشهور، وتفرّق الـ database اللي بتشغّل التطبيق عن الـ warehouse اللي بيحلل.
 part: Storage وDatabases
 color: c1
 ---
 
-## المثال الأول: منصة e-commerce واحدة، خمس احتياجات
+## 🧠 افهم: السؤال مش «أنهي أحسن؟»
 
-المنصة تعالج `600 order/s`، عندها `10 مليون` session، catalog مرن، fraud graph، وتقارير على `4 سنين`. اختيار database واحدة لكل ده ممكن ينجح في البداية، لكنه غالبًا يفرض tradeoffs غير لازمة.
+سارة سألت: «نستخدم PostgreSQL ولا DynamoDB؟». السؤال ده ملوش إجابة لوحده. الإجابة بتيجي من **شكل الداتا** و**شكل الأسئلة** اللي هتسألها.
 
-ابدأ بورقة requirements:
+نفس الفكرة زي ما بتختار مكان تخزين في البيت: التلاجة للأكل، والدولاب للهدوم، والمكتبة للكتب. محدش بيسأل «التلاجة أحسن ولا الدولاب؟».
 
-1. أهم reads/writes وشكل المفاتيح؟
-2. هل transaction وconstraints وjoins لازمة؟
-3. `p95` latency والـ throughput كام؟
-4. هل stale read لمدة `30 ثانية` مقبولة؟
-5. RTO وRPO والـ Region requirements؟
-6. تكلفة التشغيل وخبرة الفريق؟
+<Hl c="o">اختار الـ database من ٤ أسئلة: الداتا شكلها إيه؟ هتسألها إزاي؟ محتاج سرعة وscale قد إيه؟ وعايز تدير قد إيه؟</Hl>
 
-## Request-by-request decision
+<Box type="story" icon="🧰" title="عدّة الصنايعي">
 
-<Flow items={[
-  { t: "Order transaction", s: "RDS / Aurora", c: 1 }, "→",
-  { t: "Session by key", s: "DynamoDB", c: 2 }, "→",
-  { t: "Hot catalog", s: "ElastiCache", c: 3 }, "→",
-  { t: "Fraud traversal", s: "Neptune", c: 4 }, "→",
-  { t: "Historical BI", s: "Redshift", c: 5 },
-]} />
-
-`DocumentDB` يدخل التقييم لما documents واستعلام حقول مرنة هي الأساس، بعد اختبار compatibility. الحجم وحده لا يختار SQL أو NoSQL.
-
-## مقارنة واضحة
-
-<Grid2>
-<Card title="RDS / Aurora" c={1}>
-
-Orders وpayments بعلاقات وACID transactions. النجاح: اتساق وconstraints. المقابل: schema وإدارة connections وscaling pattern.
-
-</Card>
-<Card title="DynamoDB" c={2}>
-
-Session lookup بمفتاح معروف وtraffic متغير. النجاح: latency منخفضة على scale. المقابل: model مبني حول access patterns وقيود joins.
-
-</Card>
-</Grid2>
-
-<Grid2>
-<Card title="ElastiCache" c={3}>
-
-Catalog hot reads من `150 ms` إلى `15 ms`. المقابل: invalidation وstale data وfallback عند miss.
-
-</Card>
-<Card title="Neptune / Redshift" c={4}>
-
-Neptune للعلاقات العميقة؛ Redshift للـ OLAP. ولا واحد مسار افتراضي لكتابة checkout.
-
-</Card>
-</Grid2>
-
-## Timeline لقرار سيئ
-
-- `10:00`: الفريق يحط checkout events في Redshift لأن التقارير موجودة هناك.
-- `10:15`: ingestion latency توصل `90 ثانية`، والعميل مش شايف order فورًا.
-- `10:20`: retries تعمل duplicate records لأن مسار OLAP مش مصمم كـ transaction API.
-- النتيجة: التقارير نجحت لكن تجربة التشغيل فشلت. الحل فصل OLTP source عن analytics pipeline.
-
-## Polyglot له ثمن
-
-كل service جديدة تضيف IAM وnetworking وbackup وmonitoring وon-call skill. ابدأ بأقل عدد يحقق الـ SLA، وافصل لما benchmark أو failure requirement يثبت الاحتياج.
-
-<Hl c="y">قرار قوي يذكر access pattern ورقم SLA وسبب رفض البديل، مش اسم خدمة مشهور.</Hl>
-
-<Box type="warn" title="احسب التكلفة الكاملة">
-
-قارن compute/capacity وstorage وI/O وrequests والـ backups والـ transfer والحد الأدنى للتشغيل. Serverless لا تعني مجانية.
+الصنايعي الشاطر مش معاه «أحسن مفك». معاه عدّة: مفك صليبة ومفك عادة وشاكوش ومنشار. وبيبص على **المسمار** الأول وبعدين يختار. الـ databases المتخصصة هي العدّة، وأسئلة الفصل ده هي إنك تبص على المسمار.
 
 </Box>
 
-## 🧪 تمرين: Architecture review
+## 👀 تخيّل: شجرة القرار
 
-SaaS عندها: invoices تحتاج transaction، tenant settings تُقرأ بالمفتاح `30,000 مرة/ثانية`، dashboard تقبل تأخير `15 دقيقة`، وcache failure لازم ما يوقفش checkout. اكتب لكل workload خدمة، source of truth، consistency، RTO/RPO، وبديل مرفوض. بعدين احذف أي خدمة لا يدعمها requirement رقمي.
+<Diagram
+  title="من السؤال للـ database"
+  height={380}
+  mheight={620}
+  nodes={[
+    { id: "q", t: "الداتا شكلها إيه؟", c: 1, x: 90, y: 50, mx: 50, my: 5 },
+    { id: "rel", t: "جداول وعلاقات وjoins", s: "معاملات مالية", c: 2, x: 62, y: 12, mx: 25, my: 30 },
+    { id: "kv", t: "مفتاح ← قيمة", s: "ملايين طلبات بسيطة", c: 3, x: 62, y: 50, mx: 75, my: 30 },
+    { id: "ana", t: "تحليل تاريخي ضخم", s: "SUM وGROUP BY", c: 4, x: 62, y: 88, mx: 50, my: 58 },
+    { id: "rds", t: "RDS / Aurora", c: 2, x: 15, y: 12, mx: 25, my: 50 },
+    { id: "ddb", t: "DynamoDB", c: 3, x: 15, y: 50, mx: 75, my: 50 },
+    { id: "rs", t: "Redshift", s: "data warehouse", c: 5, x: 15, y: 88, mx: 50, my: 82 },
+  ]}
+  edges={[
+    { from: "q", to: "rel", c: 1 },
+    { from: "q", to: "kv", c: 1 },
+    { from: "q", to: "ana", c: 1 },
+    { from: "rel", to: "rds", c: 2 },
+    { from: "kv", to: "ddb", c: 3 },
+    { from: "ana", to: "rs", c: 4 },
+  ]}
+/>
 
-## قالب القرار
+## 🔍 من جوه: الأربع أسئلة
 
-«هنختار **الخدمة** لأن access pattern هو **النمط** عند **الحجم/latency**، ونحتاج **recovery**. رفضنا **البديل** لأن **tradeoff قابل للقياس**».
+### ١. الداتا شكلها إيه؟
 
-<Checklist id="aws-cp-21" title="خلّصت الفصل لما" items={["تبدأ من access patterns وأرقام SLA", "تختار SQL للعلاقات والـ transactions", "تختار DynamoDB للـ key access المصمم صح", "تفصل cache وgraph وwarehouse عن OLTP", "تكتب قرار فيه تكلفة وrecovery وبديل مرفوض"]} />
+- جداول بعلاقات ثابتة (عميل ← طلبات ← أصناف) → **relational**.
+- items مستقلة بتتجاب بالمفتاح → **key-value** (DynamoDB).
+- documents شكلها بيختلف (JSON) → **document** (DocumentDB أو DynamoDB).
+- علاقات هي الأساس (مين يعرف مين) → **graph** (Neptune).
+- قيم بوقت (حرارة كل دقيقة) → **time series** (Timestream).
+
+### ٢. هتسألها إزاي؟
+
+- أسئلة **معروفة مسبقًا** وبسيطة بالمفتاح → DynamoDB ممتاز.
+- أسئلة **متغيرة** وjoins وfilters كتير → SQL.
+- تجميع على ملايين الصفوف التاريخية (OLAP) → **data warehouse** زي Redshift، مش database التطبيق.
+
+### ٣. السرعة والـ scale
+
+- مللي ثواني لأي حجم → DynamoDB.
+- microseconds للقراية → cache (ElastiCache أو DAX).
+- ACID transactions قوية على داتا مترابطة → RDS/Aurora (وDynamoDB بيدعم transactions بحدود).
+
+### ٤. عايز تدير قد إيه؟
+
+| المستوى | المثال |
+| --- | --- |
+| كل حاجة عليك | database على EC2 |
+| managed (إنت بتختار الحجم) | RDS، ElastiCache، DocumentDB |
+| serverless (مفيش حجم تختاره) | DynamoDB، Aurora Serverless v2 |
+
+<Box type="tip" title="OLTP ولا OLAP؟">
+
+**OLTP** = عمليات التطبيق اليومية: «سجّل طلب»، «هات سلة». كتير وصغيرة وسريعة → RDS/DynamoDB.
+**OLAP** = تحليل: «إجمالي المبيعات لكل محافظة في ٣ سنين». قليلة وتقيلة → **Redshift** (فصل ٣٣).
+
+</Box>
+
+## 🛠️ طبّق: اختار لكل جزء في دُكّان
+
+الـ Lab ورقي. غطّي العمود التالت وحاول تجاوب لوحدك:
+
+| الجزء | السؤال المهم | الاختيار |
+| --- | --- | --- |
+| الطلبات والفواتير | معاملات مالية وjoins | **Aurora PostgreSQL** (أو RDS) |
+| سلة الزبون | هات بالـ customerId، ملايين المرات | **DynamoDB** + TTL |
+| أكتر المنتجات مشاهدة | قراية كتير جدًا، ينفع تبقى قديمة دقيقة | **ElastiCache** |
+| «اشتروا كمان…» | علاقات | **Neptune** |
+| حساسات حرارة التلاجات | قيمة كل دقيقة بوقتها | **Timestream** |
+| البحث «جبنة رومي» | بحث نصي | **OpenSearch Service** |
+| تقرير ٣ سنين مبيعات | تجميع تاريخي ضخم | **Redshift** |
+| برنامج قديم محتاج Oracle بإعدادات OS خاصة | تحكم كامل | **EC2** (أو RDS Custom) |
+
+**تحدّي:** عم حسن قال «مش عايز ٨ databases، الفريق صغير». إيه أقل عدد يكفي البداية؟ غالبًا: **Aurora** للطلبات + **DynamoDB** للسلة، وباقي الحاجات تستنى لما تبقى مشكلة حقيقية. التعقيد ليه تمن.
+
+## ⚖️ قارن: الجدول الكبير
+
+| الخدمة | النوع | الكلمة المفتاحية في السؤال |
+| --- | --- | --- |
+| RDS | relational managed | SQL، MySQL/PostgreSQL/Oracle/SQL Server، managed |
+| Aurora | relational cloud-native | MySQL/PostgreSQL compatible، high performance، ٦ نسخ |
+| DynamoDB | key-value / document | serverless NoSQL، single-digit ms، any scale |
+| ElastiCache | in-memory cache | caching، Redis/Valkey/Memcached، microseconds |
+| MemoryDB | in-memory durable | Redis compatible + durable primary database |
+| DocumentDB | document | MongoDB compatible |
+| Neptune | graph | relationships، social، fraud، recommendations |
+| Keyspaces | wide-column | Apache Cassandra compatible |
+| Timestream | time series | IoT، metrics بوقت |
+| OpenSearch Service | search & analytics | full-text search، log analytics |
+| Redshift | data warehouse | OLAP، analytics، petabyte، BI |
+
+<Checklist id="aws-cp-21" title="خلّصت الفصل لما" items={["تسأل الأربع أسئلة قبل ما تختار database", "تفرّق OLTP عن OLAP وتعرف إن Redshift للتحليل", "تختار database لكل جزء من سيستم بسبب", "تحفظ الكلمة المفتاحية لكل خدمة في الجدول", "تعرف إن كتر الـ databases تعقيد ليه تمن"]} />
 
 <Quiz>
-<Q n={1} q="Order وpayment لازم ينجحوا أو يفشلوا مع بعض؛ نقطة البداية؟">RDS أو Aurora بمحرك relational مناسب بسبب transaction والاتساق.</Q>
-<Q n={2} q="Dashboard تقبل data متأخرة 15 دقيقة؛ هل لازم تضغط OLTP؟">لأ؛ pipeline إلى Redshift ممكن تفصل analytics عن قاعدة التشغيل.</Q>
-<Q n={3} q="إيه أول معلومة قبل DynamoDB؟">الـ access patterns والمفاتيح مع الحجم والـ latency المطلوبة.</Q>
+<Q n={1} q="شركة عايزة تحلل ٥ سنين مبيعات بـ SQL وتعمل dashboards. أنهي خدمة؟">**Amazon Redshift**.</Q>
+<Q n={2} q="تطبيق MongoDB عايز ينقل لخدمة مُدارة متوافقة. أنهي خدمة؟">**Amazon DocumentDB**.</Q>
+<Q n={3} q="نظام بنكي محتاج transactions وjoins معقدة على جداول مترابطة. البداية المنطقية؟">**Amazon RDS** أو **Aurora** (relational).</Q>
+<Q n={4} q="قراءات حساسات كل ثانية من ١٠ آلاف جهاز، والتحليل بالوقت. أنهي database؟">**Amazon Timestream**.</Q>
 </Quiz>

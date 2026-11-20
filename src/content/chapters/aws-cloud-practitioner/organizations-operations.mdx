@@ -1,74 +1,166 @@
 ---
 title: إدارة الحسابات والتشغيل من مكان واحد
-short: Organizations والتشغيل
+short: Organizations وOperations
 order: 32
 label: فصل ٣٢
 badge: التشغيل والحوكمة · فصل ٣٢
-en: Organizations · OUs · SCPs · Control Tower · Systems Manager · AWS Health · Trusted Advisor · Service Quotas
-keywords: multi-account · guardrails · operations · health · quotas
-goal: تفرق بين حوكمة الحسابات وتشغيل الموارد ونصائح AWS وحدود الخدمات.
+en: AWS Organizations · OUs · SCPs · AWS Control Tower · AWS CloudFormation · AWS CDK · AWS Systems Manager · AWS Trusted Advisor · Service Quotas · Service Catalog
+keywords: multi-account · guardrails · infrastructure as code · operations · quotas
+goal: تفهم ليه الشركات بتقسم شغلها على حسابات كتير، وإزاي Organizations وSCPs بيحطوا حدود، وإزاي CloudFormation بيبني البنية من كود، وSystems Manager بيدير السيرفرات من غير SSH.
 part: التشغيل والحوكمة
 color: c2
 ---
 
-## Enterprise عندها 60 account
+## 🧠 افهم: حساب واحد مبقاش كفاية
 
-الشركة قسمت البيئة إلى `Security`, `Infrastructure`, `Production`, و`Sandbox` OUs. قبل product launch اكتشفوا إن فريق sandbox أنشأ موارد في Region غير معتمدة، وproduction قربت من EC2 quota.
+دُكّان كبر وبقى عنده فريق تطوير وفريق بيانات. وكلهم شغالين في **حساب AWS واحد**. النتيجة:
 
-1. `AWS Organizations` جمع الحسابات والـ billing.
-2. SCP على Sandbox منع Regions غير المعتمدة.
-3. IAM role داخل account سمح للمطور بـ EC2، لكن الـ SCP منع action خارج النطاق.
-4. `Control Tower` وفّر landing zone وcontrols وaccount provisioning.
-5. `Service Quotas` كشف إن الحد 500 instance والفريق محتاج 650.
-6. `Systems Manager` نفّذ patch wave على 300 node بدل SSH يدوي.
-7. `AWS Health` نبّه عن maintenance لمورد محدد.
+- مطور مسح database الـ production وهو فاكرها test.
+- مش عارفين فاتورة التجارب قد إيه وفاتورة الـ production قد إيه.
+- كل بيئة جديدة بتتعمل بالإيد في الـ console، ومحدش فاكر عمل إيه.
 
-## Organizations وSCP
+الحل: **حسابات منفصلة** لكل بيئة (dev، staging، prod)، و**مكان واحد** يحط عليهم قواعد ويجمع فواتيرهم، و**كود** بيبني البنية بدل الضغط بالماوس.
 
-`Organizations` تدير accounts وOUs وسياسات وconsolidated billing. الـ `SCP` يحدد أقصى permissions المتاحة؛ **لا يمنح permission**.
+<Hl c="b">Organizations = شجرة حسابات بفاتورة واحدة وقواعد (SCPs). Control Tower = بيجهّز الشجرة دي بأفضل الممارسات. CloudFormation = البنية مكتوبة كود. Systems Manager = إدارة السيرفرات من مكان واحد.</Hl>
 
-مثال: IAM يسمح `s3:GetObject`، والـ SCP لا تمنعه → ممكن يسمح لو مفيش deny تاني. IAM لا يسمح، حتى لو SCP واسعة → الطلب يفشل. SCP فيها explicit deny → الطلب يفشل مهما كان IAM allow.
+<Box type="story" icon="🏢" title="شركة بفروع">
 
-فصل accounts يقلل blast radius، لكن يزيد احتياج automation وcentral logging. استخدم management account للحوكمة قدر الإمكان، مش workloads يومية.
+- **Organizations** = **الشركة الأم** وتحتها فروع (حسابات). الفاتورة بتتجمع في الإدارة.
+- **SCPs** = **لايحة الشركة**: «ممنوع أي فرع يفتح في بلد برّه القايمة». حتى مدير الفرع ميقدرش يكسرها.
+- **Control Tower** = **مكتب الاستشارات** اللي بيفتحلك الفروع جاهزة بالأمن والكاميرات واللوايح.
+- **CloudFormation** = **الرسم الهندسي** للفرع: تديه لأي مقاول يبني نفس الفرع بالظبط.
+- **Systems Manager** = **إدارة الصيانة** اللي بتبعت فني لكل الفروع من غير ما المدير يروح بنفسه.
 
-## Control Tower
+</Box>
 
-`AWS Control Tower` يبني landing zone فوق Organizations وخدمات أخرى، ويقدم controls وAccount Factory. مناسب لما enterprise عايزة baseline متكرر بدل إنشاء كل account يدويًا.
+## 👀 تخيّل: شجرة حسابات دُكّان
 
-هو مش بديل لـ Organizations. Control prevent أو detect يختلف تأثيره؛ اختبر قبل تطبيق control واسع عشان متقفلش deployment path حرج.
+<Diagram
+  title="Organization فيها OUs وحسابات"
+  height={360}
+  mheight={600}
+  nodes={[
+    { id: "mgmt", t: "Management account", s: "الفاتورة + الإدارة", c: 1, x: 90, y: 50, mx: 50, my: 5 },
+    { id: "sec", t: "OU · Security", s: "logs + audit", c: 2, x: 60, y: 12, mx: 18, my: 35 },
+    { id: "wl", t: "OU · Workloads", s: "SCP: Regions محددة بس", c: 3, x: 60, y: 60, mx: 66, my: 35 },
+    { id: "dev", t: "dukkan-dev", c: 4, x: 22, y: 40, mx: 45, my: 70 },
+    { id: "prod", t: "dukkan-prod", c: 5, x: 22, y: 85, mx: 85, my: 70 },
+    { id: "log", t: "log-archive", c: 2, x: 22, y: 8, mx: 15, my: 70 },
+  ]}
+  edges={[
+    { from: "mgmt", to: "sec", c: 1 },
+    { from: "mgmt", to: "wl", c: 1 },
+    { from: "sec", to: "log", c: 2 },
+    { from: "wl", to: "dev", c: 3 },
+    { from: "wl", to: "prod", c: 3 },
+  ]}
+/>
 
-## Systems Manager
+- الـ **SCP** على OU `Workloads` بتسري على `dev` و`prod` الاتنين.
+- الـ logs من كل الحسابات بتتبعت لحساب `log-archive` محدش بيعدّل فيه.
+- الفاتورة كلها بتتجمع في الـ management account (**consolidated billing**).
 
-`Systems Manager` يدير fleet operations: inventory، patching، automation، Run Command، Session Manager وParameter Store.
+## 🔍 من جوه: الأدوات
 
-Timeline patch:
+### AWS Organizations
 
-1. 22:00 patch 10 canary nodes.
-2. 22:15 راقب errors وCPU.
-3. 22:30 patch 20% من fleet.
-4. 23:00 كمل waves لو health checks ناجحة.
-5. لو error rate عدى 2%، وقف automation وابدأ rollback.
+- **OUs (Organizational Units):** فولدرات بتجمع حسابات.
+- **SCPs (Service Control Policies):** بتحدد **أقصى** صلاحيات ممكنة في الحسابات. **مبتدّيش صلاحيات**، بتحط سقف. حتى الـ root في الحساب العضو مايقدرش يعدّيها.
+- **Consolidated billing:** فاتورة واحدة، والاستخدام بيتجمع فممكن تستفيد من خصومات الحجم والـ Savings Plans بين الحسابات.
 
-Session Manager يقلل فتح SSH inbound، لكنه محتاج IAM وagent/connectivity مضبوطين. Systems Manager مش بديل لـ CloudWatch monitoring.
+### AWS Control Tower
 
-## Health وTrusted Advisor وQuotas
+بيعمل **landing zone**: Organization جاهزة بحسابات أساسية (log archive وaudit)، و**controls** (guardrails) وقائية وكاشفة، و**Account Factory** لإنشاء حسابات جديدة بنفس المعايير.
 
-- `AWS Health`: events شخصية تخص مواردك؛ maintenance الساعة 02:00 مثلًا.
-- `Trusted Advisor`: checks وتوصيات في cost وsecurity وperformance وfault tolerance وlimits؛ التغطية حسب support plan.
-- `Service Quotas`: تشوف quota وتطلب زيادة للـ adjustable quota.
+### Infrastructure as Code: CloudFormation وCDK
 
-CPU 95% بسبب code → CloudWatch. AWS maintenance على RDS → Health. recommendation عن idle resource → Trusted Advisor. محتاج 650 instance والحد 500 → Service Quotas.
+- **AWS CloudFormation:** بتكتب البنية في **template** (YAML/JSON)، وCloudFormation بيعمل **stack** بالموارد كلها بالترتيب الصح، ولو حاجة فشلت بيرجع (rollback). تكرّر نفس البيئة في أي حساب أو Region.
+- **AWS CDK:** تكتب البنية بلغة برمجة (TypeScript، Python…) وبتتحول لـ CloudFormation.
 
-طلب quota increase مش فوري ولا مضمون؛ قدم قبل launch بأيام أو أسابيع، واعمل load test وخطة degraded mode.
+### AWS Systems Manager
 
-## 🧪 Lab ورقي
+مجموعة أدوات لإدارة السيرفرات (EC2 وon-prem):
 
-صمم OU tree لشركة فيها regulated production وsandbox. اكتب guardrail واحد، patch rollout بأرقام، وquota لازم تزيد قبل launch، وحدد rollback.
+- **Session Manager:** shell على السيرفر من غير SSH ولا port 22، ومتسجل.
+- **Patch Manager:** patches أوتوماتيك بجدول.
+- **Run Command:** نفّذ أمر على ١٠٠ سيرفر مرة واحدة.
+- **Parameter Store:** إعدادات وأسرار (فصل ٣٠).
 
-<Checklist id="aws-cp-32" title="خلّصت الفصل لما" items={["تشرح accounts وOUs", "تعرف إن SCP guardrail لا يمنح permission", "تربط Control Tower بالـ landing zone", "تميز Systems Manager وHealth وTrusted Advisor", "تعرف إن Service Quotas حدود تشغيل مش ميزانية"]} />
+### أدوات تانية تتسأل
+
+- **AWS Trusted Advisor:** بيفحص الحساب ويدّي توصيات في: **cost optimization، performance، security، fault tolerance، service limits، وoperational excellence**. الفحوصات الكاملة حسب خطة الدعم.
+- **Service Quotas:** بيوريك حدود الخدمات (مثلًا عدد vCPUs المسموح) ويطلب زيادتها.
+- **AWS Service Catalog:** كتالوج منتجات معتمدة (templates) الموظفين يطلّعوا منه بس.
+- **AWS License Manager:** يتابع الـ licenses (Windows، Oracle) ويمنع تخطي العدد.
+- **AWS RAM (Resource Access Manager):** تشارك موارد (subnets مثلًا) بين حسابات.
+
+## 🛠️ طبّق: bucket من كود
+
+⚠️ CloudFormation نفسه مجاني، بتدفع على الموارد اللي بيعملها. الـ bucket الفاضي مش بيكلف تقريبًا.
+
+1. **اكتب template:**
+
+<File name="dukkan-bucket.yaml">
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Description: bucket صور دُكّان بإعدادات آمنة
+Resources:
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: dukkan-lab
+Outputs:
+  BucketName:
+    Value: !Ref ImagesBucket
+```
+
+</File>
+
+2. **اعمل الـ stack:**
+
+```bash
+aws cloudformation deploy --template-file dukkan-bucket.yaml --stack-name dukkan-images
+aws cloudformation describe-stacks --stack-name dukkan-images --query "Stacks[0].Outputs"
+```
+
+**المتوقع:** bucket باسم متولّد، فيه versioning وBlock Public Access من غير ما تضغط حاجة.
+
+3. **جرّب التكرار:** شغّل نفس الأمر بـ `--stack-name dukkan-images-staging`. بيئة تانية بنفس الإعدادات بالظبط. ده هدف IaC.
+4. **اقرا Trusted Advisor:** `Trusted Advisor` ← `Recommendations`. **المتوقع:** فحوصات أساسية زي MFA على الـ root وSecurity Groups المفتوحة.
+
+🧹 **تنضيف:** (لازم الـ bucket يبقى فاضي)
+
+```bash
+aws cloudformation delete-stack --stack-name dukkan-images
+aws cloudformation delete-stack --stack-name dukkan-images-staging
+```
+
+## ⚖️ قارن: الأدوات اللي بتتلخبط
+
+| بيتلخبطوا | الفرق |
+| --- | --- |
+| SCP ↔ IAM policy | SCP = **سقف** على الحساب كله، مبيدّيش صلاحية. IAM policy = بيدّي صلاحية لهوية جوه الحساب. لازم الاتنين يسمحوا |
+| Organizations ↔ Control Tower | Organizations = الأداة الأساسية. Control Tower = بيجهّز Organization بأفضل الممارسات أوتوماتيك |
+| CloudFormation ↔ Elastic Beanstalk | CloudFormation = **أي** بنية من template. Beanstalk = يرفع **تطبيق** ويعمل البنية ليه |
+| Trusted Advisor ↔ Security Hub | Trusted Advisor = توصيات عامة (تكلفة، أداء، أمان، limits). Security Hub = findings أمنية بالتفصيل |
+| Systems Manager ↔ CloudFormation | Systems Manager = **تشغيل** السيرفرات الموجودة. CloudFormation = **بناء** البنية |
+
+<Checklist id="aws-cp-32" title="خلّصت الفصل لما" items={["تشرح ليه الشركات بتستخدم حسابات كتير", "تعرف إن SCP بيحط سقف ومبيدّيش صلاحيات", "تعرف Control Tower بيجهّز إيه", "تكتب CloudFormation template بسيط وتعمل منه stack", "تعرف Systems Manager وTrusted Advisor وService Quotas بيعملوا إيه"]} />
 
 <Quiz>
-<Q n={1} q="SCP سمحت S3 لكن IAM ما سمحتش؛ المستخدم يقدر يقرأ؟">لأ. SCP لا تمنح permission.</Q>
-<Q n={2} q="AWS مخططة maintenance يؤثر على موردك؛ تراجع إيه؟">AWS Health Dashboard.</Q>
-<Q n={3} q="Launch محتاج موارد أعلى من الحد؛ تبدأ فين؟">Service Quotas، وتبدأ بدري.</Q>
+<Q n={1} q="عايز تمنع كل الحسابات في OU من استخدام أي Region برّه أوروبا، حتى الـ admins. أنهي أداة؟">**Service Control Policy (SCP)** في AWS Organizations.</Q>
+<Q n={2} q="عايز تبني نفس البنية في ٣ حسابات من template واحد. أنهي خدمة؟">**AWS CloudFormation**.</Q>
+<Q n={3} q="عايز تدخل على shell السيرفرات من غير ما تفتح port 22. أنهي خدمة؟">**AWS Systems Manager Session Manager**.</Q>
+<Q n={4} q="أداة بتدّي توصيات عن التكلفة والأمان والـ fault tolerance والـ service limits؟">**AWS Trusted Advisor**.</Q>
+<Q n={5} q="شركة عايزة تجهّز بيئة multi-account آمنة بسرعة بأفضل الممارسات. أنهي خدمة؟">**AWS Control Tower**.</Q>
 </Quiz>
