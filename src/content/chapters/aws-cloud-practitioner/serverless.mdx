@@ -6,96 +6,88 @@ label: فصل ١٥
 badge: Compute · فصل ١٥
 en: Lambda · API Gateway · event-driven · concurrency · cold start
 keywords: function · trigger · managed scaling · quotas · short-lived
-goal: تفهم serverless كمسؤولية أقل، وتربط API Gateway وevents بـ Lambda مع حدودها.
+goal: تفهم serverless من خلال API إنتاجية، وتحسب أثر الـ concurrency والـ retries والـ latency.
 part: Compute
 color: c5
 ---
 
-## Serverless مش معناها مفيش servers
+## المثال الأول: Checkout وقت حملة
 
-السيرفرات موجودة، لكن AWS بتدير provisioning والـ OS والـ scaling. إنت تركز في الكود والـ permissions والـ observability والتكلفة.
+متجر متوقع ينتقل من `40 request/s` إلى `1,200 request/s` لمدة 10 دقايق. المطلوب إن `POST /orders` يرد خلال `500 ms`، يسجّل الطلب مرة واحدة، وما يفتحش آلاف الاتصالات على PostgreSQL.
 
-`AWS Lambda` تشغّل function لما event يحصل. كل invocation مستقلة، وLambda تقدر تعمل scale أفقي حسب الحمل والـ quotas.
+١. `API Gateway` يستقبل HTTPS ويطبّق route وauthorization وthrottling.
+٢. Lambda تتحقق من الطلب وتستخدم `idempotencyKey` عشان retry ما يعملش order تاني.
+٣. العملية القصيرة تكتب في database أو تبعت شغل خلفي لـ SQS.
+٤. CloudWatch يقيس duration وerrors وthrottles؛ alarm يشتغل لو error rate عدّت `1%` لخمس دقايق.
 
-<Box type="story" icon="🔔" title="جرس الحصة">
+<Flow items={[
+  { t: "POST /orders", s: "1,200 req/s", c: 1 }, "→",
+  { t: "API Gateway", s: "auth + throttle", c: 2 }, "→",
+  { t: "Lambda", s: "idempotent logic", c: 5 }, "→",
+  { t: "DB / SQS", s: "durable state", c: 3 },
+]} />
 
-بدل ما مدرس يفضل واقف مستني طول اليوم، الجرس يناديه وقت الحصة. الـ event هو الجرس، والـ function هي الشغل المحدد. لو أجراس كتير رنّت، محتاج تعرف كام مدرس يقدر يشتغل في نفس الوقت.
+<Box type="idea" title="Serverless وصف تشغيل، مش اختفاء السيرفرات">
+
+AWS تدير hosts والـ OS وتوفير السعة. الفريق لسه مسؤول عن الكود، IAM، حماية الداتا، limits، observability، وتصميم الفشل والتكلفة.
 
 </Box>
 
-## Event-driven في بوابة المدرسة
+## Concurrency بالأرقام
 
-أمثلة triggers:
+لو متوسط execution هو `250 ms` والحمل `1,200 request/s`، الـ concurrency التقريبية هي `1,200 × 0.25 = 300`. لو الـ database تستحمل `80` connection بس وfunction بتفتح connection لكل execution، النجاح في scaling عند Lambda ممكن يبقى فشل للـ database.
 
-- `API Gateway` يستقبل HTTP request وينادي Lambda.
-- `S3` يرسل event بعد رفع صورة واجب.
-- `EventBridge` يشغّل وظيفة بجدول أو event.
-- Lambda تسحب batches من `SQS` أو stream عن طريق event source mapping.
+الحلول تشمل connection pooling مناسب زي `RDS Proxy`، queue لتنعيم الحمل، و`reserved concurrency` لحماية downstream. Reserved concurrency كمان تعزل سعة function، لكنها ممكن تعمل throttling لو اتحددت أقل من المطلوب.
 
-الـ event غالبًا JSON، وشكله بيعتمد على المصدر. صمّم function تتعامل مع retry من غير ما تكرر أثر خطر؛ ده اسمه <En>idempotency</En>.
+## Cold start والـ latency
 
-## API Gateway دوره إيه؟
+لما Lambda تحتاج execution environment جديدة، أول invocation عليها وقت تجهيز إضافي. مش كل invocation cold، والأثر بيتغير حسب runtime وحجم package والتهيئة والشبكة.
 
-API Gateway هو front door للـ APIs: routes، authorization options، throttling، monitoring، وتحويل الطلب للتكامل الخلفي. Lambda هي compute اللي تنفذ المنطق.
+`Provisioned Concurrency` تجهز environments مسبقًا وتقلل التذبذب، مقابل تكلفة إضافية. في checkout حساس، قارن `p95` و`p99` قبل وبعد؛ متدفعش للحل قبل ما القياس يثبت المشكلة.
 
-<Flow items={[
-  { t: "POST /homework", s: "طالب", c: 1 },
-  "→",
-  { t: "API Gateway", s: "route + auth + throttle", c: 2 },
-  "→",
-  { t: "Lambda", s: "تحقق وسجّل", c: 5 },
-  "→",
-  { t: "Database", s: "داتا دائمة", c: 3 },
-]} />
+## Event sources والـ retries
 
-## الحدود اللي لازم تفضل في دماغك
+- API Gateway ينادي Lambda بشكل synchronous وينتظر response.
+- S3 وEventBridge يقدروا يبدأوا processing بسبب event.
+- Lambda تقرأ SQS على batches من خلال event source mapping.
 
-Lambda مناسبة لشغل محدود المدة، مش process لا نهائية؛ الحد المعروف لتنفيذ function التقليدية يصل إلى 15 دقيقة. وفيه quotas للـ concurrency والـ payload والذاكرة والتخزين المؤقت، وبعضها قابل للزيادة.
+مصدر الحدث بيحدد retry behavior. في معالجة دفعة SQS، failure ممكن يرجّع messages للظهور؛ لذلك كل write مالي لازم يبقى idempotent، والرسائل المستعصية تروح DLQ بعد عدد محاولات محسوب.
+
+## حدود واختيار بديل
+
+Lambda execution التقليدية حدها الأقصى `15 دقيقة` حتى أكتوبر 2026. فيه quotas للـ concurrency والـ payload والذاكرة والـ ephemeral storage؛ بعضها قابل للزيادة وبعضها مرتبط بنوع التكامل، فراجع docs الحالية.
 
 <Grid2>
-<Card title="Concurrency" c={2}>
+<Card title="Lambda مناسبة" c={2}>
 
-عدد executions اللي شغالة في نفس اللحظة. لو downstream database تستحمل 50 connection بس، scale سريع ممكن يخنقها؛ استخدم limits وتصميم مناسب.
+Traffic متغير، tasks قصيرة وstateless، event-driven processing، وفريق عايز يقلل إدارة infrastructure.
 
 </Card>
-<Card title="Cold start" c={4}>
+<Card title="Container أو EC2 أنسب" c={4}>
 
-وقت إضافي لما Lambda تجهز execution environment جديدة. مش كل request باردة، وتأثيرها يختلف حسب runtime والحجم والشبكة.
+Process أطول من الحد، daemon مستمر، تحكم OS عميق، أو workload ثابت كبير أثبتت الأرقام إن compute مخصصة أوفر.
 
 </Card>
 </Grid2>
 
-`Provisioned concurrency` تجهّز environments مسبقًا لتقليل latency، لكنها بتضيف تكلفة. متستخدمهاش تلقائيًا قبل القياس.
+<Box type="warn" title="نجاح تقني ممكن يعمل incident مالي">
 
-## إمتى Lambda مش أنسب؟
-
-- عملية طويلة عن الحد أو محتاجة process عايشة باستمرار.
-- تحكّم عميق في OS أو hardware.
-- latency ثابتة جدًا من غير ما تقبل إدارة mitigations.
-- workload ثابتة ضخمة وقد يكون نموذج تاني أوفر بعد الحساب.
-
-<Box type="warn" title="Pay per use برضه محتاج حواجز">
-
-خطأ أو event loop ممكن يعمل invocations كتير. حط budgets وalarms وreserved concurrency عند اللزوم، وراجع تسعير Lambda وAPI Gateway والـ logs. متفترضش إن تجربة صغيرة مجانية.
+Loop بين S3 وLambda أو retry بلا idempotency يضاعف invocations والكتابات. استخدم budgets وalarms وconcurrency controls، وافصل output prefix عن input في image pipelines.
 
 </Box>
 
-## 🧪 Lab ورقي: من event لنتيجة
+## 🧪 تمرين: Image pipeline إنتاجية
 
-ارسم رفع صورة إلى S3، event إلى Lambda، ثم thumbnail إلى prefix مختلف. اكتب شرطين: function متكررش نفس النتيجة بشكل مؤذٍ، والفشل يطلع log أو يروح لمسار retry/DLQ مناسب.
+شركة تستقبل `300` صورة في الدقيقة، وكل صورة تحتاج thumbnail في `4 ثوانٍ`. ارسم S3 event → Lambda → S3 output، واحسب concurrency التقريبية. أضف duplicate event، ملف تالف، وارتفاع مفاجئ إلى `3,000` صورة/دقيقة. اكتب: إزاي تمنع overwrite مؤذٍ؟ فين DLQ أو failure destination؟ وإمتى تنقل المعالجة لـ ECS؟
 
-التمرين بلا موارد. لو نفذته لاحقًا، استخدم ملف تجريبي غير حساس، راجع التكاليف، واحذف function والـ API والـ logs والموارد التجريبية بعد الانتهاء.
+## مقارنة سريعة
 
-## جملة الامتحان
+API Gateway يدير واجهة الـ API؛ Lambda تنفذ compute. Lambda scaling مش ضمان إن كل dependency هتتحمل. `Pay per use` مفيد للحمل المتقطع، لكنه مش وعد إن التكلفة أقل في كل workload.
 
-`No server management + event + automatic scaling` يشاور على Lambda. `Managed front door for REST/HTTP APIs` يشاور على API Gateway. الاتنين ممكن يشتغلوا سوا لكن مش بدلاء.
-
-الفصل الجاي هنحزم التطبيق كله في container ونقارن ECS وEKS وFargate.
-
-<Checklist id="aws-cp-15" title="خلّصت الفصل لما" items={["تشرح serverless من غير ما تقول مفيش servers", "تربط API Gateway بالـ HTTP وLambda بالتنفيذ", "تعرف معنى concurrency وcold start", "تذكر حد التنفيذ والـ quotas بشكل عالي", "تحط تكلفة وretry وidempotency في التصميم"]} />
+<Checklist id="aws-cp-15" title="خلّصت الفصل لما" items={["تشرح serverless من غير ما تقول مفيش servers", "تتبع checkout من API Gateway لحد التخزين", "تحسب concurrency من المعدل والمدة", "تذكر حد 15 دقيقة والـ cold start", "تصمم retry وidempotency وحماية للـ downstream"]} />
 
 <Quiz>
-<Q n={1} q="مين يعمل route وthrottling للـ API غالبًا؟">API Gateway؛ وLambda ممكن تنفذ business logic وراه.</Q>
-<Q n={2} q="هل كل استدعاء Lambda فيه cold start؟">لأ. يحصل لما تحتاج execution environment جديدة؛ البيئات الدافئة ممكن تعيد الاستخدام.</Q>
-<Q n={3} q="ليه نحط concurrency limit قدام database صغيرة؟">عشان التوسّع السريع ما يفتحش اتصالات أكتر من قدرتها ويوقعها.</Q>
+<Q n={1} q="عندك `400 request/s` وكل execution مدتها `0.5 s`؛ الـ concurrency التقريبية كام؟">حوالي `200` execution متزامنة، قبل احتساب التذبذب والـ retries.</Q>
+<Q n={2} q="Lambda وسّعت بنجاح لكن RDS وقعت من الاتصالات؛ ده failure فين؟">في تصميم الـ downstream capacity. استخدم pooling/proxy أو queue وحدود concurrency حسب السيناريو.</Q>
+<Q n={3} q="هل API Gateway بديل لـ Lambda؟">لأ. API Gateway front door وإدارة API، وLambda واحدة من integrations اللي تنفذ المنطق.</Q>
 </Quiz>

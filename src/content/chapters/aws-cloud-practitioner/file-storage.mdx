@@ -6,95 +6,84 @@ label: فصل ١٨
 badge: Storage وDatabases · فصل ١٨
 en: EFS · FSx · Storage Gateway · AWS Backup · Snow Family
 keywords: shared file system · hybrid storage · centralized backup · offline transfer
-goal: تختار block أو file أو object وتعرف دور EFS وFSx وStorage Gateway وBackup وخيارات النقل الحالية.
+goal: تختار block أو file أو object لمتطلبات إنتاجية، وتبني backup وhybrid transfer قابلين للاختبار.
 part: Storage وDatabases
 color: c3
 ---
 
-## أول قرار: block ولا file ولا object؟
+## المثال الأول: Media rendering على Linux
+
+شركة فيديو عندها `24` EC2 worker في `3 AZs`. كل worker لازم يشوف نفس project files، ومتوسط المشروع `80 GB`. المطلوب worker جديد يعمل mount خلال دقيقة، والـ filesystem يفضل متاح لو AZ واحدة تعطلت.
+
+١. workers تعمل mount لـ `Amazon EFS` عبر NFS.
+٢. mount targets تتوزع على الـ AZs المستخدمة، وقواعد الشبكة تسمح NFS من workers فقط.
+٣. الملفات النهائية تنتقل إلى S3 للتوزيع والأرشفة؛ EFS يفضل للـ shared working set.
+٤. AWS Backup ينفذ policy، والفريق يعمل restore test ربع سنوي ويقيس الزمن.
+
+## اختار interface الأول
 
 <Grid2>
-<Card title="Block" c={1}>
+<Card title="Block: EBS" c={1}>
 
-قرص للـ OS أو database: blocks تتعمل لها filesystem. المثال الأشهر `EBS` مع EC2.
+Disk blocks لسيرفر أو database وfilesystem فوقها. مناسب لـ boot volume وworkload محتاجة block semantics.
 
 </Card>
-<Card title="File" c={3}>
+<Card title="File: EFS / FSx" c={3}>
 
-ملفات ومجلدات وmount مشترك ببروتوكول مألوف. الأمثلة `EFS` و`FSx`.
+Paths وdirectories وmount مشترك عبر NFS أو SMB وخصائص filesystem.
 
 </Card>
 </Grid2>
 
-<Card title="Object" c={5}>
+<Card title="Object: S3" c={5}>
 
-Objects بالـ key وAPI، مناسب للـ static content والنسخ والـ data lakes. المثال `S3`.
+API وkeys على scale للـ static assets والـ backups والـ data lakes؛ مش mount تقليدي افتراضيًا.
 
 </Card>
 
-<Box type="story" icon="🗃️" title="مكتب المدرسة">
+## EFS ولا FSx؟
 
-Block زي هارد جهاز السكرتير. File زي فولدر الشبكة اللي كذا موظف يفتحه. Object زي أرشيف مركزي تطلب منه ملف برقم؛ مش بتتعامل معاه كهارد.
+`EFS` filesystem مُدار ومرن لأحمال Linux/NFS، ويمكن مشاركته بين instances وعبر AZs داخل Region. اختاره لما التطبيق فعلًا محتاج POSIX-like shared file access، مش لمجرد إن المطورين متعودين على folders.
 
-</Box>
+`FSx` عيلة متخصصة:
 
-## Amazon EFS
+- `FSx for Windows File Server`: SMB وWindows وActive Directory.
+- `FSx for Lustre`: throughput عالي للـ HPC والـ analytics.
+- `FSx for NetApp ONTAP`: احتياجات NetApp protocols/features.
+- `FSx for OpenZFS`: NFS وخصائص ZFS المُدارة.
 
-`Elastic File System` filesystem مُدار ومرن لأحمال Linux، يدعم `NFS` ومشاركة نفس الملفات بين instances متعددة وعبر Availability Zones. حجمه يكبر ويصغر تلقائيًا حسب الملفات.
+لو pipeline تقرأ objects كاملة وتكتب نتائج مستقلة، S3 ممكن يبقى أبسط. لو legacy Windows app محتاجة SMB locks وAD، FSx for Windows أقرب من EFS.
 
-في بوابة المدرسة، instances متعددة ممكن تشارك uploads قديمة محتاجة file interface. لكن لو التطبيق يقدر يستخدم object API، S3 قد يكون أبسط وأوفر حسب النمط.
+## Hybrid: مصنع لسه on-premises
 
-## Amazon FSx
+مصنع ينتج `6 TB` ملفات يوميًا، وعنده WAN `1 Gbps` مشتركة. `AWS Storage Gateway` يوفر interfaces مألوفة وlocal cache لبعض الأنماط، لكنه مش وصلة شبكة ولا backup policy وحده. `AWS DataSync` مناسب لنقل online مُدار وجدولة ومراقبة transfer بين storage systems المدعومة.
 
-`FSx` عيلة filesystems مُدارة لاستخدامات مخصوصة:
+احسب قبل النقل: `6 TB` على `1 Gbps` نظريًا أكتر من `13 ساعة` قبل overhead والمنافسة. لو الـ SLA هو `4 ساعات`، لازم bandwidth أعلى أو تقليل/ضغط الداتا أو تغيير العملية.
 
-- `FSx for Windows File Server`: Windows وSMB وActive Directory scenarios.
-- `FSx for Lustre`: high-performance computing والـ analytics.
-- `FSx for NetApp ONTAP`: خصائص وواجهات NetApp متعددة.
-- `FSx for OpenZFS`: workloads محتاجة خصائص ZFS وNFS.
+## Backup بنتيجة قابلة للقياس
 
-<Hl c="b">EFS اختيار Linux عام ومرن؛ FSx لما تحتاج filesystem أو compatibility أو performance مخصوصة.</Hl>
+AWS Backup توحّد plans وschedules وretention لخدمات مدعومة حسب الـ Region. النجاح مش ظهور job باللون الأخضر؛ النجاح إن restore test يرجع dataset سليمة خلال الـ RTO المطلوب.
 
-## Storage Gateway
+الساعة `02:00` backup يومية، الساعة `11:20` ransomware يشفر share، والـ RPO `24 ساعة` يسمح بفقد حتى آخر backup، لكن RTO `2 ساعة` يتطلب قياس restore لحجم حقيقي. لو restore استغرق `5 ساعات`، الخطة فشلت رغم وجود النسخة.
 
-`AWS Storage Gateway` يربط on-premises بالـ cloud من خلال appliance وواجهات مألوفة، مع local cache لبعض الأنماط. عيلته تشمل file وvolume وtape scenarios حسب المنتج الحالي.
+## Snow Family: caveat أكتوبر 2026
 
-مثال: سيرفر المدرسة المحلي يفضل يستخدم file share، والـ gateway يربطه بتخزين AWS. ده hybrid access، مش VPN ولا backup policy لوحده.
+مواد قديمة تذكر `AWS Snow Family` للنقل الفيزيائي. حسب AWS Decision Guide المتاح في أكتوبر 2026، Snow Family غير متاحة لعملاء جدد، ودعم Snowball في commercial Regions مقرر ينتهي `31 ديسمبر 2026`. للتصميم الجديد راجع DataSync للنقل online وAWS Data Transfer Terminal أو partner options للنقل الفيزيائي حسب التوفر والـ docs الحالية.
 
-## AWS Backup
+<Box type="warn" title="Managed storage له تكلفة تشغيل">
 
-خدمة مركزية تعمل backup plans وschedules وretention لعدة خدمات مدعومة زي EBS وRDS وEFS وDynamoDB وS3 وغيرها حسب الـ Region والميزة.
-
-AWS Backup تسهّل الإدارة والسياسات، لكن إنت لسه تختار الموارد والمدة والنسخ عبر Regions/accounts وتختبر restore. الـ backup vault والنسخ ليهم تكلفة.
-
-## Snow Family: معلومة امتحان مع تنبيه زمني
-
-مواد CLF-C02 القديمة تذكر أجهزة `AWS Snow Family` لنقل داتا offline أو edge compute لما الشبكة محدودة. لكن حسب AWS Decision Guide الحالي في أكتوبر 2026، Snow Family **مش متاحة لعملاء جدد**، ودعم أجهزة Snowball في الـ commercial Regions مقرر ينتهي 31 ديسمبر 2026.
-
-للتصميم الحالي، راجع AWS DataSync للنقل online، وAWS Data Transfer Terminal أو partner options للنقل الفيزيائي حسب التوفر. في الامتحان، افهم الفكرة التاريخية، لكن متقترحش طلب Snow جديد من غير docs حديثة.
-
-<Box type="warn" title="النقل والنسخ لهم فاتورة">
-
-File systems، backup storage، requests، data transfer، والـ gateway resources كلها ممكن تتكلف. راجع السعر والمنطقة قبل أي Lab، ومفيش وعد بـ Free Tier.
+احسب capacity وthroughput والـ backups والـ requests والـ transfer. امسح filesystems والنسخ التجريبية بعد الاختبار، ومتفترضش Free Tier.
 
 </Box>
 
-## 🧪 تمرين ورقة: اختار التخزين
+## 🧪 تمرين: Migration وrestore
 
-صنّف: boot disk → EBS؛ فولدر Linux مشترك → EFS؛ Windows share → FSx for Windows؛ صور عامة بالـ key → S3؛ مكتب محلي محتاج cloud-backed share → Storage Gateway.
+شركة عندها Windows share حجمها `35 TB`، معدل تغيير `400 GB/day`، وRTO `6 ساعات`. اختار FSx أو EFS أو S3 مع السبب، ارسم initial copy ثم incremental sync، وحدد cutover window. بعدها افترض حذف `2 TB`: اكتب restore test بأوقات بداية ونهاية ومعيار نجاح واضح.
 
-بعدها ارسم backup plan للـ EFS واكتب `restore test`. التمرين بلا موارد. لو جرّبت خدمة، احذف filesystem والـ backups والـ gateway resources بعد التأكد إن الداتا تجريبية وغير مطلوبة.
-
-## قرار من سؤال واحد
-
-هل التطبيق محتاج mount وfolders مشتركة؟ File. محتاج disk blocks لسيرفر؟ Block. محتاج API وkeys على scale؟ Object. محتاج يفضل on-premises ومتصل بالسحابة؟ فكر hybrid.
-
-الفصل الجاي هنحط داتا الطلاب المترابطة في RDS ونفهم Multi-AZ وRead Replicas.
-
-<Checklist id="aws-cp-18" title="خلّصت الفصل لما" items={["تفرق block وfile وobject", "تربط EFS بـ Linux NFS المشترك", "تختار FSx لاحتياج filesystem مخصوص", "تشرح Storage Gateway كحل hybrid", "تعرف تحديث حالة Snow Family وتختبر restore للـ backups"]} />
+<Checklist id="aws-cp-18" title="خلّصت الفصل لما" items={["تفرق block وfile وobject من الـ interface", "تربط EFS بـ Linux NFS المشترك", "تختار FSx لاحتياج filesystem مخصوص", "تحسب hybrid transfer بدل التخمين", "تعرف تحديث Snow Family وتقيس restore فعلي"]} />
 
 <Quiz>
-<Q n={1} q="خمس EC2 Linux محتاجة نفس الـ folders؛ تبدأ تفكر في إيه؟">Amazon EFS لأنه shared managed NFS filesystem.</Q>
-<Q n={2} q="AWS Backup هل تختار retention بدلًا عنك؟">لأ. هي تدير التنفيذ والسياسات، لكن إنت تحدد الخطة والاحتفاظ وتختبر الاسترجاع.</Q>
-<Q n={3} q="هل Snow Family اختيار جديد مضمون في أكتوبر 2026؟">لأ. AWS تقول إنها غير متاحة لعملاء جدد؛ لازم تراجع بدائل النقل والـ docs الحالية.</Q>
+<Q n={1} q="عشر EC2 Linux في AZs مختلفة محتاجة نفس الـ paths؛ تبدأ بإيه؟">Amazon EFS لو NFS shared filesystem هو الـ requirement الحقيقي.</Q>
+<Q n={2} q="Backup job نجحت لكن restore استغرق 5 ساعات والـ RTO ساعتين؛ النتيجة؟">خطة التعافي فشلت في الـ RTO، ولازم تعديل architecture أو حجم/طريقة الاستعادة.</Q>
+<Q n={3} q="هل تقترح Snowball لعميل جديد في أكتوبر 2026؟">لأ من غير تحقق حديث؛ AWS تقول Snow Family غير متاحة لعملاء جدد، فراجع البدائل الحالية.</Q>
 </Quiz>

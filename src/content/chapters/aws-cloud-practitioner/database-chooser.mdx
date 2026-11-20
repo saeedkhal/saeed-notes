@@ -6,119 +6,95 @@ label: فصل ٢١
 badge: Storage وDatabases · فصل ٢١
 en: SQL · NoSQL · cache · graph · warehouse · access patterns
 keywords: decision tree · RDS · DynamoDB · ElastiCache · Neptune · Redshift
-goal: تحول متطلبات بوابة المدرسة لقرار database عملي من غير اختيار خدمة بالشهرة.
+goal: تحول متطلبات production وأرقامها لقرار database موثّق وقابل للاختبار.
 part: Storage وDatabases
 color: c1
 ---
 
-## ابدأ بالسؤال مش بالخدمة
+## المثال الأول: منصة e-commerce واحدة، خمس احتياجات
 
-قبل ما تقول RDS أو DynamoDB، اكتب:
+المنصة تعالج `600 order/s`، عندها `10 مليون` session، catalog مرن، fraud graph، وتقارير على `4 سنين`. اختيار database واحدة لكل ده ممكن ينجح في البداية، لكنه غالبًا يفرض tradeoffs غير لازمة.
 
-1. شكل الداتا والعلاقات؟
-2. أهم access patterns؟
-3. محتاج transaction أو joins؟
-4. read/write volume والـ latency؟
-5. availability وrecovery المطلوبين؟
-6. مين عنده خبرة يشغّل ويصمم الحل؟
+ابدأ بورقة requirements:
 
-<Box type="story" icon="🧑‍🏫" title="المدرس مش بيوزع نفس الكشكول">
+1. أهم reads/writes وشكل المفاتيح؟
+2. هل transaction وconstraints وjoins لازمة؟
+3. `p95` latency والـ throughput كام؟
+4. هل stale read لمدة `30 ثانية` مقبولة؟
+5. RTO وRPO والـ Region requirements؟
+6. تكلفة التشغيل وخبرة الفريق؟
 
-مسألة حساب، خريطة علاقات، كشف حضور، وتقرير سنوي مش نفس نوع الورقة. اختيار database قبل فهم السؤال زي ما توزع كشكول رسم في امتحان رياضيات عشان غلافه حلو.
-
-</Box>
-
-## شجرة القرار العملية
+## Request-by-request decision
 
 <Flow items={[
-  { t: "علاقات + SQL + transactions؟", s: "RDS / Aurora", c: 1 },
-  "→",
-  { t: "Lookup بمفتاح وعلى scale؟", s: "DynamoDB", c: 2 },
-  "→",
-  { t: "تسريع مصدر موجود؟", s: "ElastiCache", c: 3 },
-  "→",
-  { t: "العلاقات نفسها هي الاستعلام؟", s: "Neptune", c: 4 },
-  "→",
-  { t: "BI وتحليلات تاريخية؟", s: "Redshift", c: 5 },
+  { t: "Order transaction", s: "RDS / Aurora", c: 1 }, "→",
+  { t: "Session by key", s: "DynamoDB", c: 2 }, "→",
+  { t: "Hot catalog", s: "ElastiCache", c: 3 }, "→",
+  { t: "Fraud traversal", s: "Neptune", c: 4 }, "→",
+  { t: "Historical BI", s: "Redshift", c: 5 },
 ]} />
 
-لو الداتا documents مرنة واستعلاماتها على الحقول، قيّم DocumentDB. دي شجرة بداية؛ الحجم وحده مش كفاية، لأن قواعد SQL وNoSQL الاتنين ممكن تكبر بطرق مختلفة.
+`DocumentDB` يدخل التقييم لما documents واستعلام حقول مرنة هي الأساس، بعد اختبار compatibility. الحجم وحده لا يختار SQL أو NoSQL.
 
-## سيناريوهات بوابة المدرسة
+## مقارنة واضحة
 
 <Grid2>
-<Card title="الطلاب والفصول والدرجات" c={1}>
+<Card title="RDS / Aurora" c={1}>
 
-علاقات واضحة، constraints، وtransactions عند تسجيل الدرجة. `RDS PostgreSQL` أو Aurora PostgreSQL-compatible بداية مفهومة.
+Orders وpayments بعلاقات وACID transactions. النجاح: اتساق وconstraints. المقابل: schema وإدارة connections وscaling pattern.
 
 </Card>
-<Card title="Session وطلب سريع بالمفتاح" c={2}>
+<Card title="DynamoDB" c={2}>
 
-`DynamoDB` لما الوصول الأساسي بـ session ID والـ scale متغير. صمّم TTL والـ key والـ capacity.
+Session lookup بمفتاح معروف وtraffic متغير. النجاح: latency منخفضة على scale. المقابل: model مبني حول access patterns وقيود joins.
 
 </Card>
 </Grid2>
 
 <Grid2>
-<Card title="جدول حصص مطلوب كل ثانية" c={3}>
+<Card title="ElastiCache" c={3}>
 
-المصدر يفضل database، و`ElastiCache` تحتفظ بنسخة ساخنة بمدة قصيرة. لازم خطة invalidation وماذا يحدث عند cache miss.
+Catalog hot reads من `150 ms` إلى `15 ms`. المقابل: invalidation وstale data وfallback عند miss.
 
 </Card>
-<Card title="مين يدرّس مين؟" c={4}>
+<Card title="Neptune / Redshift" c={4}>
 
-لو المنتج محتاج traversals عميقة واقتراح علاقات بين مدرسين ومواد وطلاب، `Neptune` يستحق التقييم.
+Neptune للعلاقات العميقة؛ Redshift للـ OLAP. ولا واحد مسار افتراضي لكتابة checkout.
 
 </Card>
 </Grid2>
 
-<Card title="تقرير الوزارة السنوي" c={5}>
+## Timeline لقرار سيئ
 
-نجمع داتا تاريخية للتحليل في `Redshift` بدل ما التقارير الثقيلة تضغط على قاعدة التشغيل.
+- `10:00`: الفريق يحط checkout events في Redshift لأن التقارير موجودة هناك.
+- `10:15`: ingestion latency توصل `90 ثانية`، والعميل مش شايف order فورًا.
+- `10:20`: retries تعمل duplicate records لأن مسار OLAP مش مصمم كـ transaction API.
+- النتيجة: التقارير نجحت لكن تجربة التشغيل فشلت. الحل فصل OLTP source عن analytics pipeline.
 
-</Card>
+## Polyglot له ثمن
 
-## Polyglot مش معناها زوّد خدمات
+كل service جديدة تضيف IAM وnetworking وbackup وmonitoring وon-call skill. ابدأ بأقل عدد يحقق الـ SLA، وافصل لما benchmark أو failure requirement يثبت الاحتياج.
 
-ممكن نظام واحد يستخدم أكتر من database، لكن كل خدمة جديدة تضيف تكلفة وpermissions وmonitoring وbackup ومهارة تشغيل. ابدأ بأبسط حل يحقق المتطلبات، وافصل لما القياس يثبت المشكلة.
+<Hl c="y">قرار قوي يذكر access pattern ورقم SLA وسبب رفض البديل، مش اسم خدمة مشهور.</Hl>
 
-<Hl c="y">الاختيار الصح أقل خدمة تحقق access patterns والموثوقية المطلوبة، مش أكبر رسمة معمارية.</Hl>
+<Box type="warn" title="احسب التكلفة الكاملة">
 
-## أسئلة تفضح الاختيار الغلط
-
-- لو cache وقعت، هل النظام يفقد الحقيقة؟ لو أيوه، تصميمك محتاج مراجعة.
-- لو DynamoDB query محتاجة scan لكل table، هل الـ key بيدعم السؤال؟
-- لو كل request تشغيلية رايحة Redshift، هل خلطت OLTP وOLAP؟
-- لو graph query مجرد `get by id`، هل Neptune ضرورة؟
-- لو relational schema بلا علاقات أو transactions، هل SQL اختير بالعادات بس؟
-
-## 🧪 Lab ورقي: صمّم المدرسة
-
-ارسم خمس صناديق: `Portal API`, `RDS`, `DynamoDB`, `ElastiCache`, `Redshift`. وصل:
-
-- التسجيل والدرجات إلى RDS.
-- sessions إلى DynamoDB.
-- القراءات الساخنة إلى ElastiCache مع سهم رجوع لـ RDS.
-- نسخة تحليلية دورية إلى Redshift.
-
-دلوقتي احذف أي صندوق مش عندك requirement حقيقي له. التمرين مجاني. لو عملت prototype فعلي، استخدم داتا وهمية، حط budget، وامسح clusters/tables/backups والـ networking المدفوع بعد القياس.
-
-<Box type="warn" title="التكلفة جزء من القرار">
-
-قارن compute أو capacity، storage، requests، I/O، backup، data transfer، والحد الأدنى للتشغيل. راجع pricing calculator والـ docs الحالية؛ مفيش خدمة مضمونة مجانية لمجرد إنها serverless.
+قارن compute/capacity وstorage وI/O وrequests والـ backups والـ transfer والحد الأدنى للتشغيل. Serverless لا تعني مجانية.
 
 </Box>
 
-## ورقة قرار من سطر واحد
+## 🧪 تمرين: Architecture review
 
-اكتب: «هنختار **الخدمة** لأن أهم access pattern هو **النمط**، ونحتاج **availability/recovery**، والبديل **الخدمة الأخرى** اترفض بسبب **سبب قابل للقياس**».
+SaaS عندها: invoices تحتاج transaction، tenant settings تُقرأ بالمفتاح `30,000 مرة/ثانية`، dashboard تقبل تأخير `15 دقيقة`، وcache failure لازم ما يوقفش checkout. اكتب لكل workload خدمة، source of truth، consistency، RTO/RPO، وبديل مرفوض. بعدين احذف أي خدمة لا يدعمها requirement رقمي.
 
-الفصل الجاي هنخرج من التخزين ونبني شبكة VPC تحمي وتوصل مكونات بوابة المدرسة.
+## قالب القرار
 
-<Checklist id="aws-cp-21" title="خلّصت الفصل لما" items={["تبدأ من access patterns لا اسم الخدمة", "تختار SQL للعلاقات والـ transactions", "تختار DynamoDB للـ key access المصمم صح", "تفصل cache وgraph وwarehouse عن مصدر التشغيل", "تكتب قرار فيه سبب وتكلفة وخطة recovery"]} />
+«هنختار **الخدمة** لأن access pattern هو **النمط** عند **الحجم/latency**، ونحتاج **recovery**. رفضنا **البديل** لأن **tradeoff قابل للقياس**».
+
+<Checklist id="aws-cp-21" title="خلّصت الفصل لما" items={["تبدأ من access patterns وأرقام SLA", "تختار SQL للعلاقات والـ transactions", "تختار DynamoDB للـ key access المصمم صح", "تفصل cache وgraph وwarehouse عن OLTP", "تكتب قرار فيه تكلفة وrecovery وبديل مرفوض"]} />
 
 <Quiz>
-<Q n={1} q="درجات وطلاب وفصول بعلاقات وtransactions؛ تبدأ بإيه؟">RDS أو Aurora بمحرك relational مناسب، لأن العلاقات والاتساق هم الأساس.</Q>
-<Q n={2} q="هل إضافة ElastiCache تعني حذف قاعدة البيانات الأصلية؟">لأ. غالبًا هي طبقة تسريع، والمصدر الدائم يفضل database مناسبة.</Q>
-<Q n={3} q="إيه أول معلومة قبل اختيار DynamoDB؟">الـ access patterns والمفاتيح؛ لأن تصميم الـ partition/sort keys يحدد كفاءة الوصول.</Q>
+<Q n={1} q="Order وpayment لازم ينجحوا أو يفشلوا مع بعض؛ نقطة البداية؟">RDS أو Aurora بمحرك relational مناسب بسبب transaction والاتساق.</Q>
+<Q n={2} q="Dashboard تقبل data متأخرة 15 دقيقة؛ هل لازم تضغط OLTP؟">لأ؛ pipeline إلى Redshift ممكن تفصل analytics عن قاعدة التشغيل.</Q>
+<Q n={3} q="إيه أول معلومة قبل DynamoDB؟">الـ access patterns والمفاتيح مع الحجم والـ latency المطلوبة.</Q>
 </Quiz>

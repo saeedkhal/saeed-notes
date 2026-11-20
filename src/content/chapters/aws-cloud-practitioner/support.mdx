@@ -11,83 +11,49 @@ part: التكلفة والامتحان
 color: c4
 ---
 
-## الأول: محتاج إيه؟
+## Production outage الساعة 02:10
 
-سؤال community غير technical case خاص بالحساب، وورقة compliance غير software تشتريه. اختار القناة قبل ما تختار الخطة.
+Checkout واقع في 3 Regions؟ لأ، account واحدة فيها RDS issue. الفريق جمع timestamps وresource IDs وrecent changes وشال secrets، وبعدين فتح case بالseverity الصحيحة.
 
-<Box type="story" title="مكتب شؤون الطلبة">
+1. 02:10 alarm.
+2. 02:14 internal triage أكد impact: 100% checkout failures.
+3. 02:18 Support case اتفتح تحت الخطة المؤهلة.
+4. أول response target مش معناه حل نهائي؛ التحقيق والـ mitigation كملوا.
+5. بعد recovery، team راجع architecture وrunbook بدل اعتبار Support بديل للتصميم.
 
-سؤال عام تسأله في لوحة الإعلانات، مشكلة خاصة بملف طالب تفتح لها تذكرة، وشهادة اعتماد تطلبها من الأرشيف. مينفعش تبعت كل حاجة لنفس المكتب.
+## خطط أكتوبر ٢٠٢٦
 
-</Box>
+- `Basic Support`: لكل العملاء؛ account/billing help، quota requests، docs وre:Post وقدرات أساسية متاحة.
+- `Business Support+`: 24/7 technical support؛ الحد الأدنى المنشور `$29/account/month` أو النسبة، أيهما أكبر.
+- `Enterprise Support`: mission-critical وdesignated TAM؛ الحد الأدنى المنشور `$5,000/month` أو النسبة.
+- `Unified Operations`: عمليات كبيرة ومعقدة؛ الحد الأدنى المنشور `$50,000/month` أو النسبة.
 
-## الخطط الحالية في أكتوبر ٢٠٢٦
+الأسماء والأسعار والresponse times تتغير. `Developer Support` و`Business Support` و`Enterprise On-Ramp` القديمة مقرر ينتهي دعمها **١ يناير ٢٠٢٧** في commercial AWS، مع تفاصيل انتقال واستثناءات GovCloud. CLF-C02 قد يستخدم taxonomy القديمة؛ قرار الشراء يرجع للصفحة الرسمية.
 
-حسب صفحات AWS الحالية للـ commercial Regions، الخطط الرئيسية هي:
+## اختار المصدر
 
-- `Basic Support`: داخل لكل العملاء؛ account وbilling help، service quota requests، docs، re:Post، وcore guidance/checks المتاحة.
-- `AWS Business Support+`: 24/7 technical support وسياق تشغيلي أوسع؛ الحد الأدنى المنشور **$29 لكل account شهريًا** أو النسبة المحسوبة، أيهما أكبر.
-- `AWS Enterprise Support`: للـ mission-critical organizations مع designated TAM وقدرات استباقية؛ الحد الأدنى المنشور **$5,000 شهريًا** أو النسبة، أيهما أكبر.
-- `AWS Unified Operations`: أعلى مستوى للعمليات المعقدة على نطاق كبير؛ الحد الأدنى المنشور **$50,000 شهريًا** أو النسبة، أيهما أكبر.
+- سؤال عام بلا بيانات حساسة → `re:Post`.
+- حلول شائعة → `Knowledge Center` داخل re:Post.
+- case خاص بالحساب أو incident → AWS Support.
+- تقارير واتفاقيات compliance → `AWS Artifact`.
+- شراء ونشر software أو data من vendor → `AWS Marketplace`.
+- شركة consulting أو implementation → `AWS Partner Network`.
+- guidance استباقي → TAM في الخطة المؤهلة.
 
-<Hl c="o">الأسماء والأسعار وresponse times بتتغير؛ صفحة Support Plans وPricing وقت القرار هي المصدر.</Hl>
+Artifact لا يعمل audit لتطبيقك. Marketplace لا يضمن إن المنتج مناسب أو إن AWS تشغله نيابة عن vendor. APN partner مش بديل تلقائي عن عقد Support.
 
-## طب والـ Developer وBusiness وOn-Ramp؟
+## Tradeoff
 
-مواد CLF-C02 القديمة غالبًا تحفظ: Basic، Developer، Business، Enterprise On-Ramp، Enterprise.
+قارن تكلفة الخطة بتكلفة downtime والاحتياج لـ TAM، مش بحجم الشركة فقط. SaaS يخسر `$40,000/hour` ممكن يبرر دعم أعلى؛ workload داخلي noncritical ممكن لا.
 
-في commercial AWS، `Developer Support` و`Business Support` و`Enterprise On-Ramp` مقرر ينتهي دعمهم **١ يناير ٢٠٢٧**. عملاؤهم الحاليون عندهم مسار انتقال، وGovCloud له استثناءات.
+## 🧪 Lab ورقي
 
-<Box type="warn" title="إجابة الامتحان مقابل قرار اليوم">
-
-دليل CLF-C02 المنشور قد يستخدم taxonomy القديمة. افهم كلمات السؤال، لكن متشتريش خطة اعتمادًا على ملخص مذاكرة؛ راجع الصفحة الرسمية الحالية والـ Region.
-
-</Box>
-
-## Severity وresponse time
-
-كل ما الخطة أعلى وخطورة الحالة أكبر، response target أسرع. لكن target مش وعد إن المشكلة نفسها هتتحل خلال الوقت ده؛ هو وقت استجابة أولية مستهدف حسب الشروط.
-
-متصنّفش سؤال عادي على إنه production down. اختار severity بصدق، وقدّم logs وtimestamps وresource IDs بعد إزالة الأسرار.
-
-## AWS re:Post وKnowledge Center
-
-`AWS re:Post` community knowledge service للأسئلة والإجابات والمحتوى الفني، ومتاح كبداية عامة. متحطش credentials أو بيانات عميل فيه.
-
-`AWS Knowledge Center` كان مكتبة مقالات وفيديوهات لحلول شائعة. المحتوى بقى متاح ضمن تجربة `re:Post Knowledge Center`، فممكن تقابل الاسمين في المذاكرة والروابط القديمة.
-
-## AWS Artifact
-
-`AWS Artifact` بوابة self-service لتحميل تقارير compliance واتفاقيات مختارة، زي تقارير audit حسب أهليتك.
-
-Artifact **مش** أداة تعمل audit لتطبيقك، ومش marketplace، ومش support case. AWS compliance document لا يثبت تلقائيًا إن إعداداتك أنت compliant.
-
-## AWS Marketplace
-
-`AWS Marketplace` catalog لشراء ونشر software وdata وخدمات partners، مع billing ممكن يمر عبر AWS حسب العرض.
-
-مثال: firewall appliance أو observability product جاهز. راجع contract، license، data access، والتكلفة؛ وجود المنتج في Marketplace مش معناه إن AWS مسؤولة عن كل تشغيله.
-
-## AWS Partner Network
-
-`AWS Partner Network (APN)` ecosystem لشركات consulting وtechnology partners تساعد في design، migration، implementation، managed services، وبيع حلول.
-
-لو المدرسة معندهاش فريق migration، partner مؤهل ممكن ينفذ المشروع. لو عندك incident في resource AWS، ده مش بديل تلقائي عن Support plan؛ راجع عقد كل طرف.
-
-## خريطة المصدر
-
-<Chips items={["سؤال عام → re:Post", "حلول شائعة → Knowledge Center داخل re:Post", "case خاص → AWS Support", "تقارير compliance → Artifact", "شراء software → Marketplace", "شركة تنفذ أو تستشير → APN", "مستشار استباقي → TAM في الخطة المؤهلة"]} />
-
-## 🧪 Lab آمن
-
-اكتب ست حالات من غير أي بيانات حقيقية: فاتورة غلط، production down، تقرير SOC، شراء firewall، سؤال معماري عام، وفريق هجرة ناقص. وصّل كل حالة بالقناة المناسبة.
-
-الفصل الجاي هنجمع الخدمات كلها في decision guide واحد من كلمة المشكلة للحل الأقرب.
+صنف: billing dispute، Sev-1 outage، SOC report، firewall vendor، architecture question، migration delivery. اكتب القناة وسبب استبعاد البديل.
 
 <Checklist id="aws-cp-39" title="خلّصت الفصل لما" items={["تعرف الخطط التجارية الحالية في أكتوبر ٢٠٢٦", "تذكر إن الخطط القديمة بتنتهي في ٢٠٢٧", "تفرق re:Post وArtifact وMarketplace وAPN", "تعامل response target كاستجابة مش حل مضمون"]} />
 
 <Quiz>
-<Q n={1} q="عايز تقرير compliance من AWS. تروح فين؟">`AWS Artifact`، مع التحقق من الأهلية ونطاق التقرير.</Q>
-<Q n={2} q="عايز تشتري firewall من vendor ويتنشر على AWS. فين؟">`AWS Marketplace`.</Q>
-<Q n={3} q="في أكتوبر ٢٠٢٦، أختار Developer Support لمشروع جديد؟">في commercial Regions الخطة legacy ومقرر تنتهي ١ يناير ٢٠٢٧؛ راجع `Business Support+` والخطط الحالية الرسمية.</Q>
+<Q n={1} q="تقرير compliance من AWS؟">AWS Artifact.</Q>
+<Q n={2} q="شراء firewall من vendor؟">AWS Marketplace.</Q>
+<Q n={3} q="Developer Support لمشروع جديد في أكتوبر ٢٠٢٦؟">خطة legacy؛ راجع Business Support+ والخطط الرسمية الحالية.</Q>
 </Quiz>

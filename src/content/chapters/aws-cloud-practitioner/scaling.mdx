@@ -1,5 +1,5 @@
 ---
-title: "ELB وAuto Scaling: البوابة تكبر بأمان"
+title: "ELB وAuto Scaling: الخدمة تكبر بأمان"
 short: Scaling وLoad Balancing
 order: 14
 label: فصل ١٤
@@ -11,13 +11,24 @@ part: Compute
 color: c4
 ---
 
-## سيرفر أكبر ولا سيرفرات أكتر؟
+## Incident وقت campaign
 
-`Vertical scaling` يعني تزود CPU أو RAM لنفس السيرفر. بسيط، لكن له سقف وقد يحتاج توقف. `Horizontal scaling` يعني تزود instances وتوزع الحمل؛ أعقد، لكنه يساعد الـ availability والمرونة.
+منصة e-commerce بدأت حملة الساعة `20:00`. الترافيك قفز من `800` إلى `6,000 request/min`، والـ p95 latency وصل `1.8s`. عندها ALB قدام Auto Scaling Group موزعة على AZs.
 
-<Box type="story" icon="🎫" title="شباك شؤون الطلبة">
+## Timeline من الضغط للاستقرار
 
-التوسّع الرأسي إنك تحط موظف أسرع على نفس الشباك. الأفقي إنك تفتح شبابيك زيادة. الـ load balancer هو موظف الاستقبال اللي يوزع الطابور على الشبابيك السليمة.
+1. **20:00:** `desired=2` وCPU المتوسطة `35%`.
+2. **20:04:** CPU تعدي `70%` حسب policy لمدة التقييم.
+3. **20:06:** Auto Scaling تعمل scale out من `2` إلى `4 instances`.
+4. **20:08:** instances الجديدة تكمل bootstrap وتنجح في health checks.
+5. **20:09:** ALB يبدأ يوجه لها requests؛ الـ p95 يرجع `320 ms`.
+6. **22:30:** الحمل يهدى، وبعد stabilization تعمل المجموعة scale in من غير النزول تحت `min=2`.
+
+النجاح إن latency رجعت للهدف، والـ instances غير السليمة ما استقبلتش traffic، والسعة رجعت بعد الذروة. الفشل إن policy تضيف instances أسرع من جاهزيتها، أو إن bottleneck الحقيقي database.
+
+<Box type="story" icon="📈" title="دوران مختلفان">
+
+ELB يقرر أي target سليمة تستقبل الطلب الحالي. EC2 Auto Scaling يقرر عدد instances ويحافظ عليه. واحد يوزع traffic والتاني يدير fleet.
 
 </Box>
 
@@ -41,7 +52,7 @@ color: c4
 <Grid2>
 <Card title="Gateway Load Balancer" c={3}>
 
-لتوزيع الترافيك على virtual appliances زي firewalls وأنظمة الفحص. مش الاختيار العادي لموقع المدرسة.
+لتوزيع الترافيك على virtual appliances زي firewalls وأنظمة الفحص. مش الاختيار العادي لتطبيق ويب.
 
 </Card>
 <Card title="Classic Load Balancer" c={5}>
@@ -65,23 +76,30 @@ color: c4
 
 <Hl c="b">ELB يوزّع الطلبات؛ Auto Scaling يغيّر عدد الـ instances. الاتنين بيكملوا بعض، مش نفس الخدمة.</Hl>
 
-## شكل بوابة المدرسة
+## Request flow في Production
 
 <Flow items={[
-  { t: "الطلبة", c: 1 },
+  { t: "المستخدم", c: 1 },
   "→",
   { t: "ALB", s: "HTTPS + health checks", c: 2 },
   "→",
   { t: "Auto Scaling Group", s: "instances عبر AZs", c: 4 },
 ]} />
 
-وقت إعلان النتيجة، policy ممكن تعمل scale out. بعد الزحمة، تعمل scale in ضمن الحدود. التطبيق لازم يبقى مستعد: session مش متعلقة بقرص instance واحدة، والـ instances قابلة للاستبدال.
+وقت الحملة، policy تعمل scale out. بعد الزحمة، تعمل scale in ضمن الحدود. التطبيق لازم يبقى مستعد: session مش متعلقة بقرص instance واحدة، والـ instances قابلة للاستبدال.
 
-## 🧪 تمرين ورقة: مطلوب كام؟
+## قارن القرارات
 
-اكتب `min=2`, `desired=2`, `max=6`. ارسم حالتين: ضغط يرفع average CPU فيضيف instances، وهدوء يقلله. بعدين اشطب instance مريضة وارسم replacement.
+- **Vertical scaling:** موارد أكتر لنفس instance؛ له سقف وقد يحتاج downtime.
+- **Horizontal scaling:** instances أكتر؛ يحتاج تطبيقًا قابلًا للتوزيع والاستبدال.
+- **ALB:** HTTP/HTTPS وLayer 7 وhost/path routing.
+- **NLB:** TCP/UDP وLayer 4 وخصائص أداء وشبكة.
+- **GWLB:** fleet من virtual network appliances.
+- **Health check:** تمنع توجيه الطلب لـ target غير سليمة؛ مش اختبارًا كاملًا لكل business function.
 
-ده تصميم ورقي بلا تكلفة. إنشاء ALB وinstances له تكلفة حتى لو الترافيك قليل؛ راجع التسعير، وبعد أي تجربة احذف الـ Auto Scaling Group والـ load balancer والـ launch resources المرتبطة.
+## 🧪 تمرين ورقة: احسب الاستجابة
+
+ابدأ بـ `min=2`, `desired=2`, `max=8`. الحمل يتضاعف كل دقيقتين، والـ instance تحتاج ٤ دقائق لتصبح healthy. اكتب timeline من أول alarm لحد رجوع latency، وحدد metric وthreshold وstabilization. بعدين افترض إن database هي bottleneck واشرح ليه web scale out قد يفشل.
 
 <Box type="warn" title="Scaling مش علاج لكل مشكلة">
 
@@ -93,7 +111,7 @@ color: c4
 
 `HTTP path routing` → ALB. `TCP/UDP أو Layer 4` → NLB. `fleet of security appliances` → GWLB. `يحافظ على العدد ويستبدل unhealthy` → EC2 Auto Scaling.
 
-الفصل الجاي هنسيب إدارة السيرفرات ونشغّل أجزاء البوابة كـ events على Lambda.
+الفصل الجاي هنسيب إدارة السيرفرات ونشغّل أجزاء من الـ workload كـ events على Lambda.
 
 <Checklist id="aws-cp-14" title="خلّصت الفصل لما" items={["تفرق vertical عن horizontal scaling", "تختار ALB للـ HTTP routing وNLB للـ Layer 4", "تشرح min وdesired وmax", "تفرق دور ELB عن Auto Scaling", "تذكر إن التطبيق لازم يستحمل استبدال instances"]} />
 

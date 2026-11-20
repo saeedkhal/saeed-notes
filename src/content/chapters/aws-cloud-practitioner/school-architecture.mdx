@@ -1,91 +1,103 @@
 ---
-title: نجمع بوابة المدرسة قطعة قطعة
-short: معمارية بوابة المدرسة
+title: معمارية E-commerce Production
+short: معمارية E-commerce
 order: 28
 label: فصل ٢٨
 badge: ربط الأنظمة · فصل ٢٨
 en: CloudFront · S3 · API Gateway · Lambda · DynamoDB · Cognito · SQS · SNS
-keywords: serverless portal · request flow · event flow
-goal: تتبع request متزامن وevent غير متزامن عبر معمارية بوابة المدرسة.
+keywords: serverless commerce · request flow · event flow
+goal: تتبع checkout متزامن ومعالجة orders غير متزامنة مع security وfailure objectives واضحة.
 part: ربط الأنظمة
 color: c3
 ---
 
-## الصورة الكبيرة
+## المتطلبات قبل الرسم
 
-هنركّب نموذج تعليمي، مش وصفة إلزامية. الاختيار الحقيقي يتغير حسب المتطلبات والأمان والتكلفة.
+متجر يعالج `300 order/s` طبيعيًا و`2,000 order/s` وقت الحملات. المطلوب:
+
+- product pages عند `p95 < 200 ms`.
+- checkout response خلال `700 ms`.
+- لا duplicate charge حتى مع retries.
+- email وanalytics ممكن يتأخروا `10 دقايق` من غير تعطيل الطلب.
+- AZ failure ما توقفش الخدمة، وorder data لها RPO أقل من دقيقة.
 
 <Diagram
-  title="بوابة المدرسة"
-  height={360}
-  mheight={720}
+  title="E-commerce production flow"
+  height={380}
+  mheight={760}
   nodes={[
-    { id: "u", t: "الطالب", c: 1, x: 8, y: 45, mx: 50, my: 6 },
-    { id: "cf", t: "CloudFront", s: "edge", c: 4, x: 25, y: 45, mx: 50, my: 20 },
-    { id: "s3", t: "S3", s: "واجهة", c: 2, x: 43, y: 20, mx: 50, my: 34 },
-    { id: "api", t: "API Gateway", c: 3, x: 43, y: 70, mx: 50, my: 48 },
-    { id: "l", t: "Lambda", c: 1, x: 62, y: 70, mx: 50, my: 62 },
-    { id: "db", t: "DynamoDB", c: 5, x: 82, y: 50, mx: 50, my: 76 },
-    { id: "q", t: "SQS / SNS", c: 2, x: 82, y: 83, mx: 50, my: 90 },
+    { id: "u", t: "Customer", c: 1, x: 7, y: 45, mx: 50, my: 5 },
+    { id: "cf", t: "CloudFront", s: "edge + cache", c: 4, x: 23, y: 45, mx: 50, my: 18 },
+    { id: "s3", t: "S3", s: "private static origin", c: 2, x: 40, y: 20, mx: 50, my: 31 },
+    { id: "api", t: "API Gateway", s: "auth + throttle", c: 3, x: 40, y: 70, mx: 50, my: 44 },
+    { id: "l", t: "Lambda", s: "checkout logic", c: 1, x: 59, y: 70, mx: 50, my: 57 },
+    { id: "db", t: "DynamoDB", s: "orders/idempotency", c: 5, x: 80, y: 48, mx: 50, my: 70 },
+    { id: "q", t: "SNS + SQS", s: "async fanout", c: 2, x: 80, y: 82, mx: 50, my: 84 },
   ]}
   edges={[
     { from: "u", to: "cf" },
     { from: "cf", to: "s3", t: "static" },
     { from: "cf", to: "api", t: "API" },
     { from: "api", to: "l" },
-    { from: "l", to: "db" },
+    { from: "l", to: "db", t: "durable write" },
     { from: "l", to: "q", t: "event" },
   ]}
 />
 
-## وظيفة كل قطعة
+## Flow 1: فتح الموقع في 140 ms
 
-- CloudFront يقرب الواجهة ويحمي origin بإعداد مناسب.
-- S3 يخزن ملفات HTML وCSS والصور؛ خليه private ووصل CloudFront بصلاحية مخصصة.
-- API Gateway هو باب HTTPS للـ API.
-- Lambda تشغّل منطق قصير من غير إدارة servers.
-- DynamoDB يخزن records بالمفاتيح اللي التصميم محتاجها.
-- Cognito يدير sign-up/sign-in وtokens للمستخدمين.
-- SQS تمسك شغل خلفي، وSNS تنشر خبر لعدة مشتركين.
+١. Route 53 يحل الاسم إلى CloudFront.
+٢. CloudFront ترجع JavaScript والصور من edge لو cache hit؛ لو miss تجيبها من S3 origin خاصة.
+٣. الـ customer يسجل الدخول عبر Cognito ويحصل على token.
+٤. الواجهة تعرض catalog؛ personalized responses لا تتكيّش بسياسة عامة بالغلط.
 
-## Request flow: فتح الدرجات
+CloudFront يقلل latency وorigin load، لكنه مش بديل authorization. S3 تفضل private، والوصول للـ origin بصلاحيات مخصصة.
 
-١. الطالب يطلب الموقع؛ Route 53 ممكن يحل الاسم إلى CloudFront.
-٢. CloudFront ترجع ملفات الواجهة من cache أو تجيبها من S3.
-٣. الطالب يسجّل الدخول عبر Cognito ويحصل على token.
-٤. الواجهة تطلب `/grades` عبر API Gateway بالـ token.
-٥. authorizer يتحقق، ثم Lambda تقرأ درجات الطالب المسموح بها من DynamoDB.
-٦. الرد يرجع عبر API Gateway. متحطش صلاحيات الطالب في الواجهة وحدها؛ التحقق الحقيقي على الـ backend.
+## Flow 2: Checkout في 520 ms
 
-## Event flow: رفع واجب
+١. الساعة `20:00:00.000` العميل يرسل `POST /orders` مع token و`idempotencyKey`.
+٢. API Gateway تتحقق من route/authorizer وتطبّق throttling.
+٣. Lambda تتحقق من tenant/customer والسعر الحالي.
+٤. conditional write في DynamoDB تسجل order ومفتاح idempotency؛ retry بنفس المفتاح يرجع نفس النتيجة بدل charge جديد.
+٥. response يرجع الساعة `20:00:00.520`.
+٦. event يخرج للمسار الخلفي بعد ضمان عدم ضياعه وفق pattern مناسب؛ dual-write الساذج بين database وpublish خطر.
 
-١. Lambda تسجل metadata بأمان.
-٢. تبعت message إلى SQS لمعالجة الملف.
-٣. worker يعالج ويرجع النتيجة، مع retry وDLQ للفشل.
-٤. SNS تنشر `AssignmentProcessed` للإشعارات والتحليلات.
+## Flow 3: شغل خلفي مستقل
 
-<Hl c="g">الـ request flow مستني رد؛ الـ event flow بيفصل الشغل اللي ينفع يحصل بعدين.</Hl>
+SNS تعمل fanout إلى SQS queues للمخزون والإيميل والتحليلات. كل consumer عنده retries وDLQ وidempotency. لو email worker يقع `8 دقايق`، orders تفضل ناجحة والـ backlog يتعالج بعد رجوعه.
 
-## حدود مهمة
+<Hl c="g">المسار المتزامن يخلص أقل قدر لازم لتأكيد الطلب؛ الشغل اللي يقبل التأخير يخرج لمسار durable غير متزامن.</Hl>
 
-Cognito مش database للدرجات، وCloudFront مش authorization بديل، وSQS مش broadcast لكل مستهلك لوحده. استخدم أقل IAM permissions، encryption، logs، وlimits.
+## Incident: حملة أكبر من المتوقع
 
-<Box type="warn" title="Serverless مش معناها مجاني">
+- `20:00`: الحمل يصل `2,000 order/s`.
+- `20:01`: Lambda توسع، لكن DynamoDB throttling يظهر بسبب partition key مركزة.
+- `20:02`: API error rate تعدي `2%` والـ alarm يفتح incident.
+- `20:04`: الفريق يفعّل mitigation المخطط ويقلل traffic؛ orders المقبولة محفوظة، والرسائل المتأخرة في queues.
 
-كل خدمة لها meter وحدود وFree Tier متغير. CloudFront data transfer وrequests، API calls، Lambda duration، DynamoDB capacity، والرسائل ممكن تعمل فاتورة. اعمل budget وامسح التجارب.
+الدرس: serverless scaling في طبقة لا يضمن capacity في الطبقة التالية. load test لازم يثبت keys والـ quotas والـ downstream قبل الحملة.
+
+## Security وtradeoffs
+
+- Cognito يدير user identity/tokens، لكن backend يتحقق من token والـ authorization لكل order.
+- IAM roles أقل صلاحية لكل function/consumer، وتشفير وlogs بلا card secrets.
+- WAF/controls مناسبة قد تحمي الـ edge/API، وbudgets تراقب requests وduration وcapacity والرسائل.
+- DynamoDB اختيار تعليمي هنا؛ لو checkout يحتاج joins وmulti-row relational transactions، RDS/Aurora ممكن يكونوا أنسب.
+
+<Box type="warn" title="Architecture مش قائمة خدمات">
+
+كل مكوّن لازم يرتبط بمتطلب وفشل محدد. إزالة SNS أو Cognito أو DynamoDB ممكن تكون صح في نظام مختلف؛ القرار يتغير مع consistency والـ SLA والفريق والتكلفة.
 
 </Box>
 
-## 🧪 تمرين ورقي آمن
+## 🧪 تمرين: Production review
 
-بلونين، تتبّع خط "عرض الدرجات" وخط "معالجة واجب". حط قفل عند Cognito/IAM، ساعة عند SQS، وجرس عند SNS. اكتب نقطة فشل وخطة retry لكل خط.
+غيّر المتطلبات إلى `5,000 order/s`، RTO `10 دقايق` لRegion failure، وتقارير تقبل تأخير ساعة. ارسم request/event flows، احسب concurrency لو Lambda مدتها `250 ms`، وحدد hot-key risk وDLQ alarm. بعدها اكتب game day: Region/AZ failure، duplicate request، email outage، وشرط نجاح رقمي لكل تجربة.
 
-الفصل الجاي هنراقب المعمارية ونعرف مين غيّر إيه.
-
-<Checklist id="aws-cp-28" title="خلّصت الفصل لما" items={["تشرح دور كل خدمة من غير خلط", "تتبع request الدرجات", "تتبع event رفع الواجب", "تحط auth على backend", "تذكر DLQ والتكلفة والـ least privilege"]} />
+<Checklist id="aws-cp-28" title="خلّصت الفصل لما" items={["تربط كل خدمة بمتطلب إنتاجي", "تتبع checkout بالأوقات", "تفصل event flow عن response", "تحط auth وidempotency على backend", "تصمم DLQ وalarms وfailure test"]} />
 
 <Quiz>
-<Q n={1} q="ملفات الواجهة الثابتة تتحط فين وتتوزع بإيه؟">S3 كـ origin خاص وCloudFront للتوصيل والكاش.</Q>
-<Q n={2} q="معالجة PDF طويلة مش لازم المستخدم يستناها؛ نحط بينها إيه؟">SQS queue تفصل الطلب عن العامل.</Q>
-<Q n={3} q="هل وجود Cognito في الواجهة يغني عن فحص الصلاحية في API؟">لأ، الـ backend لازم يتحقق من الـ token والصلاحيات.</Q>
+<Q n={1} q="Retry لنفس checkout لازم ما يعملش charge تاني؛ أهم control؟">Idempotency key محفوظة بشرط atomic/conditional مناسب في مصدر دائم.</Q>
+<Q n={2} q="Email worker وقع 8 دقايق؛ هل checkout لازم يفشل؟">لأ لو الإيميل requirement غير متزامن؛ SQS تحتفظ بالشغل والـ backlog يتعالج لاحقًا.</Q>
+<Q n={3} q="هل Cognito token في الواجهة يغني عن authorization في API؟">لأ؛ الـ backend لازم يتحقق من token وصلاحية العميل على المورد.</Q>
 </Quiz>

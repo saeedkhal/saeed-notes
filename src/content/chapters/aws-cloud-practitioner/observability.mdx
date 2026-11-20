@@ -11,77 +11,74 @@ part: التشغيل والحوكمة
 color: c4
 ---
 
-## أربع أسئلة، أربع أدوات
+## Incident في SaaS وقت الـ peak
 
-<Grid2>
-<Card title="CloudWatch" c={4}>
+شركة SaaS عندها `CloudFront → ALB → ECS → RDS Multi-AZ`. الساعة 10:00 الـ checkout latency طلعت من 250ms لـ 8s، وبعدها errors وصلت 12%.
 
-النظام شغال إزاي دلوقتي؟ Metrics وlogs وalarms وdashboards.
+1. الساعة 10:01، `CloudWatch Alarm` لاحظ إن `ALB 5XX` عدى 5% لمدة دقيقتين وبعت `SNS` للـ on-call.
+2. الساعة 10:04، dashboard وضحت إن CPU طبيعية، لكن database connections عند الحد.
+3. الساعة 10:07، `X-Ray trace` بيّن إن 7.4s من الـ request رايحين في database call.
+4. الساعة 10:10، الفريق راجع `CloudTrail` ولقى deployment role غيّر task definition الساعة 09:58.
+5. الساعة 10:14، `AWS Config` وضّح إن parameter اتغير عن الـ approved baseline.
+6. الساعة 10:18، rollback رجّع latency لـ 280ms.
 
-</Card>
-<Card title="CloudTrail" c={5}>
+<Hl c="y">كل أداة جاوبت سؤال مختلف: حصل إيه؟ الطلب اتأخر فين؟ مين غيّر؟ والإعداد كان إيه؟</Hl>
 
-مين عمل API action وإمتى ومنين؟ Event history وtrails للـ audit.
+## CloudWatch: حالة التشغيل دلوقتي
 
-</Card>
-<Card title="AWS Config" c={2}>
+`CloudWatch` يجمع metrics وlogs، يبني dashboards، ويشغّل alarms. الـ metric رقم عبر الزمن؛ الـ log تفاصيل event؛ والـ alarm حالة مبنية على threshold أو expression.
 
-المورد كان متظبط إزاي وهل يوافق rules؟ Inventory وconfiguration history وcompliance.
+الـ alarm نجح لأنه اكتشف symptom بسرعة. لكنه لوحده فشل في تحديد السبب. Threshold حساس جدًا يعمل noise، وحساس قليلًا يفوّت incident؛ اختار window وevaluation periods من سلوك الإنتاج.
 
-</Card>
-<Card title="AWS X-Ray" c={3}>
+## X-Ray: رحلة request واحدة
 
-الـ request اتأخر فين بين مكونات التطبيق؟ Traces وservice map.
+`AWS X-Ray` يتتبع request في تطبيق معمول له instrumentation ويقسم الزمن على services وdependencies. في المثال، trace فرّقت بين ALB bottleneck وECS code وRDS call.
 
-</Card>
-</Grid2>
+X-Ray مش بديل للـ metrics: trace ممتازة للتفصيل، لكن CloudWatch أنسب لمعرفة إن 5% من كل الطلبات بطيئة.
 
-## CloudWatch: نبض التشغيل
+## CloudTrail وConfig: الفعل والحالة
 
-الـ <En>metric</En> رقم عبر الزمن، زي Lambda errors أو API latency. الـ log تفاصيل أحداث التطبيق. الـ alarm يراقب metric أو expression ويغيّر حالته وقد يشغّل action.
+`CloudTrail` يسجل API activity من Console وCLI وSDK وخدمات AWS: principal، الوقت، source IP والـ action. استخدمه لسؤال: "مين نفذ `UpdateService`؟"
 
-<Flow items={[
-  { t: "Metric", s: "Errors", c: 4 }, "→",
-  { t: "Alarm", s: "فوق الحد", c: 2 }, "→",
-  { t: "SNS", s: "إشعار الفريق", c: 1 },
-]} />
+`AWS Config` يسجل configuration history للموارد المدعومة ويقيّمها ضد Config Rules. استخدمه لسؤال: "الـ security group كان مفتوح إمتى وهل خالف policy؟"
 
-الـ alarm مش ضمان إن السبب معروف؛ هو إشارة للتحقيق. اختار threshold ومدة يقللوا الضوضاء.
+Config rule تبلغ عن noncompliance؛ مش بالضرورة تمنع أو تصلح التغيير إلا لو ربطت remediation. وCloudTrail مش application log.
 
-## CloudTrail: كاميرا الـ API
+## RTO وRPO: المطلوب قبل تصميم الـ DR
 
-CloudTrail يسجل نشاط API من Console وCLI وSDK وخدمات AWS: principal، وقت، source IP، request وغيرها. مناسب لسؤال "مين حذف الـ bucket policy؟".
+Fintech بتسجل عمليات دفع في `RDS`، والـ business قال: "لو Region وقعت، منقدرش نخسر أكتر من 5 دقايق transactions، والخدمة ترجع خلال 30 دقيقة."
 
-مش بديل للـ application logs، ومش هو أداة CPU monitoring.
+- <En>RPO — Recovery Point Objective</En>: أقصى data loss مقبول زمنيًا. هنا `RPO = 5 minutes`.
+- <En>RTO — Recovery Time Objective</En>: أقصى downtime مقبول من لحظة الانقطاع لرجوع الخدمة. هنا `RTO = 30 minutes`.
 
-## Config: صورة الإعداد عبر الزمن
+Timeline واقعي:
 
-AWS Config يسجل تكوين الموارد المدعومة وتغيّراته. Config Rules تقيّم compliance، مثل "هل الـ bucket يمنع public access؟".
+1. آخر replication مكتمل الساعة 14:02.
+2. الـ Region فشلت الساعة 14:06.
+3. المراقبة أعلنت incident الساعة 14:08.
+4. الفريق فعّل recovery في Region تانية الساعة 14:20.
+5. validation خلص و`Route 53` حوّل traffic الساعة 14:31.
 
-Config يقول إن الحالة غير compliant؛ مش معناه إنه يمنع التغيير تلقائيًا أو يصلحه إلا لو ربطت remediation مناسبة.
+الـ actual data loss أربع دقايق: **نجح RPO 5m**. الـ service رجعت بعد 25 دقيقة من 14:06: **نجح RTO 30m**.
 
-## X-Ray: رحلة الطلب
+لو آخر backup كان 13:55، يبقى data loss 11 دقيقة وRPO فشل حتى لو الخدمة رجعت بسرعة. ولو الداتا لحد 14:05 لكن الرجوع الساعة 14:50، RPO ينجح وRTO يفشل.
 
-X-Ray يجمع traces من تطبيق instrumented عشان يوضح أجزاء الطلب، latency والأخطاء بين services. لو API بطيئة بسبب call معين، trace تساعدك تحدده.
+<Box type="idea" title="إزاي تختار strategy؟">
 
-<Box type="story" icon="🏥" title="مستشفى المدرسة">
-
-CloudWatch جهاز النبض، CloudTrail دفتر مين فتح باب غرفة الأدوية، Config صورة ترتيب الغرفة ومخالفتها للقواعد، وX-Ray أشعة تتبع المشكلة جوه الرحلة.
+`Backup and restore` أرخص لكن RTO أطول. `Pilot light` يحتفظ بالـ core شغال. `Warm standby` يشغل نسخة أصغر ويقلل وقت الاسترجاع. `Multi-site active/active` أسرع وأغلى وأعقد، وبيحتاج حل consistency وfailover. المطلوب التجاري هو اللي يحدد، مش رغبتنا في أقوى architecture.
 
 </Box>
 
-## 🧪 تمرين ورقي آمن
+CloudWatch alarms وAWS Health يساعدوا الاكتشاف؛ replication وbackups يحددوا نقطة الاسترجاع؛ runbooks والاختبارات يحددوا هل RTO واقعي. مجرد كتابة RTO/RPO مش ضمان—لازم DR drills تقيس الزمن والفقد الفعلي.
 
-صنّف الأسئلة: "CPU عالية"، "مين غيّر SG"، "هل bucket خالف rule"، "أنهي service أخّرت request". اكتب CloudWatch، CloudTrail، Config، X-Ray بالترتيب.
+## 🧪 Lab ورقي
 
-لو فعّلت trails أو Config recorders أو خزنت logs، قد تظهر تكاليف تخزين وتحليل وتسجيل. راجع Pricing وامسح التجارب؛ متوقفش audit production عشان التوفير.
+ارسم incident timeline وحدد `MTTD` ووقت التشخيص ووقت الاسترجاع. بعدين اختبر سيناريو RTO 60 دقيقة وRPO 15 دقيقة على timestamps من اختيارك، وحدد النجاح والفشل بالأرقام.
 
-الفصل الجاي هنشفّر البيانات وندير المفاتيح والأسرار والشهادات.
-
-<Checklist id="aws-cp-29" title="خلّصت الفصل لما" items={["تربط metrics/logs/alarms بـ CloudWatch", "تربط API audit بـ CloudTrail", "تربط resource state/compliance بـ Config", "تربط request traces بـ X-Ray", "متفترضش إن alarm أو Config rule تصلح السبب وحدها"]} />
+<Checklist id="aws-cp-29" title="خلّصت الفصل لما" items={["تربط metrics/logs/alarms بـ CloudWatch", "تربط API audit بـ CloudTrail", "تربط resource state/compliance بـ Config", "تربط request traces بـ X-Ray", "تحسب RTO وRPO من timeline حقيقية"]} />
 
 <Quiz>
 <Q n={1} q="عايز تعرف مين نفذ `DeleteTable`؛ تفتح إيه؟">CloudTrail.</Q>
-<Q n={2} q="عايز إنذار لما Lambda errors تزيد؛ تستخدم إيه؟">CloudWatch metric وalarm، وممكن SNS للإشعار.</Q>
-<Q n={3} q="عايز تاريخ إعداد bucket وتقييمه ضد rule؛ تستخدم إيه؟">AWS Config.</Q>
+<Q n={2} q="Region وقعت 12:00، الخدمة رجعت 12:24، والـ RTO المطلوب 20 دقيقة. نجح؟">لأ؛ الـ downtime الفعلي 24 دقيقة، يعني RTO فشل بأربع دقايق.</Q>
+<Q n={3} q="آخر نسخة قابلة للاسترجاع 09:57 والفشل 10:00 مع RPO خمس دقايق. النتيجة؟">فقد محتمل ثلاث دقايق، فـ RPO ناجح.</Q>
 </Quiz>

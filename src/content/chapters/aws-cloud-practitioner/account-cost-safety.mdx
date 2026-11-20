@@ -11,6 +11,22 @@ part: الأمان والحساب
 color: c5
 ---
 
+## Incident تكلفة: Lab اتساب آخر الأسبوع
+
+فريق صغير أنشأ يوم الخميس EC2 وload balancer وEBS snapshot لاختبار ساعتين. الـ instance اتوقفت، لكن الـ load balancer والـ volume والـ snapshot فضلوا موجودين. الاثنين الصبح budget forecast نبه إن الإنفاق هيعدي السقف.
+
+المشكلة مش بس «resource غالية»؛ المشكلة إن مفيش owner ولا expiry ولا cleanup verification.
+
+## Timeline آمن قبل أول resource
+
+1. **قبل التسجيل:** افهم هل الحساب Free plan ولا Paid plan وشروط credits.
+2. **قبل الإنشاء بـ١٥ دقيقة:** اعمل budget وتنبيهات actual وforecasted.
+3. **وقت الإنشاء:** أضف `Project` و`Environment` و`Owner` و`ExpiresOn`.
+4. **بعد الـ Lab مباشرة:** احذف الأصل والتوابع، وافحص كل Region مستخدمة.
+5. **اليوم التالي:** راجع Cost Explorer/Billing لأن بيانات التكلفة مش فورية.
+
+النجاح إن كل تكلفة لها owner والغرض معروف والتنضيف مثبت. الفشل إن budget يوصل alert ولا حد يقرأه، أو إن حذف instance يتفهم غلط إنه حذف كل التوابع.
+
 ## خطتين للحساب الجديد
 
 في تجربة AWS الحالية للحسابات الجديدة، تختار بين **Free plan** و**Paid plan**. التفاصيل والأهلية بتتغير، فالكلام هنا صورة أكتوبر ٢٠٢٦ ولازم تراجع صفحة AWS Free Tier وقت التسجيل.
@@ -56,16 +72,16 @@ AWS Budgets تقدر تراقب actual أو forecasted cost وترسل alerts ع
 
 استخدم tags ثابتة من البداية:
 
-- `Project=school-portal`
+- `Project=checkout-lab`
 - `Environment=lab`
 - `Owner=team-name`
 - `ExpiresOn=2026-11-30`
 
 لتظهر tag في تقارير التكلفة قد تحتاج تفعيلها كـ cost allocation tag، وفيه تأخير قبل ظهور بيانات الفوترة. والـ tags مش مدعومة بنفس الشكل على كل resource.
 
-<Box type="story" icon="🧾" title="إيصال الرحلة">
+<Box type="story" icon="🧾" title="تكلفة قابلة للمحاسبة">
 
-لو كل بند مكتوب عليه الفصل والرحلة وصاحب الطلب، المحاسب يعرف المصروف راح فين. resource من غير tags زي إيصال مكتوب فيه «حاجات»؛ موجود لكن صعب تحاسبه.
+لما كل resource عليها project وenvironment وowner وexpiry، تقدر تربط الإنفاق بفريق وقرار. resource من غير metadata تظهر في الفاتورة لكن يصعب تعرف قيمتها أو صاحب قرارها.
 
 </Box>
 
@@ -79,13 +95,21 @@ AWS Budgets تقدر تراقب actual أو forecasted cost وترسل alerts ع
 4. راجع الفاتورة وCost Explorer لاحقًا لأن بيانات التكلفة مش فورية.
 5. احتفظ بالدليل إن التنضيف تم، من غير أسرار.
 
-## 🧪 Lab آمن: حواجز من غير موارد
+## مفاهيم متقاربة
 
-لو عندك حساب، افتح Billing فقط: حدد الخطة والرصيد وتاريخ الانتهاء، وأنشئ budget مناسبًا إن كانت الميزة متاحة. متنشئش compute أو database. لو معندكش حساب، صمم thresholds وtags وcleanup checklist على ورق.
+- **Credits:** رصيد بشروط وأهلية وانتهاء؛ مش ضمان عدم الفاتورة.
+- **Budget:** يقارن actual أو forecasted بحدود وينبه؛ مش kill switch افتراضي.
+- **Billing alarm:** آلية تنبيه بمتطلبات ونطاق محدد؛ مش بديل عن Budgets.
+- **Cost allocation tags:** تساعد نسب التكلفة بعد تفعيلها وظهور البيانات.
+- **Cleanup:** إجراء تشغيلي يحذف الأصل والتوابع ويثبت النتيجة.
+
+## 🧪 Lab آمن: tabletop لفاتورة
+
+خطط Lab مدته ساعتان فيه EC2 وALB وEBS. حدد budget عند `5 USD` و`10 USD`، recipients، tags، قائمة التوابع، وموعد مراجعة اليوم التالي. افترض إن forecast وصل `12 USD`: اكتب timeline للاستجابة ومن يملك قرار الإيقاف. متنشئش resources.
 
 ## قبل الفصل الجاي
 
-الحساب بقى له حواجز أمان وتكلفة. الفصل ١١ هيبدأ البناء الفعلي للبوابة باختيار compute مناسب، مع تسعير وcleanup واضحين قبل أي مورد.
+الحساب بقى له حواجز أمان وتكلفة. الفصل ١١ هيبدأ البناء الفعلي باختيار compute مناسب، مع تسعير وcleanup واضحين قبل أي مورد.
 
 <Checklist id="aws-cp-10" title="خلّصت الفصل لما" items={["تفرّق بين Free plan وPaid plan الحالية", "تعرف إن credits محدودة ومش بتغطي كل شيء", "تعمل budget وتفهم إنه تنبيه مش إيقاف شامل", "تحط tags وخطة cleanup قبل الإنشاء", "تراجع كل Region والتوابع بعد الـ Lab"]} />
 

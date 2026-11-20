@@ -11,96 +11,53 @@ part: Data وAI والهجرة
 color: c5
 ---
 
-## الهجرة برنامج مش زرار
+## هجرة e-commerce في 90 يوم
 
-نقل servers من الداتا سنتر لـ AWS جزء واحد. لازم تعرف الهدف، الناس، الحوكمة، الأمان، التشغيل، والتكلفة قبل موجات التنفيذ.
+الشركة عندها 80 VM وOracle وfile server، والـ checkout لازم downtime أقل من 20 دقيقة.
 
-<Box type="story" title="نقل المدرسة">
+1. أيام 1–14: `Migration Evaluator` يجمع inventory وutilization ويبني TCO.
+2. أيام 15–30: dependencies، landing zone، security وnetworking.
+3. يوم 35: pilot من 5 low-risk servers.
+4. أيام 40–75: waves من 10–15 server مع test وrollback.
+5. يوم 80: database cutover مع replication وvalidation.
+6. يوم 90: decommission بعد قبول business، مش فور أول boot.
 
-لو المدرسة هتنقل مبنى، مش هتشيل الديسكات وخلاص. هتعمل جرد، تحدد اللي هيتصلح واللي هيترمي، تجرب فصل واحد، وبعدين تنقل على دفعات. دي روح cloud migration.
+نسخ كل VM يحقق deadline، لكنه ممكن ينقل waste والمشاكل. إعادة كتابة الكل تقلل legacy لكن غالبًا تفشل deadline. الاختيار workload-by-workload.
 
-</Box>
+## CAF والـ 7 Rs
 
-## AWS CAF على مستوى الامتحان
+`AWS CAF` يراجع التحول عبر Business وPeople وGovernance وPlatform وSecurity وOperations. هو framework، مش migration tool.
 
-`AWS Cloud Adoption Framework` يساعد المؤسسة تشوف التحول من ست زوايا:
+- **Rehost**: انقل تقريبًا كما هو؛ أسرع، modernization أقل.
+- **Replatform**: تعديل محدود، زي database على RDS.
+- **Refactor**: redesign cloud-native؛ قيمة أعلى ووقت/مخاطر أكبر.
+- **Repurchase**: استبدل بـ SaaS.
+- **Relocate**: انقل environment متوافق من غير redesign كبير.
+- **Retain**: سيبه مؤقتًا لسبب قانوني أو dependency.
+- **Retire**: اقفله بعد إثبات عدم الاستخدام.
 
-<Grid2>
-<Card title="Business وPeople" c={1}>
+مثال: web VM بـ MGN = rehost؛ Oracle إلى RDS بتعديل محدود = replatform؛ monolith إلى event-driven = refactor.
 
-القيمة والنتائج المطلوبة، والمهارات والثقافة والأدوار.
+## الأدوات
 
-</Card>
-<Card title="Governance وPlatform" c={2}>
+`Migration Evaluator` للتقييم والـ business case، مش النسخ. `Application Migration Service (MGN)` يعمل continuous block-level replication وtest launch وcutover للـ rehost.
 
-القرارات والرقابة والـ portfolio، وبناء الـ landing zone والـ cloud foundation.
+من **٧ نوفمبر ٢٠٢٥**، Migration Hub لا يقبل عملاء جدد؛ العملاء الحاليون يستمروا. `AWS Transform` هو الاتجاه الحالي للتخطيط والتنفيذ والتحديث بقدرات AI، واسم `AWS Transform MGN` قد يظهر. CLF-C02 قد يستخدم الاسم التاريخي؛ راجع docs في أكتوبر ٢٠٢٦.
 
-</Card>
-<Card title="Security وOperations" c={3}>
+## نجاح وفشل الـ cutover
 
-إدارة المخاطر والهوية والحماية، وتشغيل ومراقبة واسترجاع الـ workloads.
+لو freeze بدأ 01:00، آخر sync 01:06، validation 01:14، وDNS تحول 01:17، downtime 17 دقيقة: نجح requirement 20m. لو dependency غير مكتشفة عطلت payment لساعة، migration تقنيًا booted لكن business migration فشلت.
 
-</Card>
-</Grid2>
+لازم acceptance criteria: data reconciliation، latency، security، monitoring، owner sign-off، وrollback deadline.
 
-<Hl c="o">CAF مش migration tool؛ ده إطار جاهزية وتحول مؤسسي.</Hl>
+## 🧪 Lab ورقي
 
-## الـ 7 Rs
+صنف CRM، payroll legacy، web farm، system بلا users، وdatabase حرجة على 7 Rs. اكتب deadline وdowntime وrollback لكل واحد.
 
-- **Rehost**: lift and shift؛ انقل التطبيق تقريبًا زي ما هو.
-- **Replatform**: تعديلات محدودة للاستفادة من خدمة managed.
-- **Refactor / re-architect**: غيّر التصميم للاستفادة من cloud-native.
-- **Repurchase**: استبدل التطبيق بمنتج SaaS أو منتج مختلف.
-- **Relocate**: انقل environment متوافق على مستوى البنية من غير redesign كبير.
-- **Retain**: سيبه مكانه دلوقتي لسبب تقني أو قانوني أو تجاري.
-- **Retire**: اقفله لأنه ملوش لازمة.
-
-<Box type="idea" title="مثال portal المدرسة">
-
-نقل VM كما هي `rehost`. نقل database من على VM إلى RDS `replatform`. تقسيم التطبيق لخدمات serverless `refactor`. استبداله بمنصة مدارس SaaS `repurchase`.
-
-</Box>
-
-## Migration Evaluator
-
-`Migration Evaluator` يساعد في discovery وassessment وبناء business case وTCO من بيانات البيئة الحالية. يجمع inventory وutilization عشان متقارنش cloud بسعر server مبالغ في حجمه.
-
-هو للتقييم والتخطيط، مش الأداة اللي تنسخ workload النهائي.
-
-## Migration Hub والواقع الحالي
-
-قديمًا، `AWS Migration Hub` كان مكان مركزي لتتبّع الهجرات وأدواتها. من **٧ نوفمبر ٢٠٢٥**، AWS Migration Hub وقف قبول عملاء جدد؛ العملاء الحاليين يقدروا يكملوا.
-
-`AWS Transform` هو الاتجاه الحالي للعملاء الجدد، وبيوفر تخطيط وتنفيذ وتحديث migration بقدرات AI، ومنها توصيات 7 Rs.
-
-<Box type="warn" title="المنهج ممكن يقول الاسم القديم">
-
-CLF-C02 اتكتب قبل تغيير ٢٠٢٥، فممكن مواد الدراسة تقول Migration Hub. افهم وظيفته التاريخية، لكن في قرار حقيقي جديد راجع AWS Transform والـ docs. الخدمات السحابية بتتغير أسرع من بنوك الأسئلة.
-
-</Box>
-
-## Application Migration Service
-
-`AWS Application Migration Service`، واختصارها `MGN`، مخصصة غالبًا لـ rehost servers إلى AWS. تعمل continuous block-level replication لمنطقة staging، تقدر تعمل test launch، وبعد التحقق تعمل cutover.
-
-هي application-agnostic نسبيًا: بتنقل server workload بدل ما تعيد كتابة التطبيق. اسم `AWS Transform MGN` ممكن يظهر في صفحات AWS الأحدث.
-
-## موجات آمنة
-
-<Flow items={[{t:"Assess",s:"جرد وbusiness case",c:1},"→",{t:"Mobilize",s:"foundation وتجربة",c:2},"→",{t:"Migrate",s:"waves واختبار",c:3},"→",{t:"Modernize",s:"تحسين بعد الاستقرار",c:4}]} />
-
-ابدأ workloads قليلة المخاطر، حدد rollback، اختبر dependency والـ DNS والـ security، ومتقفلش المصدر قبل قبول أصحاب التطبيق.
-
-## 🧪 Lab آمن
-
-اعمل جدول ورقي لخمس أنظمة في المدرسة: موقع، payroll قديم، file server، نظام مهجور، وemail. اختار R لكل واحد واكتب سبب في جملة. مفيش موارد AWS.
-
-الفصل الجاي هنفصل أدوات نقل database والملفات والربط الهجين والأجهزة المادية.
-
-<Checklist id="aws-cp-35" title="خلّصت الفصل لما" items={["تذكر perspectives الستة للـ CAF", "تختار R مناسبة من هدف العمل", "تفرق بين Evaluator والتتبّع وMGN", "تعرف تغيير Migration Hub إلى AWS Transform للعملاء الجدد"]} />
+<Checklist id="aws-cp-35" title="خلّصت الفصل لما" items={["تذكر perspectives الستة للـ CAF", "تختار R مناسبة من هدف العمل", "تفرق بين Evaluator والتخطيط وMGN", "تعرف تغيير Migration Hub إلى AWS Transform للعملاء الجدد"]} />
 
 <Quiz>
-<Q n={1} q="نقلت database من VM إلى RDS بتغييرات محدودة. أنهي R؟">`Replatform`؛ حسّنت المنصة من غير إعادة كتابة كاملة.</Q>
-<Q n={2} q="أداة تعمل inventory وTCO قبل القرار؟">`Migration Evaluator`.</Q>
-<Q n={3} q="عايز rehost لسيرفرات مع replication وtest launch. تختار؟">`AWS Application Migration Service (MGN)`، مع مراجعة الاسم الحالي AWS Transform MGN.</Q>
+<Q n={1} q="Database من VM إلى RDS بتغييرات محدودة؟">Replatform.</Q>
+<Q n={2} q="Inventory وTCO قبل القرار؟">Migration Evaluator.</Q>
+<Q n={3} q="Rehost مع replication وtest launch؟">Application Migration Service، مع مراجعة اسم AWS Transform MGN الحالي.</Q>
 </Quiz>

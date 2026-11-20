@@ -1,88 +1,78 @@
 ---
-title: وصل المدرسة بالسحابة — Hybrid Networking
+title: Hybrid Networking للمؤسسات
 short: Hybrid Networking
 order: 25
 label: فصل ٢٥
 badge: Networking · فصل ٢٥
 en: Site-to-Site VPN · Client VPN · Direct Connect · PrivateLink · Transit Gateway
 keywords: VPN · Direct Connect · PrivateLink · Transit Gateway
-goal: تختار وصلة مناسبة لمقر المدرسة أو الموظف أو خدمة خاصة بين الشبكات.
+goal: تختار اتصال مؤسسة حسب الطرفين والـ bandwidth والـ encryption ووقت التجهيز.
 part: Networking
 color: c5
 ---
 
-## مين بيتوصل بمين؟
+## المثال الأول: ERP بين data center وAWS
 
-قبل اختيار خدمة، اسأل: شبكة كاملة؟ جهاز موظف؟ وصلة مخصصة؟ خدمة واحدة؟ ولا عشرات VPCs؟
+شركة تنقل ERP تدريجيًا. عندها `12` VPC وdata center يرسل `3 TB/day`. المطلوب encryption، latency مستقرة، وbackup path يشتغل خلال `10 دقايق`.
 
-## نوعين VPN
+١. `Direct Connect` يوفر اتصال مخصص أكثر ثباتًا من internet path.
+٢. لأنه مش encrypted تلقائيًا لمجرد إنه خاص، يتصمم encryption مناسب حسب المتطلب.
+٣. `Site-to-Site VPN` يبقى backup عبر الإنترنت.
+٤. `Transit Gateway` يربط الـ VPCs والاتصالات كـ hub مع route tables للعزل.
+٥. failover test يقيس التحويل والـ routes والـ throughput، مش مجرد إن tunnel حالتها UP.
+
+## مين بيتصل بمين؟
 
 <Grid2>
 <Card title="Site-to-Site VPN" c={5}>
 
-نفق مشفّر عبر الإنترنت بين شبكة المقر والـ VPC أو Transit Gateway. مناسب لربط فرع كامل، وسرعته وتجربته تتأثر بالإنترنت.
+شبكة كاملة لشبكة AWS عبر tunnels مشفرة فوق الإنترنت. أسرع في التجهيز نسبيًا، لكن الجودة تتأثر بمسار الإنترنت.
 
 </Card>
-<Card title="AWS Client VPN" c={2}>
+<Card title="Client VPN" c={2}>
 
-خدمة VPN مُدارة تخلي جهاز موظف يتصل بموارد AWS والشبكات المسموحة. مناسبة لمسؤول النظام من البيت.
+جهاز مستخدم أو فريق remote يدخل شبكات مسموحة. identity وauthorization والـ routes جزء من التصميم.
 
 </Card>
 </Grid2>
 
-<Box type="story" icon="🚌" title="أتوبيس ولا عربية؟">
+`Direct Connect` يحتاج lead time وتكلفة ومزود/موقع مناسب، لكنه يقدم مسار مخصص. Site-to-Site VPN مفيد كبداية أو backup، لكن قارن bandwidth والـ SLA الفعليين.
 
-Site-to-Site زي أتوبيس ثابت بين مبنى المدرسة والمخزن: بيربط شبكتين. Client VPN زي عربية للموظف نفسه تدخل من بوابة مصرح بها.
+## PrivateLink وTransit Gateway
+
+`PrivateLink` يعرّض service محددة من provider VPC لمستهلكين عبر interface endpoints، من غير full network connectivity، ويفيد مع overlapping CIDRs. مناسب لشركة شريكة تحتاج payments API فقط.
+
+`Transit Gateway` راوتر hub يربط VPCs وon-premises. هو full routing fabric حسب route tables، مش بديل PrivateLink لعرض API واحدة بأقل blast radius.
+
+<Flow items={[
+  { t: "Data center", s: "DX + VPN backup", c: 1 }, "→",
+  { t: "Transit Gateway", s: "hub routes", c: 5 }, "→",
+  { t: "12 VPCs", s: "segmented", c: 3 },
+]} />
+
+## Incident timeline
+
+- `02:00`: Direct Connect path يقع.
+- `02:01`: BGP/route behavior يبدأ التحويل حسب التصميم.
+- `02:06`: VPN شغالة، لكن throughput أقل من replication traffic.
+- `02:15`: queue backlog يزيد؛ الـ RTO network اتحقق، لكن capacity objective فشل.
+
+النجاح محتاج test تحت traffic حقيقي: زمن التحويل، packet loss، throughput، وعودة المسار الأساسي من غير route oscillation.
+
+<Box type="warn" title="Overlapping CIDR يقفل اختيارات">
+
+Full routing بين شبكتين بنفس العناوين صعب. خطط IPAM بدري؛ ولو المطلوب service واحدة فقط، PrivateLink قد يتجنب full-network overlap.
 
 </Box>
 
-## Direct Connect
+## 🧪 تمرين: Enterprise cutover
 
-<En>AWS Direct Connect</En> وصلة شبكة مخصصة من موقعك إلى موقع Direct Connect، بعيدًا عن مسار الإنترنت العام. تدي تجربة أكثر ثباتًا وقد توفر bandwidth أعلى حسب الإعداد.
+ارسم data center و20 VPC و200 remote engineer وشريك يحتاج API واحدة. اختار DX/VPN/Client VPN/TGW/PrivateLink لكل خط. افترض سقوط DX الساعة `11:00` وحمل `800 Mbps`: اكتب timeline، backup capacity، ومعيار نجاح.
 
-هي **مش تشفير تلقائيًا** لمجرد إنها خاصة؛ لو المتطلب encryption، صمّم طبقة تشفير مناسبة، مثل VPN فوق الاتصال حسب السيناريو.
-
-التركيب بياخد تخطيط ووقت وتكلفة، فـ Site-to-Site VPN ممكن يبقى بداية أو backup.
-
-## PrivateLink
-
-<En>AWS PrivateLink</En> يعرّض **خدمة محددة** لمستهلكين عبر interface endpoints وعناوين خاصة، من غير فتح اتصال شبكي كامل أو تعريضها للـ public internet.
-
-ده اختيار client-to-service، مش بديل لربط شبكتين بكل عناوينهم. ومفيد حتى لو CIDRs متداخلة.
-
-## Transit Gateway
-
-<En>AWS Transit Gateway</En> راوتر مركزي مُدار يربط VPCs وشبكات on-premises. بدل شبكة peering متشابكة، كل شبكة تتوصل بالـ hub.
-
-<Flow items={[
-  { t: "VPC البوابة", c: 1 }, "→",
-  { t: "Transit Gateway", s: "راوتر مركزي", c: 5 }, "←",
-  { t: "VPC الحسابات", c: 3 }, "+",
-  { t: "مقر المدرسة", s: "VPN أو DX", c: 4 },
-]} />
-
-الـ Transit Gateway وPrivateLink وVPN وDirect Connect خدمات مختلفة وقد تشتغل مع بعض.
-
-## خريطة اختيار سريعة
-
-- فرع كامل بسرعة إعداد معقولة: Site-to-Site VPN.
-- موظف واحد أو فريق remote: Client VPN.
-- وصلة مخصصة أكثر ثباتًا: Direct Connect.
-- استهلاك API خاصة فقط: PrivateLink.
-- ربط شبكات كتير بهيكل hub: Transit Gateway.
-
-## 🧪 تمرين ورقي آمن
-
-ارسم مقر المدرسة، موظف support، وثلاث VPCs. اختار لكل خط خدمة واكتب سببًا من كلمتين: "شبكة لشبكة"، "جهاز مستخدم"، "service only"، أو "hub".
-
-التمرين ورقي. كل الخدمات دي ممكن تحمل رسوم اتصال، ساعات، endpoints، بوابات أو نقل بيانات؛ راجع Pricing قبل أي lab ونظّف كل resource.
-
-كده خلّصنا Networking؛ الفصل الجاي هنفصل أجزاء النظام برسائل بدل الاعتماد المباشر.
-
-<Checklist id="aws-cp-25" title="خلّصت الفصل لما" items={["تفرق Site-to-Site عن Client VPN", "متفترضش إن Direct Connect مشفّر تلقائيًا", "تشرح PrivateLink كاتصال بخدمة محددة", "تشرح Transit Gateway كـ hub", "تذكر التكلفة ووقت تجهيز الاتصال"]} />
+<Checklist id="aws-cp-25" title="خلّصت الفصل لما" items={["تفرق Site-to-Site عن Client VPN", "متفترضش إن Direct Connect مشفّر تلقائيًا", "تشرح PrivateLink كاتصال بخدمة محددة", "تشرح Transit Gateway كـ hub", "تختبر failover بالزمن والـ throughput"]} />
 
 <Quiz>
-<Q n={1} q="مدير النظام من اللابتوب عايز يدخل موارد خاصة؛ أنهي VPN؟">AWS Client VPN، لأنه اتصال عميل فردي.</Q>
-<Q n={2} q="شركة شريكة تحتاج API واحدة فقط ومش عايزين ربط شبكي كامل؟">AWS PrivateLink عبر interface endpoint.</Q>
-<Q n={3} q="عندك 40 VPC ووصلات فروع؛ إيه يقلل تشابك الربط؟">AWS Transit Gateway كراوتر مركزي.</Q>
+<Q n={1} q="مهندس من laptop عايز موارد خاصة؛ أنهي خدمة؟">AWS Client VPN لاتصال المستخدم الفردي.</Q>
+<Q n={2} q="شريك يحتاج API واحدة مع CIDR متداخل؛ المرشح؟">AWS PrivateLink عبر interface endpoint بدل full network routing.</Q>
+<Q n={3} q="Direct Connect وقع وVPN اشتغلت لكن السعة نصف المطلوب؛ هل الخطة نجحت؟">نجح الاتصال جزئيًا لكن capacity objective فشل؛ لازم backup path يتحمل الحمل المطلوب.</Q>
 </Quiz>

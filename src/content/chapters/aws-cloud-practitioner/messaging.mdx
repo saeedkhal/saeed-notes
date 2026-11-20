@@ -1,85 +1,75 @@
 ---
-title: الطابور والميكروفون — SQS وSNS
+title: SQS وSNS في Checkout Production
 short: SQS وSNS
 order: 26
 label: فصل ٢٦
 badge: ربط الأنظمة · فصل ٢٦
 en: Amazon SQS · Amazon SNS · decoupling · DLQ · fanout
 keywords: queue · pub/sub · DLQ · fanout
-goal: تفصل خدمات بوابة المدرسة وتختار queue أو topic حسب شكل التسليم.
+goal: تصمم buffering وfanout وتتعامل مع duplicate وbacklog وفشل المستهلك.
 part: ربط الأنظمة
 color: c1
 ---
 
-## ليه نفصل الخدمات؟
+## المثال الأول: Order confirmed
 
-لو تسجيل الطالب مستني خدمة الإيميل وخدمة التقارير يخلصوا، عطل واحدة يوقف الطلب كله. <En>Decoupling</En> يخلي المنتج والمستهلك مستقلين في الوقت والسرعة.
+Checkout يستقبل `1,000 order/s`. إرسال email يأخذ `800 ms`، analytics أحيانًا تتوقف `20 دقيقة`، والمستخدم لازم يستلم response خلال `300 ms`.
 
-<Box type="story" icon="🍽️" title="ورقة المطبخ">
-
-الجرسون يحط الطلب في طابور المطبخ ويرجع يخدم ناس تانية. الطبّاخ ياخد الطلب لما يفضى. الورقة فصلت سرعة الجرسون عن سرعة المطبخ.
-
-</Box>
-
-## Amazon SQS: طابور شغل
-
-<En>Amazon Simple Queue Service</En> طابور مُدار. المنتج يبعت message، والمستهلك يعمل poll ويعالجها ثم يحذفها بعد النجاح.
-
-- الرسالة بتفضل لحد ما تتعالج أو تنتهي retention.
-- كل message غالبًا تتسلم لمستهلك واحد من مجموعة العمال.
-- Standard queue scalable جدًا وتسليمها at-least-once؛ صمّم المعالجة idempotent.
-- FIFO queue تضيف ordering وخصائص إزالة التكرار ضمن حدودها.
-
-الـ <En>visibility timeout</En> يخفي الرسالة مؤقتًا أثناء المعالجة. لو العامل فشل وممسحهاش، تظهر تاني.
-
-## DLQ: أوضة الحالات الصعبة
-
-<En>Dead-letter queue</En> تستقبل الرسائل اللي فشلت عدد مرات محدد. هي مش زر إصلاح؛ راقبها، افهم السبب، وصلّح، وبعدها قرر إعادة المعالجة.
+١. checkout يحفظ order أولًا، ثم ينشر `OrderConfirmed`.
+٢. SNS تعمل fanout إلى SQS queue للإيميل، queue للمخزون، وqueue للتحليلات.
+٣. كل consumer يشتغل بسرعته؛ تعطل analytics لا يوقف checkout أو email.
+٤. كل consumer يستخدم `orderId` كـ idempotency key لأن التسليم قد يتكرر.
 
 <Flow items={[
-  { t: "تسجيل طالب", c: 1 }, "→",
-  { t: "SQS", s: "buffer", c: 2 }, "→",
-  { t: "عامل PDF", c: 3 }, "→",
-  { t: "DLQ", s: "بعد تكرار الفشل", c: 5 },
+  { t: "Order service", s: "durable write", c: 1 }, "→",
+  { t: "SNS Topic", s: "fanout", c: 2 }, "→",
+  { t: "3 SQS queues", s: "independent pace", c: 3 }, "→",
+  { t: "DLQs", s: "investigate", c: 5 },
 ]} />
 
-## Amazon SNS: ميكروفون
+## SQS: Buffer وضغط متحكم فيه
 
-<En>Amazon Simple Notification Service</En> خدمة publish/subscribe. الـ publisher ينشر على topic، وSNS تدفع نسخة لكل subscription مناسبة: SQS أو Lambda أو HTTP/S أو email وغيرها.
+Standard queues قابلة للتوسع وتسليمها at-least-once، فالترتيب والتكرار لازم يدخلوا التصميم. FIFO تضيف ordering وdeduplication semantics ضمن حدودها، لكنها مش اختيار تلقائي لكل نظام.
 
-ده <En>fanout</En>: حدث "النتيجة ظهرت" يروح لطابور الإيميل وطابور التحليلات وخدمة إشعار ولي الأمر.
+`visibility timeout` يخفي message أثناء المعالجة. لو worker يحتاج `90 ثانية` والـ timeout `30 ثانية`، message ممكن تظهر لworker تاني قبل انتهاء الأول. اضبطه على زمن المعالجة أو جدده، مع idempotency دائمًا.
+
+لو يدخل `1,000 msg/s` والعمال يخلصوا `700 msg/s`، backlog يزيد `300 msg/s`؛ بعد `20 دقيقة` يبقى `360,000` message. Queue تمنع السقوط الفوري لكنها لا تخلق capacity.
+
+## SNS: Fanout
+
+SNS publish/subscribe تدفع نسخة لكل subscription مطابقة: SQS أو Lambda أو HTTP/S أو email وغيرها. استخدم filter policies بحذر لتقليل traffic غير المطلوب، لكن راقب إن event schema والتصفية متوافقين.
 
 <Grid2>
 <Card title="SQS" c={1}>
 
-احتفظ بشغل في queue، والمستهلك يسحبه بسرعته. مناسب للـ buffering والمعالجة الخلفية.
+واحد من pool المستهلكين يعالج message، مع buffering وpolling وretention.
 
 </Card>
 <Card title="SNS" c={2}>
 
-انشر خبر لمشتركين كتير فورًا. مناسب للـ pub/sub والـ fanout.
+نسخة لكل subscriber مستقل. لا تعتمد عليها وحدها كـ work queue لكل فريق لو محتاج buffering وعزل.
 
 </Card>
 </Grid2>
 
-## الاتنين مع بعض
+## DLQ مش نهاية ناجحة
 
-SNS topic تبعت لكل فريق SQS queue خاصة به. كده كل مستهلك ياخد نسخة ويعالج بسرعته، ولو واحد وقع الباقيين يكملوا.
+بعد `5` محاولات، message تالفة تدخل DLQ. alarm لازم يفتح incident، الفريق يصلح schema/consumer، يختبر message، ثم يعمل redrive بمعدل لا يعيد إسقاط النظام. حذف DLQ من غير تحقيق يخفي data loss.
 
-التسليم قد يتكرر، فاستعمل message ID أو business key يمنع تسجيل نفس المصروف مرتين.
+<Box type="warn" title="Dual write ممكن يضيّع event">
 
-## 🧪 تمرين ورقي آمن
+لو التطبيق حفظ order ثم وقع قبل publish، الداتا موجودة والحدث ضاع. أنماط زي transactional outbox تعالج الفجوة؛ مجرد إضافة queue لا تجعل النشر atomic مع database.
 
-اكتب حدث "طالب رفع الواجب". ارسم SNS وثلاث SQS queues: تصحيح، إشعار، وتحليلات. ارسم DLQ لكل مسار حساس، واكتب مين يعمل retry ومين يراقب الفشل.
+</Box>
 
-ماتنشئش موارد للتمرين. SQS وSNS لهما تسعير وFree Tier بشروط وحدود متغيرة؛ راجع Pricing ومتعتبرش أي خدمة مجانية دائمًا.
+## 🧪 تمرين: احسب backlog
 
-الفصل الجاي هنوجّه أحداث أغنى ونبني workflow خطواته واضحة.
+Video pipeline تستقبل `500 job/min`، وكل worker يعالج `20 job/min` وعندك `15 worker`. احسب نمو backlog في ساعة، واقترح scaling. أضف poison message، visibility timeout، DLQ alarm، وidempotency key يمنع إخراج الفيديو مرتين.
 
-<Checklist id="aws-cp-26" title="خلّصت الفصل لما" items={["تشرح decoupling", "تختار SQS لشغل يتسحب", "تختار SNS للـ fanout", "تعرف وظيفة visibility timeout", "تعامل DLQ كمكان تحقيق مش مقلب رسائل"]} />
+<Checklist id="aws-cp-26" title="خلّصت الفصل لما" items={["تشرح decoupling بمسار order", "تختار SQS للـ buffering", "تختار SNS للـ fanout", "تحسب backlog وتضبط visibility timeout", "تعامل DLQ كـ incident وتمنع duplicates"]} />
 
 <Quiz>
-<Q n={1} q="عامل PDF أبطأ من الطلبات الداخلة؛ أنهي خدمة تعمل buffer؟">Amazon SQS.</Q>
-<Q n={2} q="نفس الخبر لازم يروح لثلاث فرق مستقلة؛ تعمل إيه؟">SNS fanout إلى subscriptions، ويفضل SQS queue لكل فريق عند الحاجة.</Q>
-<Q n={3} q="رسالة دخلت DLQ؛ هل تعتبر اتصلحت؟">لأ، اتعزلت للتحقيق. لازم نصلح السبب ونقرر redrive بأمان.</Q>
+<Q n={1} q="يدخل 1,000 msg/s ويتعالج 700؛ إيه اللي يحصل؟">الـ backlog يزيد 300 message كل ثانية لحد ما تزود capacity أو يقل الحمل.</Q>
+<Q n={2} q="ثلاث خدمات لازم كل واحدة تستلم نفس الحدث باستقلال؛ التصميم؟">SNS fanout إلى SQS queue منفصلة لكل خدمة.</Q>
+<Q n={3} q="Message دخلت DLQ؛ هل اتصلحت؟">لأ؛ اتعزلت. لازم تحقيق وإصلاح واختبار ثم redrive آمن.</Q>
 </Quiz>

@@ -11,13 +11,26 @@ part: Compute
 color: c2
 ---
 
-## الـ instance مش «جهاز في حسابك»
+## Incident: instance اتبدلت والتطبيق مرجعش
 
-`Amazon EC2` بيديك compute capacity افتراضية. بتختار صورة بداية، حجم، شبكة، تخزين، وصلاحيات وصول؛ وبعدها AWS تطلع لك <En>instance</En>.
+تطبيق SaaS كان شغال على EC2 واحدة. بعد `Stop/Start` تغير الـ public IPv4، والـ user data القديمة كانت تعتمد على secret مكتوب داخلها، والـ root volume كان إعداد حذفه عند termination غير مفهوم للفريق.
 
-<Box type="story" icon="🏫" title="معمل كمبيوتر جديد">
+المشكلة كشفت إن الـ instance لازم تتوصف كمجموعة قرارات قابلة للإعادة، مش جهاز يتظبط يدويًا مرة.
 
-الـ `AMI` هي نسخة الويندوز والبرامج اللي هتنزل على أجهزة المعمل. الـ instance type هو مواصفات الجهاز. الـ Security Group هو البواب اللي بيسمح لبورتات محددة، وuser data هي ورقة تعليمات أول تشغيل.
+## Launch flow من الصفر
+
+1. اختار `AMI` تحدد نظام التشغيل ومعلومات الإقلاع.
+2. اختار `instance type` حسب CPU وmemory وnetwork الفعلية.
+3. حدد VPC/subnet وSecurity Group تسمح فقط بالترافيك المطلوب.
+4. اربط IAM role بدل access keys ثابتة.
+5. اربط EBS وحدد `DeleteOnTermination` بوعي.
+6. شغّل bootstrap قابل للإعادة، ثم health check وmonitoring.
+
+النجاح إن instance بديلة توصل لنفس الحالة من automation وتدخل الخدمة خلال الهدف. الفشل إن recovery يعتمد على تعديل يدوي أو secret داخل user data.
+
+<Box type="story" icon="🧩" title="أربع قرارات مختلفة">
+
+الـ AMI تحدد البداية البرمجية، والـ instance type يحدد الموارد، والـ Security Group يضبط الترافيك، والـ purchase option يغير نموذج السعر. واحد منهم مش بديل للتاني.
 
 </Box>
 
@@ -27,7 +40,7 @@ color: c2
 
 عائلات الـ instances بتلمّح لطبيعة الموارد:
 
-- `T` و`M`: استخدام عام؛ بداية منطقية لتطبيق المدرسة.
+- `T` و`M`: استخدام عام؛ بداية منطقية لتطبيقات متنوعة بعد القياس.
 - `C`: compute optimized للحسابات الكثيفة.
 - `R` و`X`: memory optimized للأحمال اللي محتاجة RAM كبيرة.
 - `I` و`D`: storage optimized لأحمال I/O أو تخزين محلي مخصوص.
@@ -49,7 +62,7 @@ color: c2
 
 الـ Security Group firewall افتراضي مرتبط بالـ network interface. قواعده **stateful**: لو سمحت بطلب داخل، الرد مسموح من غير قاعدة عكسية منفصلة.
 
-لبوابة المدرسة، افتح `HTTPS` من الجمهور للـ web tier، وخلّي الإدارة من مصدر موثوق عند الضرورة. متفتحش كل البورتات لكل الإنترنت لمجرد إن التجربة «تشتغل».
+لـ web tier، افتح `HTTPS` من الجمهور، وخلّي الإدارة عبر مسار موثوق عند الضرورة. متفتحش كل البورتات لكل الإنترنت لمجرد إن التجربة «تشتغل».
 
 ## دورة الحياة
 
@@ -82,11 +95,20 @@ color: c2
 </Card>
 </Grid2>
 
-`Spot` يستغل سعة فائضة بخصم، لكن AWS ممكن تقاطعها بإشعار قصير؛ مناسب لشغل قابل للإعادة، مش سيرفر المدرسة الوحيد. `Dedicated Hosts/Instances` للعزل أو متطلبات ترخيص مخصوصة، وتكلفتها أعلى عادةً.
+`Spot` يستغل سعة فائضة بخصم، لكن AWS ممكن تقاطعها بإشعار قصير؛ مناسب لشغل قابل للإعادة، مش نسخة production وحيدة لا تتحمل الانقطاع. `Dedicated Hosts/Instances` للعزل أو متطلبات ترخيص مخصوصة، وتكلفتها أعلى عادةً.
+
+## Timeline لدورة الحياة
+
+- **pending → running:** الـ instance تتجهز ثم يبدأ compute billing حسب نموذج التسعير.
+- **reboot:** نفس الـ instance تعيد التشغيل.
+- **stop/start:** compute يتوقف ثم يبدأ، وقد تتغير public IPv4 غير الثابتة.
+- **terminate:** instance تنتهي؛ مصير root EBS يعتمد على الإعداد.
+
+Stop مش cleanup كامل: EBS وElastic IP وموارد أخرى ممكن تفضل بتتحاسب.
 
 ## 🧪 Lab ورقي آمن
 
-ارسم بطاقة instance للبوابة: `AMI: Linux`، `Family: general purpose`، inbound `443`، وrole لقراءة asset محدد. بعدين اكتب قدامها: On-Demand في البداية، ومراجعة metrics قبل تغيير الحجم.
+صمم instance لـ API: `AMI: Linux`، family مبدئية، inbound `443` من ALB فقط، role لقراءة object محدد، وuser data بلا secrets. اكتب timeline لاستبدالها بعد failure خلال ١٠ دقائق، وحدد دليل نجاح الـ bootstrap.
 
 مفيش resource هيتعمل. لو طبّقت فعليًا، راجع السعر أولًا، اقفل المنافذ الزيادة، وبعد التجربة اعمل terminate واحذف volumes أو IPs غير المطلوبة.
 
@@ -94,12 +116,12 @@ color: c2
 
 الـ AMI تحدد **البداية البرمجية**، والـ instance type يحدد **الموارد**، والـ purchase option يغيّر **طريقة السعر والتزامك**، والـ Security Group يتحكم في **الترافيك**.
 
-الفصل الجاي هنركّب هارد افتراضي دائم للـ instance ونفهم EBS والـ snapshots.
+الفصل الجاي هنركّب block storage دائم للـ instance ونفهم EBS والـ snapshots.
 
 <Checklist id="aws-cp-12" title="خلّصت الفصل لما" items={["تفرّق AMI عن instance type", "تشرح user data من غير ما تحط فيها أسرار", "تعرف إن Security Groups stateful", "تميّز On-Demand وSpot والالتزامات على مستوى مبتدئ", "تراجع موارد بتفضل مدفوعة بعد stop"]} />
 
 <Quiz>
 <Q n={1} q="إيه اللي يحدد صورة نظام التشغيل عند الإطلاق؟">الـ AMI.</Q>
-<Q n={2} q="Spot مناسبة لنسخة بوابة وحيدة لا تحتمل الانقطاع؟">لأ؛ Spot قابلة للمقاطعة، فتلائم شغل قابل للإعادة أو متحمّل للفشل.</Q>
+<Q n={2} q="Spot مناسبة لنسخة production وحيدة لا تحتمل الانقطاع؟">لأ؛ Spot قابلة للمقاطعة، فتلائم شغل قابل للإعادة أو متحمّل للفشل.</Q>
 <Q n={3} q="وقفت instance؛ هل الفاتورة بقت صفر أكيد؟">لأ. compute المتوقف لا يُحاسب كتشغيل عادةً، لكن EBS وموارد أخرى ممكن تفضل مدفوعة.</Q>
 </Quiz>

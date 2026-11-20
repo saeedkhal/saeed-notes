@@ -11,84 +11,49 @@ part: Data وAI والهجرة
 color: c4
 ---
 
-## جاهز ولا هتبني؟
+## Claims workflow في شركة تأمين
 
-خدمات AWS هنا تلات رفوف: خدمة API لمهمة محددة، منصة generative AI، أو أدوات تبني وتدرّب بيها model مخصوص.
+كل يوم بيوصل 12,000 claim: PDF وصور ومكالمة صوتية. المطلوب رد أولي خلال دقيقتين مع human review للقرارات الحساسة.
 
-<Box type="story" title="مدرس خصوصي ولا كتاب جاهز؟">
+1. `Transcribe` يحول المكالمة من speech إلى text.
+2. `Textract` يستخرج fields وtables من الفاتورة.
+3. `Rekognition` يحلل صور الضرر.
+4. `Comprehend` يستخرج entities وsentiment من النص.
+5. تطبيق مبني على `Bedrock` يلخص الملف ويولد draft، مع Guardrails وRAG من policies.
+6. reviewer يوافق أو يعدل؛ `Polly` يقدر ينطق الرد، و`Translate` يغير اللغة.
 
-لو عايز تسمع نص بصوت، مش لازم تدرّب model من الصفر؛ استخدم خدمة جاهزة. لو المدرسة عندها نمط درجات خاص وعايزة model تتنبأ بيه، ساعتها أدوات التدريب والتجارب أهم.
+نجاح الـ workflow يتقاس بالدقة والlatency والتكلفة ونسبة الحالات اللي احتاجت مراجعة، مش بمجرد إن model رجع إجابة. Low-confidence أو high-value claim لازم يتحول لإنسان.
 
-</Box>
+## Bedrock ولا SageMaker AI ولا Q؟
 
-## SageMaker AI
+`Amazon Bedrock` منصة fully managed لبناء generative AI apps باستخدام foundation models، مع Knowledge Bases وGuardrails وAgents وevaluation.
 
-`Amazon SageMaker AI` هو الاسم الحالي للخدمة اللي كانت اسمها Amazon SageMaker قبل ديسمبر ٢٠٢٤. بيخدم بناء وتدريب وتخصيص ونشر models للـ ML التقليدي والـ AI.
+`Amazon SageMaker AI`—الاسم الحالي للخدمة القديمة SageMaker قبل ديسمبر ٢٠٢٤—لبناء وتدريب وتخصيص ونشر ML models وإدارة lifecycle أعمق.
 
-فكّر فيه لما data scientists محتاجين notebooks، training jobs، pipelines، model registry، وmanaged endpoints.
+`Amazon Q` assistant جاهز للعمل؛ `Q Developer` يساعد فرق software وAWS. Q منتج للمستخدم، Bedrock منصة تبني فوقها منتج.
 
-<Hl c="p">SageMaker AI للبناء والتحكم العميق؛ مش مجرد استدعاء مهمة جاهزة.</Hl>
+- chatbot من foundation model من غير training infrastructure → Bedrock.
+- fraud model مخصص على labeled transactions وpipelines/endpoints → SageMaker AI.
+- assistant جاهز للمطورين → Amazon Q.
 
-AWS عندها دلوقتي منصة أوسع باسم `Amazon SageMaker` بتجمع data وanalytics وAI، وجواها SageMaker AI. الاسم في مواد الامتحان ممكن يكون أقصر، فاقرأ سياق السؤال.
+## APIs متخصصة
 
-## Amazon Bedrock
+`Rekognition` للصور والفيديو؛ `Textract` للمستندات والـ forms/tables؛ `Comprehend` لـ NLP؛ `Lex` لإدارة conversational bot؛ `Polly` text→speech؛ `Transcribe` speech→text؛ `Translate` لغة→لغة.
 
-`Amazon Bedrock` خدمة fully managed وserverless لبناء generative AI apps باستخدام foundation models من Amazon ومزودين تانيين.
+صورة invoice: Textract لو المطلوب amount وtable، وRekognition لو المطلوب objects داخل الصورة. ممكن تستخدم الاتنين.
 
-فيها قدرات زي Knowledge Bases للـ RAG، Guardrails، Agents، وmodel evaluation. تختارها لما عايز تبني chatbot أو تلخيص أو agent من foundation model من غير إدارة training infrastructure.
+## Tradeoffs إنتاجية
 
-<Box type="idea" title="Bedrock ولا SageMaker AI؟">
+Foundation model أسرع في البداية، لكن لازم تختبر hallucination وprivacy وprompt injection والتكلفة per token. Custom model يدي تحكم أعلى لكنه يحتاج data وMLOps ومراقبة drift. API جاهزة تقلل الإدارة، لكنها مش مناسبة لكل domain أو قرار حساس.
 
-ابدأ بـ Bedrock لتطبيق generative AI مُدار واختيار foundation models. اختار SageMaker AI لو محتاج تدريب أو customization وتحكم في الـ ML lifecycle والـ infrastructure. ممكن المشروع يستخدم الاتنين.
+## 🧪 Lab ورقي
 
-</Box>
-
-## Amazon Q
-
-`Amazon Q` مساعد generative AI جاهز للعمل. `Amazon Q Developer` يساعد في بناء وتشغيل وتحويل software والتعامل مع AWS؛ وفيه تجارب Q متخصصة لسيناريوهات business.
-
-الفرق: Bedrock منصة المطور يبني فوقها app، بينما Q assistant جاهز للمستخدم. Q نفسه مبني باستخدام Bedrock، لكنهم مش نفس المنتج.
-
-## صورة ومستند
-
-`Amazon Rekognition` يحلل الصور والفيديو: objects، labels، faces، ومحتوى غير مناسب حسب الميزة والسياسة.
-
-`Amazon Textract` يستخرج text وforms وtables من documents وscans. لو صورة فيها طالب وشنطة: Rekognition. لو صورة استمارة تقديم وعايز الخانات: Textract.
-
-<Box type="warn" title="الوجه مش قرار">
-
-التعرف الآلي ممكن يخطئ ويتأثر بجودة الداتا. متخليش نتيجة حساسة زي قبول طالب أو عقوبة تعتمد عليه لوحده؛ استخدم human review وسياسات الخصوصية.
-
-</Box>
-
-## لغة مكتوبة
-
-`Amazon Comprehend` يستخدم NLP لاستخراج entities وkey phrases وsentiment واللغة من النص.
-
-`Amazon Translate` يترجم النصوص بين اللغات. Comprehend يفهم خصائص النص؛ Translate يغير لغته.
-
-## كلام وصوت ومحادثة
-
-- `Amazon Transcribe`: speech → text.
-- `Amazon Polly`: text → lifelike speech.
-- `Amazon Lex`: conversational bots بالصوت أو النص.
-
-بوابة المدرسة تستقبل سؤال منطوق: Transcribe يحوله كتابة، Lex يدير الحوار، وPolly ينطق الرد. Translate ممكن يترجم المحتوى، وComprehend يحلل المعنى أو sentiment.
-
-## خريطة في سطر
-
-<Chips items={["custom ML → SageMaker AI", "foundation models → Bedrock", "AI assistant → Amazon Q", "image/video → Rekognition", "forms/tables → Textract", "NLP → Comprehend", "bot → Lex", "text to speech → Polly", "speech to text → Transcribe", "languages → Translate"]} />
-
-## 🧪 Lab آمن
-
-ارسم flow لخدمة استقبال صوتية: الطالب يسأل، الكلام يتحول text، bot يفهم intent، الرد يترجم عند اللزوم، وبعدين يتحول صوت. اكتب اسم الخدمة فوق كل سهم من غير تشغيل موارد.
-
-الفصل الجاي هنسيب بناء الحل ونشوف إزاي مؤسسة كاملة تخطط للهجرة للـ cloud.
+ارسم request فيه صوت ومستند وصورة. لكل خطوة اكتب input/output، latency budget من إجمالي 120 ثانية، confidence threshold، ومتى تعمل human escalation.
 
 <Checklist id="aws-cp-34" title="خلّصت الفصل لما" items={["تفرق بين Bedrock وSageMaker AI وAmazon Q", "تختار Rekognition أو Textract من نوع الصورة", "تحفظ اتجاه Polly وTranscribe وتعرف دور Lex"]} />
 
 <Quiz>
-<Q n={1} q="عايز foundation model جاهز لتطبيق generative AI من غير إدارة servers. تختار؟">`Amazon Bedrock`.</Q>
-<Q n={2} q="عندك scan لفاتورة وعايز الجداول والخانات. Rekognition ولا Textract؟">`Textract` لأنه مخصص لاستخراج النص والـ forms والـ tables من المستندات.</Q>
-<Q n={3} q="النص داخل والصوت خارج. Polly ولا Transcribe؟">`Polly`. Transcribe يعمل العكس: الكلام إلى نص.</Q>
+<Q n={1} q="Foundation model مُدار لتطبيق generative AI؟">Amazon Bedrock.</Q>
+<Q n={2} q="Scan لفاتورة وعايز الجداول والخانات؟">Textract.</Q>
+<Q n={3} q="النص داخل والصوت خارج؟">Polly؛ Transcribe يعمل العكس.</Q>
 </Quiz>

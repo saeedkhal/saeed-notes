@@ -1,82 +1,79 @@
 ---
-title: الحدث والخطوات والإيميل
+title: Events وWorkflows في Production
 short: Events وWorkflows
 order: 27
 label: فصل ٢٧
 badge: ربط الأنظمة · فصل ٢٧
 en: Amazon EventBridge · AWS Step Functions · Amazon SES
 keywords: event bus · orchestration · state machine · email
-goal: تختار بين توجيه حدث وتشغيل رحلة متعددة الخطوات وإرسال بريد.
+goal: تفصل event routing عن orchestration والبريد في رحلة معاملات قابلة للتتبع.
 part: ربط الأنظمة
 color: c2
 ---
 
-## EventBridge: موزّع الأحداث
+## المثال الأول: Refund خلال 30 دقيقة
 
-<En>Amazon EventBridge</En> event bus مُدار. مصادر AWS أو تطبيقك أو SaaS تنشر events، والـ rules تطابق محتوى الحدث وتبعته إلى targets.
+Fintech تستقبل `RefundRequested`. الرحلة لازم تتحقق من المعاملة، تمنع duplicate، تطلب موافقة لو المبلغ فوق `$5,000`، تنادي payment provider، ثم ترسل email. الـ SLA هو `30 دقيقة`.
 
-مثال: حدث `StudentRegistered` فيه نوع المدرسة والمحافظة. Rule تبعته لـ Lambda تجهيز الحساب، وRule تانية تبعته لـ SQS التحليلات.
-
-<Box type="story" icon="🚦" title="غرفة الإذاعة">
-
-الحدث خبر داخل غرفة الإذاعة. كل rule ورقة مكتوب عليها: "لو الخبر عن الصف الأول ابعته للمرشد". الغرفة بتوجّه، مش بتنفذ كل رحلة بنفسها.
-
-</Box>
-
-EventBridge قوي في content-based filtering وتكامل أحداث خدمات مختلفة. SNS أبسط pub/sub push، وSQS طابور يسحبه مستهلك.
-
-## Step Functions: قائد الرحلة
-
-<En>AWS Step Functions</En> تنسّق workflow كـ state machine: خطوات، اختيار، انتظار، retry، وcatch. تعرض تاريخ التنفيذ بدل ما تخبي كل المنطق في Lambda واحدة.
+١. EventBridge rule تطابق `detail-type` وcurrency وتبدأ workflow.
+٢. Step Functions تتحقق من idempotency ثم تعمل Choice حسب المبلغ.
+٣. خطأ `5xx` من provider يتعمل له retry بـ backoff؛ خطأ validation يروح Catch فورًا.
+٤. بعد النجاح، SES تبعت receipt، وevent منفصل يروح analytics.
 
 <Flow items={[
-  { t: "راجع البيانات", c: 2 }, "→",
-  { t: "اختار", s: "صحيحة؟", c: 3 }, "→",
-  { t: "أنشئ الحساب", c: 1 }, "→",
-  { t: "ابعت ترحيب", c: 4 },
+  { t: "EventBridge", s: "match + route", c: 2 }, "→",
+  { t: "Step Functions", s: "state + decisions", c: 3 }, "→",
+  { t: "Payment API", s: "retry/catch", c: 1 }, "→",
+  { t: "SES", s: "receipt", c: 4 },
 ]} />
 
-استخدمها لما العملية نفسها لها ترتيب وحالة وقرارات. EventBridge يقول **مين يهتم بالحدث**؛ Step Functions تقول **الرحلة تمشي إزاي**.
+## EventBridge: مين يهتم بالحدث؟
 
-## SES: البريد نفسه
+Event bus يستقبل events من AWS أو التطبيق أو SaaS integrations، والـ rules تعمل content-based matching إلى targets. استخدم schema/version واضح، ومتضعش card data أو secrets داخل event لمجرد سهولة النقل.
 
-<En>Amazon Simple Email Service (SES)</En> خدمة إرسال واستقبال email على نطاق واسع، مناسبة لرسائل زي تأكيد التسجيل وكشف النتيجة.
+EventBridge routing مش workflow state. لو target فشل، صمم retries وDLQ/monitoring حسب التكامل، واعرف إن event delivery قد يتكرر.
 
-SES مش workflow engine ولا event bus. ممكن Step Functions أو Lambda تطلب منها إرسال الرسالة.
+## Step Functions: الرحلة تمشي إزاي؟
 
-لازم تلتزم بسياسات مكافحة spam، تدير bounces وcomplaints، وتتحقق من identities. الحساب الجديد قد يبدأ في sandbox بقيود لحد طلب production access.
+State machine تعرض steps وChoice وWait وParallel وRetry وCatch وتاريخ execution. ده أوضح من Lambda واحدة تنام وتخزن state بنفسها.
 
 <Grid2>
-<Card title="خبر حصل" c={2}>
+<Card title="Routing" c={2}>
 
-EventBridge: rules توجه event للtargets المناسبة.
+`OrderShipped` يروح billing وanalytics وnotifications حسب محتوى الحدث: EventBridge.
 
 </Card>
-<Card title="خطوات مترتبة" c={3}>
+<Card title="Orchestration" c={3}>
 
-Step Functions: orchestration وحالة وretry وقرارات.
+Reserve inventory ثم charge ثم compensate لو الشحن فشل: Step Functions.
 
 </Card>
 </Grid2>
 
-## مثال المدرسة
+## Failure وtradeoff
 
-بعد نجاح الدفع، التطبيق ينشر `FeesPaid`. EventBridge يبعته لـ Step Functions: تأكد من الطالب، حدّث الحالة، ثم اطلب من SES إرسال إيصال. Rule تانية تبعت نسخة للتحليلات من غير ربط الرحلتين.
+الساعة `10:00` provider يرجع `503`. retries عند `10:00:01` و`10:00:03` و`10:00:07` تنجح في الرابعة. لو retry لكل error بما فيها `400`، workflow تضيع وقت وتكلفة من غير فرصة نجاح. حدد retryable errors وmax attempts وtimeout.
 
-صمّم الخطوات idempotent لأن retries ممكن تحصل. متبعتش بيانات حساسة زيادة داخل event.
+في distributed transaction، نجاح charge وفشل inventory يحتاج compensation مصممة؛ Step Functions تنسقها لكنها لا تجعل APIs الخارجية atomic.
 
-## 🧪 تمرين ورقي آمن
+## SES: البريد، مش الرحلة
 
-ارسم رحلة قبول طالب: event يبدأها، اختيار لو الأوراق ناقصة، انتظار مراجعة، ثم SES. حط retry على خطوة مؤقتة وcatch لمسار تدخل بشري.
+SES للإرسال والاستقبال على scale. identities لازم تتوثق، والحساب قد يبدأ sandbox لحد production access. راقب bounces وcomplaints وsuppression، والتزم بسياسات spam. نجاح API call لا يضمن إن المستخدم قرأ الرسالة.
 
-التمرين ورقي. EventBridge وStep Functions وSES خدمات مدفوعة حسب الاستخدام وبها حدود وشروط؛ راجع Pricing ونظّف أي rule أو state machine تجريبية.
+<Box type="warn" title="إيميل فشل بعد refund ناجح">
 
-الفصل الجاي هنجمع الخدمات في معمارية واحدة لبوابة المدرسة.
+متعملش rollback لمعاملة مالية ناجحة لمجرد إن receipt email فشلت. افصل business outcome عن notification، واعمل retry/DLQ للبريد.
 
-<Checklist id="aws-cp-27" title="خلّصت الفصل لما" items={["تشرح rule وtarget في EventBridge", "تميز routing من orchestration", "تستخدم Step Functions للخطوات والحالة", "تعرف إن SES للبريد مش workflow", "تراعي retries والـ spam والسياسات"]} />
+</Box>
+
+## 🧪 تمرين: Video approval workflow
+
+ارسم upload event، virus scan، transcoding في فرعين، manual review لو content score فوق حد معين، publish، ثم email. اكتب timeout بالأرقام لكل خطوة، retryable errors، catch path، وcompensation لو publish حصل قبل اكتشاف فشل.
+
+<Checklist id="aws-cp-27" title="خلّصت الفصل لما" items={["تشرح rule وtarget في EventBridge", "تميز routing من orchestration", "تبني retry وcatch وtimeout في Step Functions", "تعرف إن SES للبريد مش workflow", "تفصل business success عن notification failure"]} />
 
 <Quiz>
-<Q n={1} q="عايز توجّه events حسب حقل `schoolType`؛ تختار إيه؟">EventBridge rule بحدث مطابق.</Q>
-<Q n={2} q="عملية فيها انتظار وقرار وretry ومتابعة حالة؛ تختار إيه؟">AWS Step Functions.</Q>
-<Q n={3} q="هل SES ينظم خطوات قبول الطالب؟">لأ؛ SES يرسل البريد. Step Functions تنظم الخطوات.</Q>
+<Q n={1} q="عايز توجّه events لما `amount > 5000`؛ المرشح؟">EventBridge rule لو المطلوب matching وتوجيه.</Q>
+<Q n={2} q="عملية فيها قرار وانتظار وretry وتعويض؛ تستخدم إيه؟">AWS Step Functions.</Q>
+<Q n={3} q="Refund نجح وSES فشلت؛ هل ترجع الفلوس تاني؟">لأ؛ ثبّت نجاح المعاملة واعمل retry/DLQ للإشعار بشكل مستقل.</Q>
 </Quiz>

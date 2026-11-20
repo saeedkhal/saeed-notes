@@ -11,82 +11,45 @@ part: التكلفة والامتحان
 color: c3
 ---
 
-## قبل ولا بعد؟
+## فاتورة زادت 38% في أسبوع
 
-أهم فرق: `Pricing Calculator` يعمل estimate قبل التنفيذ، و`Cost Explorer` يحلل تكلفة واستخدام حصلوا فعلًا ويعرض forecast.
+FinOps team عنده budget شهري `$80,000`، والforecast بقى `$104,000`.
 
-<Box type="story" title="رحلة المدرسة">
+1. قبل المشروع، `Pricing Calculator` كان مقدر architecture بـ `$72,000` حسب assumptions.
+2. `AWS Budgets` بعت forecast alert عند 90%.
+3. `Cost Explorer` قارن الأسبوعين وبيّن زيادة data transfer وNAT processing.
+4. activated tags فصلت `Project=Video` عن باقي التكلفة.
+5. `Data Exports` مع `CUR 2.0` كشف line items والaccounts والusage بالتفصيل.
+6. الفريق أصلح cross-AZ path؛ اليوم التالي التكلفة اليومية نزلت، لكن الفاتورة السابقة ما اختفتش.
 
-قبل الرحلة تعمل ورقة تقدير للأتوبيس والأكل. أثناء الشهر تراجع كشف المصروفات. ولو قربت تعدي السقف، عايز جرس إنذار. دي Calculator وExplorer وBudgets.
+## قبل وبعد وعلى مستوى التفاصيل
 
-</Box>
+`Pricing Calculator` estimate قبل التنفيذ، مش فاتورة مضمونة. `Cost Explorer` يحلل historical cost/usage ويعمل forecast. `Budgets` ينبه على cost أو usage أو commitment metrics مدعومة.
 
-## AWS Pricing Calculator
+Budget مش hard cap، وbilling data مش لحظية؛ ممكن تصرف بين القياس والتنبيه. Budget Actions موجودة لحالات محددة لكن لازم permissions وimpact محسوبين.
 
-تبني estimate لخدمات وRegions وإعدادات متوقعة وتشارك النتيجة. مفيد للمقارنة والـ business case، لكنه **مش فاتورة مضمونة**.
+## CUR 2.0 والـ tags
 
-الـ usage الحقيقي، discounts، taxes، data transfer، نمو الداتا، وتغيّر الأسعار ممكن يغيروا الرقم. راجع assumptions وتاريخ التسعير.
+`AWS Data Exports` هو المسار الحالي الموصى به لتصدير billing data إلى S3، ومنها `CUR 2.0` لتحليل line items بـ Athena أو QuickSight. في أكتوبر ٢٠٢٦ توجد standardized cost/rate columns اختيارية؛ `Legacy CUR` ما زال يظهر في مواد قديمة.
 
-## Cost Explorer
+Tag زي `CostCenter=Payments` لازم يتفعّل كـ cost allocation tag. البيانات القديمة مش بتتراجع بالكامل، ومش كل resource يدعم tags بنفس الشكل.
 
-`AWS Cost Explorer` يعرض historical cost and usage، يفلتر ويجمع حسب service وaccount وRegion وtag وغيرها، ويعمل forecasts وrecommendations مدعومة حسب الحالة.
+## Organizations
 
-استخدمه لسؤال: "إيه اللي زوّد فاتورة الأسبوع ده؟" مش لسؤال: "كام سعر architecture لسه مبنيتهاش؟"
+Consolidated billing يجمع فواتير member accounts وقد يشارك بعض volume/commitment benefits حسب قواعد AWS. الحسابات تفضل boundaries مستقلة؛ billing موحد لا يمنح IAM access.
 
-<Hl c="g">Calculator قبل الصرف؛ Explorer بعده ومعاه forecast.</Hl>
+## Tradeoff عملي
 
-## AWS Budgets
+تفاصيل CUR أدق لكن محتاجة pipeline وتحليل. Cost Explorer أسرع للتحقيق اليومي. Calculator يعتمد على جودة assumptions؛ لازم تضيف growth وrequests وtransfer وsupport والضرائب المناسبة.
 
-`AWS Budgets` يعمل thresholds على cost أو usage أو coverage/utilization لبعض commitments، ويرسل alerts عبر قنوات مدعومة.
+## 🧪 Lab ورقي
 
-الـ alert مش معناه إيقاف الموارد تلقائيًا. فيه `Budget Actions` لحالات وإجراءات محددة وبصلاحيات محسوبة، لكن متعتمدش إن budget لوحده hard spending cap.
-
-<Box type="warn" title="التنبيه ممكن يتأخر">
-
-بيانات billing مش لحظية، والموارد تقدر تصرف بين القياس والتنبيه. للحساب التعليمي: فعّل MFA، alerts، وامسح الموارد بعد المعمل؛ متستناش budget ينقذك.
-
-</Box>
-
-## Data Exports وCUR 2.0
-
-`AWS Data Exports` هو الطريق الحالي الموصى به لتصدير بيانات billing تفصيلية ومتكررة إلى S3. أهم table هو `Cost and Usage Report 2.0 (CUR 2.0)`.
-
-CUR 2.0 عنده schema ثابت أكتر من Legacy CUR، وتقدر تختار أعمدة وصفوف بـ SQL وتحدد granularity. في أكتوبر ٢٠٢٦ ظهرت standardized cost/rate columns اختيارية لتوحيد تحليل purchase options.
-
-`Legacy CUR` لسه اسم هتقابله في مواد قديمة، لكنه غير المسار الجديد الموصى به. الملفات التفصيلية مناسبة لـ Athena وQuickSight وتحليلات FinOps.
-
-## Cost allocation tags
-
-اعمل user-defined tag زي `Project=SchoolPortal` أو `CostCenter=Admissions`، وبعدين **فعّله** كـ cost allocation tag من Billing.
-
-الـ tag مش بيظهر بأثر رجعي كامل على تكلفة حصلت قبل إضافته وتفعيله، ومش كل نوع مورد يدعم tags بنفس الطريقة.
-
-## Consolidated billing
-
-مع `AWS Organizations`، management account يدفع فاتورة مجمعة للـ member accounts. ده يسهل رؤية التكلفة، وقد يجمع volume usage ويشارك بعض خصومات commitments حسب قواعد AWS.
-
-لكن كل account يفضل boundary منفصل للموارد والـ IAM. consolidated billing مش معناه إن users في حساب بقوا يدخلوا موارد حساب تاني.
-
-<Box type="idea" title="حساب لكل بيئة">
-
-المدرسة تعمل accounts للـ production والـ development وsecurity، وتجمع الفاتورة مركزيًا. فصل الحسابات يقلل blast radius، والـ tags تقسم المشاريع جوه الحساب.
-
-</Box>
-
-## أداة لكل سؤال
-
-<Chips items={["تقدير قبل البناء → Pricing Calculator", "تحليل وفوركاست → Cost Explorer", "تنبيه على threshold → Budgets", "line items تفصيلية → Data Exports / CUR 2.0", "تكلفة مشروع → activated tags", "فاتورة حسابات متعددة → Organizations"]} />
-
-## 🧪 Lab آمن
-
-اعمل mock bill من خمس سطور في spreadsheet محلي. حط Service وAccount وProject وCost، وبعدها جاوب: أعلى service؟ تكلفة portal؟ هل تعديت budget؟ مفيش دخول AWS.
-
-الفصل الجاي هنشوف منين تاخد مساعدة موثوقة، وإيه خطة الدعم المناسبة حسب خطورة الـ workload.
+اعمل 10 line items فيها Service وAccount وProject وUsage وCost. جاوب: مين سبب الزيادة؟ alert كان إمتى؟ وإيه assumption غلط في estimate؟
 
 <Checklist id="aws-cp-38" title="خلّصت الفصل لما" items={["تفرق Calculator عن Explorer", "تعرف إن Budget alert مش hard cap", "تشرح CUR 2.0 كبيانات تفصيلية", "تفعّل cost allocation tags", "تفهم consolidated billing من غير خلط IAM"]} />
 
 <Quiz>
-<Q n={1} q="Architecture لسه على الورق وعايز estimate. تستخدم؟">`AWS Pricing Calculator`.</Q>
-<Q n={2} q="عايز كل line item في S3 لتحليل مخصص. تختار؟">`AWS Data Exports` مع `CUR 2.0`، وهو المسار الحالي الموصى به.</Q>
-<Q n={3} q="عملت tag على resource، كده ظهر فورًا في تقارير التكلفة القديمة؟">لأ. لازم تفعّله كـ cost allocation tag، والتطبيق مش بأثر رجعي كامل.</Q>
+<Q n={1} q="Architecture على الورق وعايز estimate؟">Pricing Calculator.</Q>
+<Q n={2} q="كل line item في S3؟">Data Exports مع CUR 2.0.</Q>
+<Q n={3} q="Tag ظهر بأثر رجعي كامل؟">لأ؛ لازم تفعيله والتاريخ مش كامل بأثر رجعي.</Q>
 </Quiz>

@@ -11,68 +11,64 @@ part: التشغيل والحوكمة
 color: c2
 ---
 
-## Organizations: شجرة الحسابات
+## Enterprise عندها 60 account
 
-<En>AWS Organizations</En> تدير حسابات متعددة مركزيًا، تجمع billing، وتطبق سياسات. الحسابات تتجمع في <En>Organizational Units (OUs)</En> زي Production وSchools وSandbox.
+الشركة قسمت البيئة إلى `Security`, `Infrastructure`, `Production`, و`Sandbox` OUs. قبل product launch اكتشفوا إن فريق sandbox أنشأ موارد في Region غير معتمدة، وproduction قربت من EC2 quota.
 
-<En>Service Control Policies (SCPs)</En> تحط أقصى permissions متاحة للحسابات أو الـ OUs. هي **مش grant** لصلاحية؛ IAM لسه لازم يسمح، والـ SCP لازم ما تمنعش.
+1. `AWS Organizations` جمع الحسابات والـ billing.
+2. SCP على Sandbox منع Regions غير المعتمدة.
+3. IAM role داخل account سمح للمطور بـ EC2، لكن الـ SCP منع action خارج النطاق.
+4. `Control Tower` وفّر landing zone وcontrols وaccount provisioning.
+5. `Service Quotas` كشف إن الحد 500 instance والفريق محتاج 650.
+6. `Systems Manager` نفّذ patch wave على 300 node بدل SSH يدوي.
+7. `AWS Health` نبّه عن maintenance لمورد محدد.
 
-<Box type="story" icon="🏫" title="لائحة الوزارة">
+## Organizations وSCP
 
-الـ SCP لائحة تقول "ممنوع شراء جهاز من النوع ده" لكل المدارس في الإدارة. مش تصريح للمدرس يشتري؛ لسه محتاج موافقة داخل المدرسة، زي IAM.
+`Organizations` تدير accounts وOUs وسياسات وconsolidated billing. الـ `SCP` يحدد أقصى permissions المتاحة؛ **لا يمنح permission**.
 
-</Box>
+مثال: IAM يسمح `s3:GetObject`، والـ SCP لا تمنعه → ممكن يسمح لو مفيش deny تاني. IAM لا يسمح، حتى لو SCP واسعة → الطلب يفشل. SCP فيها explicit deny → الطلب يفشل مهما كان IAM allow.
 
-خلي management account للحوكمة فقط قدر الإمكان، واستخدم حسابات منفصلة لتقليل blast radius.
+فصل accounts يقلل blast radius، لكن يزيد احتياج automation وcentral logging. استخدم management account للحوكمة قدر الإمكان، مش workloads يومية.
 
-## Control Tower: landing zone
+## Control Tower
 
-<En>AWS Control Tower</En> يساعد ينشئ ويحكم بيئة multi-account مبنية على Organizations، بهيكل accounts وcontrols وaccount factory.
+`AWS Control Tower` يبني landing zone فوق Organizations وخدمات أخرى، ويقدم controls وAccount Factory. مناسب لما enterprise عايزة baseline متكرر بدل إنشاء كل account يدويًا.
 
-هو مش بديل لـ Organizations؛ بيستخدمها وخدمات تانية لتقديم landing zone مُدارة.
+هو مش بديل لـ Organizations. Control prevent أو detect يختلف تأثيره؛ اختبر قبل تطبيق control واسع عشان متقفلش deployment path حرج.
 
-## Systems Manager: تشغيل الأسطول
+## Systems Manager
 
-<En>AWS Systems Manager</En> يجمع قدرات تشغيل وإدارة آمنة للـ nodes والموارد: inventory، patching، automation، Run Command، Session Manager وParameter Store حسب الحاجة.
+`Systems Manager` يدير fleet operations: inventory، patching، automation، Run Command، Session Manager وParameter Store.
 
-Session Manager يقلل الحاجة لفتح SSH inbound، لكن محتاج agent/configuration وIAM صح. Systems Manager مش monitoring بديل لـ CloudWatch.
+Timeline patch:
 
-## Health Dashboard
+1. 22:00 patch 10 canary nodes.
+2. 22:15 راقب errors وCPU.
+3. 22:30 patch 20% من fleet.
+4. 23:00 كمل waves لو health checks ناجحة.
+5. لو error rate عدى 2%، وقف automation وابدأ rollback.
 
-<En>AWS Health Dashboard</En> يعرض events وتنبيهات شخصية قد تؤثر على مواردك، مع guidance؛ يختلف عن صفحة الصحة العامة اللي تعرض حالة خدمات AWS عمومًا.
+Session Manager يقلل فتح SSH inbound، لكنه محتاج IAM وagent/connectivity مضبوطين. Systems Manager مش بديل لـ CloudWatch monitoring.
 
-لو AWS عندها maintenance لموردك، Health هو المكان الطبيعي. لو CPU عالي بسبب كودك، راجع CloudWatch.
+## Health وTrusted Advisor وQuotas
 
-## Trusted Advisor
+- `AWS Health`: events شخصية تخص مواردك؛ maintenance الساعة 02:00 مثلًا.
+- `Trusted Advisor`: checks وتوصيات في cost وsecurity وperformance وfault tolerance وlimits؛ التغطية حسب support plan.
+- `Service Quotas`: تشوف quota وتطلب زيادة للـ adjustable quota.
 
-<En>AWS Trusted Advisor</En> يعمل checks وتوصيات عبر مجالات زي cost optimization وperformance وsecurity وfault tolerance وservice limits. توافر checks يعتمد على support plan والخدمة.
+CPU 95% بسبب code → CloudWatch. AWS maintenance على RDS → Health. recommendation عن idle resource → Trusted Advisor. محتاج 650 instance والحد 500 → Service Quotas.
 
-هو مستشار، مش زر يصلح كل شيء تلقائيًا، ومش بديل لتصميم ومراجعة الأمان.
+طلب quota increase مش فوري ولا مضمون؛ قدم قبل launch بأيام أو أسابيع، واعمل load test وخطة degraded mode.
 
-## Service Quotas
+## 🧪 Lab ورقي
 
-<En>Service Quotas</En> مكان تشوف وتدير quotas لخدمات AWS المدعومة وتطلب زيادة للـ adjustable quotas.
-
-Quota حد حساب أو Region لخدمة، مش budget مالي. قبل موسم النتيجة راجع quotas بدري؛ طلب الزيادة مش مضمون وفوري.
-
-<Flow items={[
-  { t: "Organizations", s: "accounts + OUs + SCPs", c: 2 }, "→",
-  { t: "Control Tower", s: "landing zone + controls", c: 3 }, "→",
-  { t: "Systems Manager", s: "تشغيل الموارد", c: 4 },
-]} />
-
-## 🧪 تمرين ورقي آمن
-
-ارسم OU للإنتاج وOU للتجارب. اكتب SCP تمنع Regions غير معتمدة **كمفهوم فقط**، ثم بطاقات: patch fleet، event من AWS، recommendation، quota increase. وصلها بـ Systems Manager وHealth وTrusted Advisor وService Quotas.
-
-متطبقش SCP تجريبية على production؛ خطأ ممكن يمنع الإدارة. الخدمات والـ support plans والـ automation قد تحمل تكلفة، فراجع Pricing ونطاق التأثير واعمل rollback plan.
-
-كده معاك خريطة CLF-C02 متصلة؛ راجع الفصول بسيناريوهات اختيار الخدمة، مش بحفظ الأسماء لوحدها.
+صمم OU tree لشركة فيها regulated production وsandbox. اكتب guardrail واحد، patch rollout بأرقام، وquota لازم تزيد قبل launch، وحدد rollback.
 
 <Checklist id="aws-cp-32" title="خلّصت الفصل لما" items={["تشرح accounts وOUs", "تعرف إن SCP guardrail لا يمنح permission", "تربط Control Tower بالـ landing zone", "تميز Systems Manager وHealth وTrusted Advisor", "تعرف إن Service Quotas حدود تشغيل مش ميزانية"]} />
 
 <Quiz>
-<Q n={1} q="SCP سمحت S3 لكن IAM ما سمحتش؛ المستخدم يقدر يقرأ؟">لأ. SCP لا تمنح permission؛ IAM لازم يسمح ومايبقاش فيه منع آخر.</Q>
-<Q n={2} q="AWS مخططة maintenance يؤثر على موردك؛ تراجع إيه؟">AWS Health Dashboard الشخصي.</Q>
-<Q n={3} q="قرب موسم النتائج ومحتاج عدد موارد أعلى من الحد؛ تبدأ فين؟">Service Quotas لمراجعة الحد وطلب زيادة لو adjustable، وابدأ بدري.</Q>
+<Q n={1} q="SCP سمحت S3 لكن IAM ما سمحتش؛ المستخدم يقدر يقرأ؟">لأ. SCP لا تمنح permission.</Q>
+<Q n={2} q="AWS مخططة maintenance يؤثر على موردك؛ تراجع إيه؟">AWS Health Dashboard.</Q>
+<Q n={3} q="Launch محتاج موارد أعلى من الحد؛ تبدأ فين؟">Service Quotas، وتبدأ بدري.</Q>
 </Quiz>

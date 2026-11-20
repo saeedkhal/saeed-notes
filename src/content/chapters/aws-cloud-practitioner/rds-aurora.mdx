@@ -6,88 +6,77 @@ label: فصل ١٩
 badge: Storage وDatabases · فصل ١٩
 en: RDS · Aurora · Multi-AZ · Read Replica · automated backups
 keywords: relational · SQL · high availability · read scaling · point-in-time restore
-goal: تفهم قيمة database managed وتفرق high availability عن read scaling والنسخ الاحتياطي.
+goal: تصمم قاعدة معاملات علائقية وتفصل بين availability وread scaling وrecovery.
 part: Storage وDatabases
 color: c4
 ---
 
-## Managed مش معناها AWS تعمل كل حاجة
+## المثال الأول: Fintech ledger
 
-`Amazon RDS` تدير شغل زي provisioning والـ patching والـ backups والفشل حسب إعدادك. إنت لسه مسؤول عن schema والـ queries والمستخدمين والصلاحيات واختيار الحجم.
+منصة مدفوعات تنفذ `250 transaction/s`. تحويل الرصيد لازم يخصم ويضيف في transaction واحدة، والـ RTO لعطل instance هو `5 دقايق`، والـ RPO لحذف منطقي هو `15 دقيقة`.
 
-محركات RDS المشهورة تشمل PostgreSQL وMySQL وMariaDB وOracle وSQL Server وDb2، مع اختلاف التوفر والخصائص والترخيص حسب الـ Region.
+١. API تبدأ SQL transaction وتكتب ledger entry بمفتاح idempotency.
+٢. `RDS PostgreSQL Multi-AZ` ينسخ بشكل متزامن للـ standby حسب نوع deployment.
+٣. لو primary فشلت الساعة `12:00`، AWS تعمل failover والـ app تعيد الاتصال بالـ DNS endpoint.
+٤. لو operator نفذ `DELETE` الساعة `14:10`، الحذف ممكن يتنسخ؛ الفريق يستخدم point-in-time restore إلى وقت قبل الخطأ ثم يسترجع الداتا المطلوبة.
 
-<Box type="story" icon="📒" title="دفتر شؤون الطلبة">
+## Managed وحدود المسؤولية
 
-الداتا العلائقية زي جداول طالب وفصل ودرجة بينهم علاقات وقواعد. RDS توفر موظف يدير الخزنة والنسخ والصيانة، لكن المدرسة هي اللي تصمم الدفاتر وتحدد مين يشوف إيه.
+RDS تدير provisioning والـ patching والـ backups والـ failover حسب الإعداد. الفريق مسؤول عن schema والـ indexes والـ queries والـ users والـ secrets والسعة والـ maintenance windows.
 
-</Box>
+المحركات تشمل PostgreSQL وMySQL وMariaDB وOracle وSQL Server وDb2، مع اختلاف Region والترخيص والخصائص. Relational مناسب للـ transactions والـ constraints والـ joins، مش لمجرد إن الداتا شكلها جداول.
 
-## ليه relational؟
-
-لما عندك tables وعلاقات وtransactions وSQL joins: تسجيل طالب في فصل، دفع مصروفات، ورصد درجات بطريقة متسقة. المفتاح مش إن الداتا «منظمة» بس؛ المطلوب كمان integrity واستعلامات علائقية.
-
-## Amazon Aurora
-
-`Aurora` relational engine من AWS، compatible مع MySQL أو PostgreSQL. تخزين الـ cluster موزع عبر ثلاث Availability Zones، وبيكبر تلقائيًا ضمن حدود الخدمة.
-
-Aurora لها writer وAurora Replicas للقراءة والـ failover. هي جزء من عيلة RDS في الإدارة، لكن معماريتها وخصائصها مش مجرد MySQL instance عادية.
-
-<Hl c="p">اختيار Aurora مش لمجرد إن اسمها أسرع؛ اختارها لو خصائصها وأداؤها وتكلفتها تناسب الحمل.</Hl>
-
-## Multi-AZ ولا Read Replica؟
+## Multi-AZ مش Read Replica
 
 <Grid2>
 <Card title="Multi-AZ" c={2}>
 
-هدفه الأساسي high availability وfailover. في Multi-AZ DB instance التقليدي، standby متزامنة مش endpoint للقراءة العادية. AWS تبدّل للـ standby عند مشكلة.
+High availability وfailover. في Multi-AZ DB instance التقليدي، الـ standby مش endpoint للقراءة العادية.
 
 </Card>
 <Card title="Read Replica" c={4}>
 
-هدفها read scaling، والـ replication غالبًا asynchronous. التطبيق يوجه queries قراءة للـ replica، ويمكن promotion عند سيناريوهات معينة.
+Read scaling، وغالبًا replication asynchronous. تقارير متأخرة ثواني قد تقبلها؛ شاشة رصيد لحظية قد لا تقبل stale read.
 
 </Card>
 </Grid2>
 
-AWS عندها كمان **Multi-AZ DB clusters** فيها reader instances قابلة للقراءة؛ دي صيغة مختلفة عن Multi-AZ DB instance التقليدية. في سؤال الامتحان اقرأ الاسم والسياق، ومترددش قاعدة «Multi-AZ لا تُقرأ» على كل منتج جديد.
+فيه كمان `Multi-AZ DB clusters` بreader instances قابلة للقراءة؛ متعممش قاعدة الـ standby التقليدية على كل deployment. اقرأ اسم المنتج والـ architecture الحالية.
 
-## Backups وSnapshots
+## Aurora
 
-`Automated backups` تدعم point-in-time restore داخل retention period المحددة. `Manual snapshots` تفضل لحد ما تحذفها، وبتتحاسب على التخزين.
+Aurora engine من AWS ومتوافق مع MySQL أو PostgreSQL، والـ cluster storage موزع عبر `3 AZs` وبيكبر تلقائيًا ضمن حدود الخدمة. فيه writer وAurora Replicas للقراءة والـ failover.
 
-الاسترجاع عادةً ينشئ DB/cluster جديدة؛ مش زر rewind يعدّل نفس production database. حدّد backup window وretention واختبر restore.
+اختيار Aurora لازم يطلع من throughput والـ failover والـ compatibility والتكلفة. عبارة "Aurora أسرع" وحدها مش business case، والتوافق لا يعني إن كل extension أو behavior مطابق.
 
-Aurora تعمل backups مستمرة incremental للـ cluster volume، وتدعم restore داخل retention. Replica مش بديل عن backup: replication ممكن تنقل delete أو corruption منطقي.
+## Timeline لتعافي واقعي
 
-## تصميم بوابة المدرسة
+- `09:00`: automated backup/PITR شغالين باحتفاظ `7 أيام`.
+- `10:05`: migration script تحذف `18,000` row بالغلط.
+- `10:08`: alarm يكشف هبوط المعاملات؛ الفريق يوقف writes المؤذية.
+- `10:15`: يبدأ restore لقاعدة جديدة عند `10:04:30`.
+- `10:55`: validation تخلص، ثم تُستخرج الصفوف أو يحصل cutover حسب الخطة.
 
-قاعدة PostgreSQL على RDS تخزّن الطلاب والفصول والدرجات. لو availability مطلوبة، فعّل Multi-AZ المناسب. لو تقارير القراءة تقيلة، قيّم Read Replica أو Aurora Replica.
+الـ RPO اتحقق لو نقطة الاسترجاع قبل الخطأ متاحة. الـ RTO فشل لو المطلوب `30 دقيقة` والتعافي أخد `50`. Snapshot موجودة مش دليل إن الخطة ناجحة.
 
-خلي التطبيق يستخدم DNS endpoint مش IP ثابت، وخزّن credentials في خدمة أسرار. اقفل database عن الإنترنت العام لو مفيش سبب، واسمح من app security group فقط.
+<Box type="warn" title="Replica تنقل الخطأ">
 
-<Box type="warn" title="أغلب قواعد البيانات بتتكلف وهي فاضية">
-
-DB instances والتخزين والـ I/O والـ backups الزائدة والنقل والـ replicas لها تكلفة. Multi-AZ وRead Replicas يضيفوا موارد. راجع التسعير قبل الإنشاء ومتعتمدش على وعد Free Tier.
+Read Replica تحل ضغط القراءة، لكنها مش backup مستقل تلقائيًا. حذف أو corruption منطقي ممكن ينتقل لها. والـ backup مش بديل failover سريع.
 
 </Box>
 
-## 🧪 Lab ورقي: availability ولا performance؟
+## أمان وتكلفة
 
-صنّف: «عايز failover تلقائي لو AZ وقعت» → Multi-AZ. «صفحة التقارير القراءة فيها تقيلة» → Read Replica. «رجوع للحالة قبل حذف الساعة 10:05» → point-in-time restore.
+حط database في private subnets، اسمح من app security group فقط، واستخدم Secrets Manager أو حل أسرار مناسب. احسب instances وstorage وI/O والـ backups الزائدة والـ replicas والنقل؛ Multi-AZ وread replicas موارد إضافية.
 
-التمرين بلا موارد. لو نفذت قاعدة تجريبية، استخدم داتا وهمية، راجع deletion protection والـ final snapshot، وبعدها احذف instance والـ snapshots اللي مش محتاجها.
+## 🧪 تمرين: حقق RTO وRPO
 
-## متخلطش الأدوات
+Checkout database حجمها `2 TB`، عليها `70%` writes و`30%` reads. المتطلب: AZ failure خلال `4 دقايق`، حذف منطقي بفقد أقصى `5 دقايق`، وتقارير متأخرة حتى `60 ثانية`. اختار Multi-AZ وread replica وbackup settings، ثم اكتب timeline لاختبار failover وrestore ومعيار نجاح كل واحد.
 
-Multi-AZ مش scaling writes. Read Replica مش backup مضمون. Backup مش high availability فورية. كل واحدة بتحل failure أو load مختلف.
-
-الفصل الجاي هنشوف DynamoDB وباقي قواعد البيانات purpose-built: cache وdocument وgraph وwarehouse.
-
-<Checklist id="aws-cp-19" title="خلّصت الفصل لما" items={["تعرف مسؤوليتك رغم إن RDS managed", "تربط relational بالـ transactions والعلاقات", "تميز Multi-AZ التقليدي عن Read Replica", "تشرح Aurora على مستوى عالي", "تختبر restore ومتعتبرش replica backup"]} />
+<Checklist id="aws-cp-19" title="خلّصت الفصل لما" items={["تعرف مسؤوليتك رغم إن RDS managed", "تربط relational بالـ transactions والقيود", "تميز Multi-AZ التقليدي عن Read Replica", "تشرح Aurora وdeployment caveat", "تقيس restore ضد RTO وRPO"]} />
 
 <Quiz>
-<Q n={1} q="عايز تقلل downtime عند عطل الـ primary؛ تختار إيه غالبًا؟">Multi-AZ deployment مناسب للـ high availability والـ failover.</Q>
-<Q n={2} q="عايز توسّع استعلامات القراءة؛ تفكر في إيه؟">Read Replica أو Aurora Replica حسب المحرك والتصميم.</Q>
-<Q n={3} q="ليه replication مش backup؟">لأن حذف أو خطأ منطقي ممكن يتنسخ للـ replica؛ backup بتاريخ وretention يدي نقطة استرجاع.</Q>
+<Q n={1} q="AZ فشلت والمطلوب failover تلقائي؛ تختار إيه غالبًا؟">RDS Multi-AZ deployment مناسب، مع اختبار زمن إعادة الاتصال الفعلي.</Q>
+<Q n={2} q="تقرير يقبل تأخير 30 ثانية وبيضغط على الـ primary؛ الحل المرشح؟">Read Replica أو Aurora Replica حسب المحرك والتصميم.</Q>
+<Q n={3} q="ليه Read Replica مش backup؟">لأن الخطأ المنطقي ممكن يتنسخ، بينما PITR أو backup بتاريخ يوفّر نقطة استرجاع مستقلة.</Q>
 </Quiz>

@@ -6,98 +6,74 @@ label: فصل ٢٠
 badge: Storage وDatabases · فصل ٢٠
 en: DynamoDB · ElastiCache · DocumentDB · Neptune · Redshift
 keywords: key-value · cache · document · graph · data warehouse
-goal: تميّز قواعد البيانات purpose-built وتعرف المشكلة اللي كل خدمة معمولة عشانها.
+goal: تختار purpose-built database من access pattern إنتاجي وتفهم tradeoffs السعة والاتساق.
 part: Storage وDatabases
 color: c5
 ---
 
-## مفيش database تكسب كل السباقات
+## المثال الأول: Cart لـ SaaS متعدد الـ tenants
 
-AWS بتشجع <En>purpose-built databases</En>: اختار model حسب شكل الداتا والاستعلامات والـ scale، مش حسب الاسم الأشهر.
+المنصة عندها `2 مليون` مستخدم وذروة `45,000 request/s`. أهم طلبين: هات cart بـ `tenantId + userId`، وحدّث item بشرط إن version ما اتغيرتش.
 
-<Box type="story" icon="🏫" title="خمس دواليب في المدرسة">
+١. partition key توزع tenants بدل ما كل traffic يروح لنفس partition.
+٢. sort key تنظّم items أو snapshots حسب التصميم.
+٣. conditional write تمنع overwrite متعارض.
+٤. TTL تنظف sessions المؤقتة، لكن الحذف مش ضمان لحظي عند ثانية الانتهاء.
+٥. CloudWatch يراقب throttling والـ latency والـ errors.
 
-كشف سريع برقم الطالب غير شبكة «مين قريب مين». نسخة ورقة كاملة غير تقرير سنوي على ملايين السجلات. لو حطيت كل حاجة في نفس الدولاب، هتدفع تعقيد أو بطء في مكان مش لازم.
+`DynamoDB` NoSQL serverless مُدارة، وبتحقق single-digit millisecond performance على scale لما المفاتيح والـ access patterns متصممين صح. `Scan` واسع في request ساخنة علامة إن model محتاج مراجعة.
 
-</Box>
+## Capacity وميزات مهمة
 
-## DynamoDB: key-value وdocument
+On-demand يناسب traffic غير المتوقع، وprovisioned capacity يناسب تحكم وتوقع أوضح مع autoscaling حسب التصميم. GSI تضيف access pattern لكنها تضيف storage وwrite cost وقد يكون لها consistency behavior مختلف عن base table.
 
-`Amazon DynamoDB` قاعدة NoSQL serverless مُدارة، معمولة لأداء single-digit milliseconds على أي scale عند تصميم المفاتيح صح.
+Streams تنشر تغييرات items، وGlobal Tables تدعم multi-Region active-active مع تصميم conflict والـ routing. Backup وPITR يحلوا recovery؛ Global Table وحدها مش backup من حذف منطقي.
 
-كل item له primary key. ممكن يكون partition key فقط، أو partition + sort key. طريقة الوصول لازم تأثر على التصميم من الأول؛ مش هننقل SQL schema زي ما هي.
+## Cache: قلل `p95` من 180 إلى 20 ms
 
-في بوابة المدرسة: session برقم عشوائي، أو إعدادات طالب نجيبها بـ `studentId`. لكن تقارير joins مرنة بين طلاب وفصول ومواد ممكن تكون أسهل في relational database.
+`ElastiCache` تدعم Valkey وMemcached وRedis OSS حسب الاختيار الحالي. في catalog API، أول request تعمل cache miss فتقرأ RDS في `180 ms` وتخزن النتيجة `60 ثانية`؛ الطلبات التالية ترجع في `20 ms`.
 
-خصائص عالية المستوى:
+الفشل: price اتغير في المصدر لكن cache قديمة تعرض قيمة قديمة. الحل حسب المتطلب: TTL أقصر، invalidation event، أو عدم cache لمسار حساس. Cache miss لازم يرجع لمصدر الحقيقة؛ eviction مش data loss لو التصميم صح.
 
-- On-demand أو provisioned capacity modes.
-- Global Secondary Index لمسارات وصول إضافية.
-- DynamoDB Streams لتغييرات items.
-- Global Tables لنسخ multi-Region active-active حسب التصميم.
-- backup وpoint-in-time recovery كخيارات حماية.
-
-## ElastiCache: سرعة فوق مصدر الحقيقة
-
-`Amazon ElastiCache` cache مُدارة تدعم Valkey وMemcached وRedis OSS حسب الاختيار الحالي. تخزن داتا ساخنة في الذاكرة لتقلل latency والضغط على database.
-
-<Hl c="o">Cache عادية مش مصدر الحقيقة: لازم التطبيق يستحمل miss أو eviction ويرجع للـ database.</Hl>
-
-مثال: جدول الحصص الأكثر طلبًا يتخزن لدقائق. لما يتغير المصدر، تحتاج invalidation أو TTL واضح.
-
-## DocumentDB: مستندات JSON-like
-
-`Amazon DocumentDB (with MongoDB compatibility)` لبيانات شبه منظمة كـ documents واستعلام حقولها. مناسب لكتالوج محتوى أو profiles متغيرة البنية.
-
-التوافق مش معناه تطابق كل ميزة وسلوك وإصدار MongoDB؛ راجع compatibility docs قبل migration.
-
-## Neptune: العلاقات هي السؤال
-
-`Amazon Neptune` graph database. مفيد لما الاستعلام يمشي عبر علاقات كتير: شبكة معلمين ومواد وفصول، recommendation، أو fraud detection.
-
-لو كل اللي محتاجه lookup بمفتاح، graph database غالبًا تعقيد زيادة.
-
-## Redshift: warehouse للتحليلات
-
-`Amazon Redshift` data warehouse للـ OLAP والتحليلات والتقارير على داتا كبيرة. مناسب لسؤال زي «اتجاه الغياب عبر السنين والمدارس».
-
-مش بديل OLTP افتراضي لتسجيل حضور طالب لحظيًا. ممكن تجمع له داتا من الأنظمة التشغيلية عشان التحليل.
+## Document وGraph وWarehouse
 
 <Grid2>
-<Card title="تشغيل يومي OLTP" c={2}>
+<Card title="DocumentDB" c={2}>
 
-RDS/Aurora أو DynamoDB حسب model والاستعلامات.
+Documents JSON-like واستعلام حقول مرنة. MongoDB compatibility مش تطابق كل feature أو behavior؛ اختبر قبل migration.
 
 </Card>
-<Card title="تحليل تاريخي OLAP" c={5}>
+<Card title="Neptune" c={4}>
 
-Redshift لما الهدف aggregation وBI على نطاق كبير.
+Graph traversals زي اكتشاف شبكة حسابات وأجهزة ومعاملات مرتبطة في fraud investigation. Lookup بمفتاح واحد لا يبرر graph.
 
 </Card>
 </Grid2>
 
-## 🧪 تمرين ورقة: وصّل المشكلة بالخدمة
+`Redshift` data warehouse للـ OLAP: aggregation وBI على مليارات rows تاريخية. مش المسار الافتراضي لمعاملة checkout لحظية؛ انقل له data من الأنظمة التشغيلية بطريقة تتحمل التأخير المتفق عليه.
 
-وصّل: session by ID → DynamoDB؛ نتيجة query متكررة → ElastiCache؛ profile مرن JSON-like → DocumentDB؛ مسارات علاقات → Neptune؛ dashboard سنوية ضخمة → Redshift.
+## مقارنة failure modes
 
-اكتب جنب كل اختيار «مصدر حقيقة ولا cache ولا analytics». التمرين بلا تكلفة. الخدمات الفعلية قد تتكلف بمجرد provisioning أو الاستخدام؛ راجع السعر واحذف clusters/tables التجريبية والنسخ بعد الانتهاء.
+- DynamoDB key ساخنة: throttling وتوزيع سيئ رغم إن الخدمة managed.
+- ElastiCache miss storm: ضغط مفاجئ على source database.
+- DocumentDB migration: feature مستخدمة غير متوافقة.
+- Neptune: تكلفة وتعقيد بلا graph query حقيقية.
+- Redshift: dashboards تضغط لو data loading أو model غير مناسب، لكنه مش OLTP replacement.
 
-<Box type="warn" title="Serverless لا يلغي التصميم">
+<Box type="warn" title="Purpose-built لا تعني service لكل feature">
 
-DynamoDB تشيل servers من إيدك، لكن partition key سيئة أو scan واسع ممكن يرفع latency والتكلفة. راقب access patterns والـ capacity والـ indexes.
+كل database جديدة تضيف IAM وmonitoring وbackup وskills وتكلفة. استخدمها لما requirement قابل للقياس يبررها.
 
 </Box>
 
-## ملخص الفروق
+## 🧪 تمرين: Fintech access patterns
 
-Key-value سريع بمفتاح → DynamoDB. نسخة مؤقتة سريعة → ElastiCache. document fields → DocumentDB. علاقات عميقة → Neptune. تحليلات warehouse → Redshift.
+عندك: session lookup بـ ID، ledger transactions بعلاقات واتساق، graph يربط device بـ accounts، dashboard على `3 سنين`، وexchange rates تُقرأ `20,000 مرة/ثانية` وتتغير كل دقيقة. اختار DynamoDB/RDS/Neptune/Redshift/ElastiCache، واكتب source of truth وlatency المقبولة وfailure fallback لكل اختيار.
 
-الفصل الجاي هنحوّل الفروق دي لشجرة قرار ونصمم داتا بوابة المدرسة كاملة.
-
-<Checklist id="aws-cp-20" title="خلّصت الفصل لما" items={["تربط DynamoDB بالـ access patterns والمفاتيح", "متعتبرش ElastiCache مصدر الحقيقة تلقائيًا", "تفرق document عن graph", "تفرق OLTP عن Redshift OLAP", "تعرف إن managed وserverless لسه محتاجين تصميم وتكلفة"]} />
+<Checklist id="aws-cp-20" title="خلّصت الفصل لما" items={["تربط DynamoDB بالـ access patterns والمفاتيح", "تميّز capacity mode وhot key", "متعتبرش ElastiCache مصدر الحقيقة", "تفرق document عن graph", "تفرق OLTP عن Redshift OLAP"]} />
 
 <Quiz>
-<Q n={1} q="عايز تخزن session وتجيبها بمفتاح فريد بسرعة؛ تبدأ بإيه؟">DynamoDB اختيار منطقي لـ key-value access pattern.</Q>
-<Q n={2} q="ليه ElastiCache مش بديل مباشر دائم للـ database؟">لأن cache قد تفقد أو تطرد بيانات، والتطبيق لازم يرجع لمصدر الحقيقة.</Q>
-<Q n={3} q="تحليل اتجاه الدرجات لخمس سنين على حجم ضخم؛ أنهي خدمة؟">Redshift كـ data warehouse للتحليلات، مش مسار التسجيل التشغيلي الأساسي.</Q>
+<Q n={1} q="كل requests لtenant ضخم على partition key واحدة وظهر throttling؛ المشكلة الأساسية؟">Hot partition بسبب تصميم المفتاح؛ managed scaling لا يصلح توزيعًا سيئًا تلقائيًا.</Q>
+<Q n={2} q="Cache وقعت؛ هل orders الأصلية تضيع؟">لازم لأ؛ لو cache طبقة تسريع، التطبيق يرجع لمصدر الحقيقة الدائم.</Q>
+<Q n={3} q="تحليل fraud عبر علاقات account-device-IP عميقة؛ المرشح؟">Neptune لو graph traversals هي access pattern الأساسية.</Q>
 </Quiz>

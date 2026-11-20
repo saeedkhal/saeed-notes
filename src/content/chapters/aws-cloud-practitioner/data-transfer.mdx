@@ -11,86 +11,45 @@ part: Data وAI والهجرة
 color: c1
 ---
 
-## ابدأ بنوع الحاجة
+## نقل data platform من غير downtime طويل
 
-Database لها transactions وschema، الملفات لها paths وpermissions، والـ legacy app ممكن يحتاج share محلي. مفيش أداة واحدة تنقل كل حاجة.
+المؤسسة عندها Oracle 12 TB، NAS حجمه 300 TB، partner يبعت SFTP يوميًا، وbackup application محتاج tape interface.
 
-<Box type="story" title="نقل ملفات الطلبة">
+1. `DMS Schema Conversion` يقيّم Oracle schema ويحول المدعوم لـ Aurora PostgreSQL.
+2. الفريق يصلح procedures غير المدعومة ويعمل tests.
+3. `DMS` يعمل full load ثم CDC؛ lag ينزل من 40 دقيقة لأقل من دقيقتين.
+4. `DataSync` ينقل NAS إلى S3 على waves ويتحقق من النقل.
+5. `Transfer Family` يوفر SFTP endpoint للـ partner من غير تغيير برنامجه.
+6. `Tape Gateway` يحافظ على virtual tape workflow.
 
-درجات الطلبة في database غير صور الشهادات في file server. وشركة التصوير اللي تبعت كل يوم بـ SFTP غير أرشيف ضخم هيتشحن مرة واحدة. الاسم الصح يطلع من نوع النقل.
+## Database: data غير schema
 
-</Box>
+`DMS` ينقل ويكرر rows بين مصادر وtargets مدعومة، one-time أو CDC. `DMS Schema Conversion` يحول schema والكود المدعوم؛ و`SCT` اسم أقدم قد يظهر في CLF-C02.
 
-## AWS DMS: حرّك بيانات الـ database
+Cutover الساعة 02:00 ينجح لو CDC lag صفر، row counts/checksums مقبولة، والتطبيق يكتب على target. لو rows اتنقلت لكن stored procedure حرجة فشلت، migration فشلت وظيفيًا.
 
-`AWS Database Migration Service (DMS)` ينقل ويكرر data بين databases ومخازن مدعومة. يقدر يعمل one-time migration ويكمل `change data capture (CDC)` لتقليل downtime.
+## Files والبروتوكول والـ hybrid
 
-- **Homogeneous**: نفس engine تقريبًا، زي PostgreSQL إلى RDS for PostgreSQL.
-- **Heterogeneous**: engine مختلف، زي Oracle إلى Aurora PostgreSQL؛ هنا schema conversion مهم.
+- `DataSync`: bulk أو scheduled online transfer لـ file/object data بين on-prem وAWS أو خدمات مدعومة.
+- `Transfer Family`: endpoints مُدارة لـ SFTP/FTPS/FTP إلى S3 أو EFS.
+- `Storage Gateway`: integration مستمر؛ S3 File Gateway، FSx File Gateway، Volume Gateway، Tape Gateway.
 
-<Hl c="b">DMS ينقل الـ data؛ تحويل schema والكود مهمة منفصلة حتى لو تحت نفس عيلة DMS.</Hl>
+DataSync مشروع copy/sync؛ Storage Gateway interface مستمرة مع cache محلي؛ Transfer Family يحافظ على بروتوكول شريك.
 
-## DMS Schema Conversion وSCT
+## لما الشبكة متكفيش
 
-`DMS Schema Conversion` خدمة managed على الويب تحول tables وviews وprocedures لصيغة target متوافقة، وتطلع assessment للحاجات اللي محتاجة تعديل يدوي.
+300 TB على وصلة فعلية 1 Gbps تحتاج نظريًا حوالي 28 يوم نقل متواصل قبل overhead، فممكن physical transfer يبقى أنسب.
 
-هي مبنية على conversion engine بتاع `AWS Schema Conversion Tool (SCT)`. في سيناريو جديد، راجع DMS Schema Conversion أولًا؛ مواد CLF-C02 القديمة ممكن تسأل عن SCT كتطبيق يحول schema.
+في **أكتوبر ٢٠٢٦**، Snow Family غير متاح لعملاء commercial جدد، ودعم Snowball في commercial Regions مقرر ينتهي **٣١ ديسمبر ٢٠٢٦**. الاتجاه الحالي `AWS Data Transfer Terminal` وحلول partners حسب البلد والسعة. الامتحان المنشور قد يسأل Snow Family تاريخيًا، فاعرف الغرض والـ caveat.
 
-<Box type="warn" title="التحويل مش سحر">
+## 🧪 Lab ورقي
 
-اختلافات engines ممكن تحتاج تعديل يدوي واختبارات. متحوّلش production database من غير backup، validation، وخطة رجوع.
-
-</Box>
-
-## DataSync: ملفات وobjects أونلاين
-
-`AWS DataSync` يحرك file وobject data أونلاين بين on-premises وAWS، وبين storage services مدعومة. بيهتم بالجدولة والتشفير والتحقق من سلامة النقل وإعادة المحاولة.
-
-اختاره لنقل NFS/SMB أو object storage إلى خدمات زي S3 وEFS وFSx، سواء مرة أو بصورة دورية. هو مش database replication engine.
-
-## Transfer Family: بروتوكول الشريك
-
-`AWS Transfer Family` يوفر endpoints مُدارة لبروتوكولات file transfer زي `SFTP` و`FTPS` و`FTP`، والملفات تروح لـ S3 أو EFS.
-
-لو مورد خارجي عنده برنامج قديم بيبعت SFTP كل ليلة ومش عايز تغيّره: Transfer Family. لو أنت بتعمل bulk copy مُحسن بين storage systems: DataSync.
-
-## Storage Gateway: باب هجين مستمر
-
-`AWS Storage Gateway` يدي تطبيقات on-premises وصول هجين لـ AWS storage بواجهات مألوفة:
-
-- `S3 File Gateway`: file shares وتخزين objects في S3.
-- `FSx File Gateway`: وصول محلي لـ FSx for Windows File Server.
-- `Volume Gateway`: block storage مع snapshots في AWS.
-- `Tape Gateway`: virtual tapes للأرشفة والـ backup.
-
-ده integration مستمر مع cache محلي، مش مجرد مشروع copy وينتهي.
-
-## Snow Family: المعلومة التاريخية والحالية
-
-`AWS Snowball Edge` كان جهاز تشحنه لنقل كمية ضخمة أو تشغيل edge compute لما الشبكة ضعيفة. `Snowcone` أصغر، و`Snowmobile` كان لنقل هائل جدًا.
-
-لكن في **أكتوبر ٢٠٢٦**، Snow Family لم يعد متاحًا لعملاء commercial جدد، ودعم Snowball في الـ commercial Regions مقرر ينتهي **٣١ ديسمبر ٢٠٢٦**؛ العملاء الحاليون وGovCloud لهم تفاصيل مختلفة.
-
-<Box type="tip" title="البديل الحالي">
-
-للنقل physical الجديد، AWS بتوجّه إلى `AWS Data Transfer Terminal` وحلول partners حسب البلد والسعة. الامتحان الحالي المنشور قد يفضل يسأل Snow Family، فاعرف الغرض مع caveat الزمن.
-
-</Box>
-
-## اختار بسرعة
-
-<Chips items={["database rows وCDC → DMS", "schema مختلف → DMS Schema Conversion / SCT", "NFS وSMB أونلاين → DataSync", "SFTP endpoint → Transfer Family", "hybrid share مستمر → Storage Gateway", "offline historical → Snow Family مع caveat", "physical current → Data Transfer Terminal/partner"]} />
-
-## 🧪 Lab آمن
-
-على ورقة، صنّف: Oracle إلى Aurora، NAS إلى S3، مورد بـ SFTP، tape backup، و500 TB مع خط ضعيف. اكتب الخدمة وسبب الاختيار، وحط نجمة على الخيارات اللي تغير توافرها.
-
-الفصل الجاي هنفهم إزاي نفس الـ compute يتسعّر On-Demand أو commitment أو Spot.
+احسب زمن 50 TB على 500 Mbps، ثم اختار DMS أو DataSync أو Transfer Family أو Gateway لكل requirement، واكتب validation وrollback.
 
 <Checklist id="aws-cp-36" title="خلّصت الفصل لما" items={["تفرق بين نقل data وتحويل schema", "تختار DataSync أو Transfer Family من البروتوكول", "تفهم Storage Gateway كحل hybrid", "تذكر caveat Snow Family في ٢٠٢٦"]} />
 
 <Quiz>
-<Q n={1} q="Oracle إلى Aurora PostgreSQL مع downtime قليل: إيه القطعتين؟">`DMS` لنقل ومزامنة البيانات، و`DMS Schema Conversion` أو SCT لتحويل الـ schema والكود المدعوم.</Q>
-<Q n={2} q="شريك لازم يفضل يبعت SFTP إلى S3. تختار؟">`AWS Transfer Family`.</Q>
-<Q n={3} q="تطبيق محلي محتاج file share مستمر والداتا تمتد لـ S3. تختار؟">`S3 File Gateway` ضمن AWS Storage Gateway.</Q>
+<Q n={1} q="Oracle إلى Aurora PostgreSQL مع downtime قليل؟">DMS للبيانات وCDC، وDMS Schema Conversion أو SCT للـ schema.</Q>
+<Q n={2} q="Partner لازم يفضل يبعت SFTP؟">AWS Transfer Family.</Q>
+<Q n={3} q="File share محلي مستمر يمتد لـ S3؟">S3 File Gateway.</Q>
 </Quiz>

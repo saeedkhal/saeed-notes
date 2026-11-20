@@ -11,13 +11,25 @@ part: Compute
 color: c3
 ---
 
-## Block storage يعني إيه؟
+## Incident: instance انتهت والداتا فين؟
 
-`Amazon EBS` بيدي EC2 volume على مستوى الـ blocks، كأنه هارد يتعمل له format ويتحط عليه filesystem. الـ volume مورد مستقل يقدر يفضل موجود بعد ما الـ instance تقف.
+خدمة processing على EC2 اتعمل لها terminate بالخطأ الساعة `16:00`. الملفات المؤقتة على instance store اختفت، لكن transaction files على EBS volume فضلت لأن إعداد الحذف كان مقفول. آخر snapshot كانت `02:00`، فالفريق اكتشف إن الديمومة والـ backup سؤالين مختلفين.
 
-<Box type="story" icon="🗄️" title="دولاب الملفات">
+`Amazon EBS` بيدي block storage على مستوى الـ blocks، يتعمل له format وfilesystem. الـ volume مورد مستقل في Availability Zone معينة، وممكن يفضل بعد توقف أو انتهاء instance حسب الإعداد.
 
-الـ EBS دولاب المدرسة المنفصل عن مكتب الموظف: الموظف يروح والدولاب يفضل. الـ instance store درج جوّه المكتب نفسه: سريع وقريب، بس لو المكتب اتشال محتواه مش ضمان.
+## Timeline للاستعادة
+
+1. **16:03:** monitoring يعلن فقد instance.
+2. **16:08:** الفريق يحدد هل الـ volume الأصلية سليمة وموجودة.
+3. **16:12:** يربط volume بـ instance بديلة داخل قيود الـ AZ المناسبة.
+4. لو الـ volume نفسها فشلت أو الداتا فسدت، يختار snapshot point-in-time.
+5. ينشئ **volume جديدة** من snapshot، يعمل validation، ثم يعيد الترافيك.
+
+النجاح إن البيانات المطلوبة ترجع خلال الهدف ويتم إثبات سلامتها. الفشل إن وجود volume يُفهم كأنه backup، أو إن snapshot موجودة من غير restore test.
+
+<Box type="story" icon="💾" title="ديمومة مختلفة">
+
+EBS مستقلة عن عمر instance نسبيًا. Instance store محلية على host ومؤقتة؛ ممتازة لـ cache أو scratch data قابلة لإعادة البناء، وليست مكان النسخة الوحيدة من بيانات مهمة.
 
 </Box>
 
@@ -60,17 +72,13 @@ EBS مش بيعمل snapshot تلقائي لمجرد إنك أنشأت volume. �
 
 SSD يناسب عمليات صغيرة ومتكررة حيث الـ IOPS مهمة. HDD يناسب تدفق blocks كبيرة حيث الـ throughput أهم.
 
-## بوابة المدرسة
+## مثال media production
 
-قرص نظام EC2 وملفات التطبيق المتغيرة ممكن يبقوا على `gp3`. ملفات صور الطلبة العامة مش لازم تتحول لـ EBS؛ غالبًا object storage زي S3 أنسب، وهنوصله.
-
-لو فيه ملفات مؤقتة أثناء تحويل فيديو، instance store ممكن ينفع **فقط** لو العملية تقدر تبدأ من جديد والداتا الأصلية محفوظة في مكان دائم.
+قرص نظام EC2 وworking data ممكن يبدأوا على `gp3`. مكتبة الفيديو الأصلية المشتركة مش لازم تتحول لـ EBS؛ object storage زي S3 غالبًا أنسب. ملفات مؤقتة أثناء transcoding ممكن تستخدم instance store **فقط** لو العملية قابلة للإعادة والأصل محفوظ دائمًا.
 
 ## 🧪 Lab ورقي: خطة رجوع
 
-اكتب السيناريو ده: «EBS عليها نظام بوابة المدرسة». ارسم سهم كل ليلة إلى snapshot، واكتب retention افتراضي للمناقشة، ثم سهم restore إلى **volume جديدة**.
-
-اسأل نفسك: مين يراقب نجاح النسخ؟ وإمتى اختبرنا الاسترجاع؟ الورقة مجانية. لو أنشأت volume أو snapshot حقيقية، راجع أسعار الحجم والطلبات واحذف التجربة بعد التأكد إنك مش محتاجها.
+صمم خطة EBS لقاعدة processing: snapshot كل ساعة، `RPO=60 دقيقة`، و`RTO=90 دقيقة`. اكتب timeline لحادث الساعة `14:37`، وحدد restore point المتوقع، validation، retention، وowner. وضح إمتى instance store تكون مقبولة في نفس النظام.
 
 ## نقط امتحان صغيرة
 
@@ -81,7 +89,7 @@ SSD يناسب عمليات صغيرة ومتكررة حيث الـ IOPS مهم�
 
 الفصل الجاي هنشوف إزاي أكتر من instance يستقبلوا الطلبات ويكبروا ويصغروا مع الضغط.
 
-<Checklist id="aws-cp-13" title="خلّصت الفصل لما" items={["تشرح block storage بمثال", "تميّز ديمومة EBS عن instance store", "تعرف إن snapshots incremental وليها تكلفة", "تختار SSD للـ IOPS وHDD للـ throughput على مستوى عالي", "تضيف restore test لخطة النسخ"]} />
+<Checklist id="aws-cp-13" title="خلّصت الفصل لما" items={["تشرح block storage بسيناريو عملي", "تميّز ديمومة EBS عن instance store", "تعرف إن snapshots incremental وليها تكلفة", "تختار SSD للـ IOPS وHDD للـ throughput على مستوى عالي", "تضيف restore test لخطة النسخ"]} />
 
 <Quiz>
 <Q n={1} q="Cache قابلة لإعادة البناء ومحتاجة disk محلي سريع؛ ممكن تستخدم إيه؟">Instance store، بشرط إن فقدانها مقبول والداتا الأصلية محفوظة.</Q>

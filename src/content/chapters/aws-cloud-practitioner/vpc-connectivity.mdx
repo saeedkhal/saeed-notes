@@ -1,90 +1,82 @@
 ---
-title: بوابات الشبكة والحراسة
+title: اتصال وحماية VPC في Production
 short: اتصال وحماية VPC
 order: 23
 label: فصل ٢٣
 badge: Networking · فصل ٢٣
 en: Internet Gateway · NAT Gateway · Security Group · NACL · VPC endpoint
 keywords: IGW · NAT Gateway · SG · NACL · endpoints
-goal: تختار طريق الاتصال وطبقة الحماية الصح من غير ما تفتح شبكة المدرسة زيادة.
+goal: تتبع egress وinbound وتختار controls تقلل التعرض والتكلفة.
 part: Networking
 color: c3
 ---
 
-## Internet Gateway
+## المثال الأول: App خاصة تقرأ S3
 
-الـ <En>Internet Gateway (IGW)</En> بيتوصل بالـ VPC ويديها طريق للإنترنت. الـ public subnet تحط في route table بتاعتها `0.0.0.0/0 → IGW`.
+`80` ECS task في private subnets تقرأ `5 TB/day` من S3 وتحتاج كمان package updates من الإنترنت.
 
-ده طريق، مش تصريح شامل. المورد محتاج public IPv4 أو IPv6 مناسب، والـ Security Group لازم تسمح.
-
-## NAT Gateway
-
-سيرفر الـ app في private subnet محتاج ينزّل تحديث، بس مش عايزين الإنترنت يبدأ اتصال ناحيته. <En>NAT Gateway</En> تسمح باتصال خروج وتستقبل الرد المرتبط به.
+١. S3 traffic تستخدم `Gateway VPC endpoint` بدل NAT.
+٢. internet egress العام يمر من NAT Gateway في public subnet ثم IGW.
+٣. app Security Group تسمح الاتصالات المطلوبة فقط.
+٤. endpoint policy وIAM يحددوا buckets/actions؛ وجود endpoint لا يمنح صلاحية تلقائيًا.
 
 <Flow items={[
-  { t: "App خاص", s: "يبدأ الطلب", c: 3 }, "→",
-  { t: "NAT Gateway", s: "في public subnet", c: 2 }, "→",
-  { t: "Internet Gateway", c: 4 },
+  { t: "Private app", s: "تبدأ الاتصال", c: 3 }, "→",
+  { t: "S3 endpoint", s: "S3 traffic", c: 2 }, "+",
+  { t: "NAT → IGW", s: "internet egress", c: 4 },
 ]} />
 
-الـ public NAT Gateway بتتحط في public subnet ولها Elastic IP، والـ private subnet توجه الطريق الافتراضي لها.
+## IGW وNAT
 
-<Box type="warn" title="NAT Gateway مش مجانية">
+`Internet Gateway` target للـ internet routing، مش firewall. public resource تحتاج route وpublic address وقواعد سماح.
 
-عليها تكلفة بالساعة ومعالجة بيانات، وقد توجد رسوم نقل بيانات. في lab فعلي امسحها أول ما تخلص وراجع Pricing؛ متسيبهاش شغالة.
-
-</Box>
+Public NAT Gateway تسمح لمورد خاص يبدأ IPv4 connection للخارج ويستقبل الرد المرتبط، لكنها لا تتيح inbound عام يبدأ من الإنترنت. لها تكلفة بالساعة ومعالجة data، وتصميم multi-AZ يحتاج مراعاة resilience ومسار cross-AZ والتكلفة.
 
 ## Security Group ضد NACL
 
 <Grid2>
 <Card title="Security Group" c={3}>
 
-- على مستوى resource أو network interface.
-- قواعد **allow فقط**.
-- <Hl c="g">Stateful</Hl>: لو الطلب مسموح، الرد مسموح تلقائيًا.
-- كل القواعد تتقيّم مع بعض.
+على ENI/resource، allow rules فقط، وstateful: الرد على اتصال مسموح يمر تلقائيًا. استخدم SG references بين app وdatabase بدل CIDRs واسعة لما يناسب.
 
 </Card>
 <Card title="Network ACL" c={4}>
 
-- على مستوى subnet.
-- قواعد allow وdeny.
-- <Hl c="o">Stateless</Hl>: لازم تسمح للذهاب والرد منفصلين.
-- أول rule مطابقة حسب الرقم هي اللي تكسب.
+على subnet، allow وdeny، وstateless. rules تُقيّم بالرقم وأول match تكسب؛ لازم تسمح return traffic والـ ephemeral ports حسب المسار.
 
 </Card>
 </Grid2>
 
-<Box type="story" icon="🛂" title="بواب الفصل وبواب الدور">
+## Incident timeline
 
-Security Group بواب فاكر إن الطالب دخل بإذن، فيسيبه يخرج. NACL بواب الدور مش بيفتكر؛ لازم ورقة للدخول وورقة للخروج.
+- `16:00`: تغيير NACL يسمح inbound `443` لكنه يمنع ephemeral return ports.
+- `16:02`: health checks تبدأ تفشل رغم إن SG صحيحة.
+- `16:05`: الفريق يقارن flow logs والقواعد ويكتشف إن NACL stateless.
+- `16:08`: rollback يرجع الخدمة.
+
+الدرس: route تحدد الطريق، SG/NACL تحدد السماح، وDNS/TLS/application health طبقات أخرى. اختبر كل طبقة بدل افتراض إن "الشبكة مفتوحة".
+
+## Endpoints
+
+- Gateway endpoints لـ S3 وDynamoDB، ولا تعتمد على PrivateLink.
+- Interface endpoints تنشئ private ENIs وتستخدم AWS PrivateLink لخدمات مدعومة.
+
+Gateway endpoints لـ S3 وDynamoDB لا تحمل رسمًا بحد ذاتها حسب الوضع الحالي في أكتوبر 2026، بينما interface endpoints لها تكلفة؛ راجع pricing والـ Region والـ service قبل التصميم.
+
+<Box type="warn" title="Endpoint لا يلغي IAM">
+
+لازم identity policy وresource policy وendpoint policy يتوافقوا. Private path مش معناه authorized request.
 
 </Box>
 
-استخدم Security Groups كتحكم أساسي دقيق، وNACL كحاجز subnet إضافي. متتعاملش مع NACL كبديل دائم للـ SG.
+## 🧪 تمرين: قلل NAT bill
 
-## VPC Endpoints
+App تنقل `12 TB/month` إلى S3 عبر NAT، وتعمل `2 TB/month` internet egress. ارسم المسار الحالي والجديد مع S3 Gateway endpoint. اكتب SG وNACL assumptions، ثم افترض فشل NAT في AZ-A وحدد أثره على tasks بكل AZ.
 
-الـ <En>VPC endpoint</En> يخلي مواردك توصل لخدمة مدعومة من غير المرور بالـ public internet أو NAT.
-
-- Gateway endpoints لـ S3 وDynamoDB، ومش مبنية على PrivateLink.
-- Interface endpoints بتعمل private network interfaces وبتستخدم AWS PrivateLink.
-
-الـ endpoint مش معناه سماح تلقائي؛ راجع endpoint policy وIAM والـ Security Groups حسب النوع.
-
-## 🧪 تمرين ورقي آمن
-
-ارسم private app عايز S3 وتحديثات عامة. حط طريق S3 على Gateway endpoint، والطريق العام على NAT. اكتب SG تسمح HTTPS خروج، واكتب جنب NACL: "الرد لازم rule".
-
-لو جرّبت في حساب فعلي، راجع تكلفة NAT والـ interface endpoint وامسحهم بعد التجربة. Gateway endpoints لـ S3 وDynamoDB لا تحمل رسمًا بحد ذاتها حاليًا، لكن راجع الـ docs وبيانات الخدمة.
-
-الفصل الجاي هنطلع من حدود الـ VPC للـ DNS والـ edge العالمي.
-
-<Checklist id="aws-cp-23" title="خلّصت الفصل لما" items={["تشرح دور IGW كطريق", "تعرف إن NAT للخروج وليها تكلفة", "تقول SG stateful وallow فقط", "تقول NACL stateless وallow/deny", "تميّز Gateway endpoint من Interface endpoint"]} />
+<Checklist id="aws-cp-23" title="خلّصت الفصل لما" items={["تشرح IGW كطريق مش تصريح", "تعرف NAT للـ egress وتكلفتها", "تقول SG stateful وallow فقط", "تقول NACL stateless وallow/deny", "تميّز Gateway endpoint من Interface endpoint"]} />
 
 <Quiz>
-<Q n={1} q="سمحت inbound في Security Group؛ لازم rule منفصلة للرد outbound؟">لأ، لأنها stateful والرد المرتبط مسموح تلقائيًا.</Q>
-<Q n={2} q="ليه نفس الفكرة محتاجة اتجاهين في NACL؟">لأن NACL stateless ومبتفتكرش الاتصال.</Q>
-<Q n={3} q="App خاص بيقرأ S3: أنهي اختيار يقلل الاعتماد على NAT؟">Gateway VPC endpoint لـ S3 مع policies مناسبة.</Q>
+<Q n={1} q="Inbound مسموح في SG؛ هل محتاج outbound rule للرد؟">لأ للرد المرتبط، لأن SG stateful.</Q>
+<Q n={2} q="SG سليمة لكن NACL منعت ephemeral return ports؛ النتيجة؟">الاتصال ممكن يفشل لأن NACL stateless وتحتاج قواعد للاتجاهين.</Q>
+<Q n={3} q="Private app تقرأ S3 بكثافة؛ إزاي تقلل NAT؟">Gateway VPC endpoint لـ S3 مع IAM وendpoint/bucket policies مناسبة.</Q>
 </Quiz>

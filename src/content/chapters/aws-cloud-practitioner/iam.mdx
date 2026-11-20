@@ -11,11 +11,22 @@ part: الأمان والحساب
 color: c2
 ---
 
-## IAM هو بواب AWS
+## Request حقيقي: خدمة الفواتير تقرأ ملفًا
 
-AWS Identity and Access Management يحدد **مين** يقدر يعمل **إيه** على **أنهي resource** وتحت **أنهي شروط**. IAM خدمة عالمية للحساب، لكن الموارد اللي بتتحكم فيها قد تكون إقليمية.
+خدمة `invoice-api` على EC2 محتاجة تقرأ template من bucket اسمه `company-invoices-prod`، لكن ممنوع تحذف ملفات أو تلمس buckets تانية. المطلوب مش «ادّيها S3 access»؛ المطلوب قرار دقيق على كل request.
 
-بوابة المدرسة فيها مدير، مدرس، طالب، وتطبيق. مش منطقي كلهم ياخدوا نفس المفتاح.
+AWS Identity and Access Management يحدد **مين** يعمل **إيه** على **أنهي resource** وتحت **أنهي conditions**. IAM خدمة عالمية للحساب، لكن الموارد المتحكم فيها قد تكون إقليمية.
+
+## Request flow في ٦ خطوات
+
+1. EC2 بتاخد role اسمها `InvoiceReaderRole`.
+2. التطبيق يحصل على temporary credentials للجلسة، من غير key مخزنة في الكود.
+3. يطلب action اسمها `s3:GetObject`.
+4. المورد المطلوب object تحت prefix محدد في `company-invoices-prod`.
+5. AWS تجمع السياسات والحدود المؤثرة وتبدأ من implicit deny.
+6. `Allow` مطابق يمرر الطلب ما لم يوجد `Explicit Deny` مؤثر.
+
+طلب `s3:DeleteObject` يفشل، وقراءة bucket تانية تفشل. ده نجاح للـ least privilege، مش عطلًا في IAM.
 
 ## أربع قطع أساسية
 
@@ -42,15 +53,15 @@ AWS Identity and Access Management يحدد **مين** يقدر يعمل **إي�
 </Card>
 </Grid2>
 
-<Box type="story" icon="🎫" title="كارنيه المدرسة">
+<Box type="story" icon="🔐" title="صيغة أي قرار وصول">
 
-الاسم على الكارنيه هو principal، المكتوب إنه مسموح يدخل المعمل هو permission، وباب المعمل هو resource. الكارنيه المؤقت لزائر أقرب للـ role session من مفتاح دائم.
+`Principal + Action + Resource + Condition`. مثال: role التطبيق تقرأ objects محددة من bucket الإنتاج عبر اتصال يحقق الشروط. أي كلمة عامة في الجملة ممكن توسع الخطر.
 
 </Box>
 
 ## Identity-based policy
 
-تتربط بـ user أو group أو role، وتقول الهوية دي تقدر تعمل إيه. مثلًا role تطبيق البوابة يقرأ ملفات من bucket محدد.
+تتربط بـ user أو group أو role، وتقول الهوية دي تقدر تعمل إيه. مثلًا role خدمة الفواتير تقرأ templates من bucket محدد.
 
 الـ managed policy كيان مستقل ممكن يتربط بأكتر من هوية. الـ inline policy جزء مباشر من هوية واحدة. الاختيار له أثر في الإدارة وإعادة الاستخدام.
 
@@ -74,9 +85,18 @@ AWS Identity and Access Management يحدد **مين** يقدر يعمل **إي�
 
 <Hl c="b">Policy مش معناها مستخدم؛ هي ورقة قواعد. والـ role مش group؛ هو هوية بتتعمل لها جلسة مؤقتة.</Hl>
 
-## 🧪 تمرين آمن: اقرأ الجملة
+## قارن القطع القريبة
 
-اكتب من غير Console: «تطبيق البوابة يقرأ صورًا من bucket المدرسة فقط». حدد principal وaction وresource، واقترح role للتطبيق. متكتبش wildcard شامل.
+- **User:** هوية طويلة العمر داخل IAM لحالة محددة؛ البشر يفضل لهم federation حاليًا.
+- **Group:** يجمع IAM users لتطبيق policies؛ لا يعمل له sign-in أو assume.
+- **Role:** هوية تُفترض وتنتج temporary session.
+- **Identity-based policy:** تبدأ من الهوية وتصف المسموح لها.
+- **Resource-based policy:** تتعلق بالمورد وتحدد principals المسموحين.
+- **Explicit deny:** يغلب allow مؤثرًا على نفس الطلب.
+
+## 🧪 تمرين آمن: حلل request
+
+اكتب request لخدمة media تقرأ object تحت `uploads/processed/` فقط. حدد principal وaction وARN المورد وcondition محتملة. بعدين اختبر على الورق ٣ طلبات: قراءة صحيحة، حذف object، وقراءة prefix مختلف. اشرح success أو AccessDenied لكل واحدة.
 
 <Box type="warn" title="Console access غير API access">
 
@@ -86,7 +106,7 @@ Password للـ Console وaccess keys للـ API نوعان مختلفان من 
 
 ## قبل الفصل الجاي
 
-عرفنا قطع IAM. الفصل الجاي هنضيق الصلاحيات عمليًا: temporary credentials وIAM Identity Center وpermissions boundaries، من غير ما نحولها لأختام سحرية.
+عرفنا قطع IAM. الفصل الجاي هنضيق الصلاحيات عمليًا: temporary credentials وIAM Identity Center وpermissions boundaries.
 
 <Checklist id="aws-cp-07" title="خلّصت الفصل لما" items={["تفرّق بين user وgroup وrole", "تعرف مكونات policy الأساسية", "تفرّق بين identity-based وresource-based policy", "تفهم implicit deny وexplicit deny"]} />
 

@@ -11,17 +11,23 @@ part: الأمان والحساب
 color: c3
 ---
 
-## أقل صلاحية عملية مستمرة
+## Incident: key اتسربت في repository
 
-Principle of least privilege معناها تدي الصلاحيات المطلوبة للمهمة، على الموارد المطلوبة، وللمدة المطلوبة. مش معناها تبدأ بـ `AdministratorAccess` وتوعد إنك هتضيقها بعدين.
+فريق SaaS اكتشف الساعة `11:05` إن developer رفع access key إلى repository عامة. الـ key كانت long-term وعليها `AdministratorAccess`، فالفريق اضطر يتعامل مع أسوأ احتمال: قراءة الداتا أو تغيير أي resource.
 
-بوابة المدرسة تقرأ صور الطلبة من bucket محدد؛ مش محتاجة تحذف كل buckets في الحساب.
+لو نفس المهمة كانت role session مدتها ساعة، تسمح فقط بـ `s3:GetObject` على prefix محدد، أثر التسريب كان أصغر زمنيًا ووظيفيًا.
 
-<Box type="story" icon="🗝️" title="مفتاح معمل الكمبيوتر">
+<Hl c="g">Least privilege يضيّق الـ action والـ resource والـ condition والمدة؛ مش مجرد اسم policy.</Hl>
 
-المدرس المناوب ياخد مفتاح المعمل وقت الحصة ويرجعه بعدها. منديهوش نسخة تفتح المدرسة كلها وتفضل معاه للأبد. ده جمع least privilege مع temporary access.
+## Timeline للاستجابة والتصحيح
 
-</Box>
+1. **11:05:** secret scanning يكتشف الـ key.
+2. **11:08:** الفريق يعطل credential ويبحث في CloudTrail عن استخدامها.
+3. **11:20:** workload تنتقل إلى IAM role بtemporary credentials.
+4. **12:00:** policy تبدأ بأفعال وموارد محددة في بيئة test.
+5. **بعد ٧ أيام:** last accessed وAccess Analyzer يساعدوا في إزالة صلاحيات غير مستخدمة.
+
+النجاح إن workload تكمل المهمة من غير credential ثابتة ومن غير صلاحيات جانبية. الفشل إن `AccessDenied` يتصلح بـ `Action: *` أو إن session قصيرة تفضل بصلاحيات إدارية.
 
 ## Temporary credentials أفضل
 
@@ -51,13 +57,13 @@ Identity Center مش بديل عن تصميم الصلاحيات؛ هو ينظم
 
 Permissions boundary هي managed policy بتحط **الحد الأقصى** اللي identity-based policies تقدر تمنحه لـ IAM user أو role. هي لا تمنح permission لوحدها.
 
-مثال: فريق المدرسة مسموح له ينشئ roles للتطبيقات، لكن boundary تمنع أي role جديد من الخروج عن خدمات أو حدود معينة. ده يفيد تفويض إدارة الصلاحيات.
+مثال: platform team تسمح لفريق منتج ينشئ roles لتطبيقاته، لكن boundary تمنع أي role جديد من تجاوز خدمات أو حدود معينة. ده يفيد تفويض إدارة الصلاحيات.
 
 <Hl c="g">لو identity policy قالت Allow والـ boundary مش سامحة بالنطاق، الصلاحية الفعلية مش هتتمنح.</Hl>
 
 وفيه طبقات تانية زي AWS Organizations SCPs. الـ SCP يحدد أقصى صلاحيات متاحة لحسابات المؤسسة؛ مش هو كمان grant مباشر.
 
-## دورة تضييق الصلاحية
+## دورة تضييق الصلاحية بالأدلة
 
 1. ابدأ من task واضحة وصلاحيات قليلة.
 2. اختبر في بيئة غير إنتاجية.
@@ -71,13 +77,21 @@ Permissions boundary هي managed policy بتحط **الحد الأقصى** ال
 
 </Box>
 
-## 🧪 Lab آمن: صغّر الطلب
+## قارن الأدوات
 
-حوّل جملة «التطبيق يدير S3» لثلاث جمل أدق: أفعال محددة، bucket محدد، ومدة session مقترحة. بعدين اكتب حاجة واحدة ممنوعة صراحة في تصميمك. التمرين من غير حساب.
+- **Temporary credentials:** تقلل عمر السر؛ لا تضيق الصلاحية تلقائيًا.
+- **IAM Identity Center:** ينظم workforce access وpermission sets عبر حسابات؛ لا يجعل الـ permission set ضيقة تلقائيًا.
+- **Permissions boundary:** سقف لصلاحيات user أو role؛ لا تمنح access وحدها.
+- **SCP:** سقف على حسابات أو OUs في Organizations؛ ليست grant.
+- **Access Analyzer / last accessed:** أدلة للمراجعة، وليست قرارًا آليًا كامل السياق.
+
+## 🧪 Lab آمن: صغّر صلاحية incident responder
+
+صمم جلسة مدتها `45 دقيقة` لمهندس يحتاج يقرأ logs ويعيد تشغيل service واحدة في staging. حدد actions وresources وcondition، واكتب ٣ أشياء ممنوعة. بعدين وضح ماذا يحدث لو identity policy تسمح بفعل والـ boundary لا تسمح به.
 
 ## قبل الفصل الجاي
 
-ضيّقنا الوصول، لكن مين مسؤول عن patching والتشفير والحماية؟ الفصل الجاي يقسم المسؤولية بين AWS والمدرسة حسب نوع الخدمة.
+ضيّقنا الوصول، لكن مين مسؤول عن patching والتشفير والحماية؟ الفصل الجاي يقسم المسؤولية بين AWS والعميل حسب نوع الخدمة.
 
 <Checklist id="aws-cp-08" title="خلّصت الفصل لما" items={["تطبق least privilege على action وresource والمدة", "تشرح ميزة temporary credentials وحدودها", "تعرف دور IAM Identity Center للبشر", "تعرف إن permissions boundary سقف وليست grant"]} />
 

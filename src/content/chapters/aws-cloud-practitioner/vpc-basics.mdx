@@ -1,91 +1,73 @@
 ---
-title: شبكة المدرسة جوه AWS — أساسيات VPC
+title: أساسيات VPC لتطبيق Production
 short: أساسيات VPC
 order: 22
 label: فصل ٢٢
 badge: Networking · فصل ٢٢
 en: VPC · CIDR · public subnet · private subnet · route table
 keywords: VPC · CIDR · subnets · route tables
-goal: تفهم إزاي تقسّم شبكة بوابة المدرسة وتحدد مين له طريق للإنترنت.
+goal: تقسّم شبكة تطبيق متعدد الـ AZs وتقرأ مسار packet من الـ routes.
 part: Networking
 color: c2
 ---
 
-## الـ VPC هي أرضك
+## المثال الأول: Checkout في 3 tiers
 
-<En>Amazon VPC</En> شبكة افتراضية معزولة منطقيًا جوه AWS. إنت بتختار مدى عناوينها، تقسيمها، والطرق اللي الترافيك يمشي فيها.
+المطلوب تطبيق في `2 AZs`: public ALB، app tasks خاصة، وRDS خاصة. الـ CIDR هو `10.20.0.0/16` ولازم نسيب مساحة لتوسع سنة.
 
-<Box type="story" icon="🏫" title="سور المدرسة">
+١. public subnets: `10.20.0.0/24` و`10.20.1.0/24`.
+٢. app subnets: `10.20.10.0/24` و`10.20.11.0/24`.
+٣. data subnets: `10.20.20.0/24` و`10.20.21.0/24`.
+٤. كل subnet داخل AZ واحدة فقط؛ توزيع الأزواج يحقق resilience لو AZ تعطلت.
+٥. ALB وحدها تستقبل من الإنترنت؛ app وdatabase بلا route مباشر للـ IGW.
 
-الـ VPC هي أرض المدرسة بسورها. الفصول جوه السور هي الـ subnets، والممرات والبوابات هي الـ routes. السور مش معناه إن كل أوضة آمنة تلقائيًا؛ لسه محتاج قواعد دخول.
+`Amazon VPC` شبكة افتراضية معزولة منطقيًا. `/16` أكبر من `/24` لأن prefix الأكبر يترك bits أقل للعناوين. خطط CIDRs من غير overlap لو متوقع ربط VPCs أو on-premises لاحقًا.
 
-</Box>
+## Public وPrivate بيتحددوا بالـ route
 
-## CIDR من غير وجع حساب
-
-`10.0.0.0/16` معناه مساحة عناوين كبيرة تبدأ بـ `10.0`. كل ما الرقم بعد `/` يكبر، المساحة تصغر: `/24` أصغر من `/16`.
-
-- VPC: `10.0.0.0/16`
-- public subnet: `10.0.1.0/24`
-- private subnet: `10.0.2.0/24`
-
-الـ subnet لازم تبقى جزء من مدى الـ VPC، ومبتتمدّش على أكتر من <En>Availability Zone</En> واحدة.
-
-<Box type="tip" title="فكّر في CIDR كعنوان عمارة">
-
-`/16` حي كامل، و`/24` عمارة جوه الحي. مش لازم تحسب عدد كل IP في الامتحان؛ المهم تعرف إن prefix أكبر يعني نطاق أصغر.
-
-</Box>
-
-## Public وPrivate مش أسماء
-
-الـ public subnet عندها route للـ <En>Internet Gateway</En>. والـ resource نفسه محتاج public IP مناسب وقواعد تسمح بالترافيك.
-
-الـ private subnet مافيهاش route مباشر للـ Internet Gateway. ممكن مواردها تخرج للإنترنت عن طريق NAT، لكن الإنترنت ما يبدأش اتصال مباشر بيها.
+الـ public subnet عندها route زي `0.0.0.0/0 → Internet Gateway`. المورد نفسه يحتاج public addressing مناسب وقواعد أمان تسمح. الـ private subnet ماعندهاش route مباشر للـ IGW؛ ممكن تخرج عن طريق NAT من غير inbound مباشر من الإنترنت.
 
 <Grid2>
-<Card title="Public subnet" c={2}>
+<Card title="Public tier" c={2}>
 
-مناسبة لحاجة لازم تستقبل من الإنترنت، زي public load balancer. قلّل اللي بتحطه فيها.
+Internet-facing ALB أو مكوّن محتاج inbound عام فعلًا. قلّل الموارد العامة.
 
 </Card>
-<Card title="Private subnet" c={3}>
+<Card title="Private tiers" c={3}>
 
-مناسبة للـ application والـ database لما مش محتاجين دخول مباشر من الإنترنت.
+Application وdatabase. افصل route tables وsecurity boundaries حسب الوظيفة.
 
 </Card>
 </Grid2>
 
-## الـ Route Table هي اليافطة
+## Request flow بالأوقات
 
-كل subnet مرتبطة بـ route table. السطر `10.0.0.0/16 → local` يخلي أجزاء الـ VPC تكلم بعض، و`0.0.0.0/0` هو الطريق الافتراضي لأي عنوان IPv4 مش موجود في طريق أدق.
+- `12:00:00.000`: العميل يحل DNS ويصل لعنوان ALB العام.
+- `12:00:00.030`: route والـ IGW يوصلوا packet للـ ALB في public subnet.
+- `12:00:00.045`: ALB يختار healthy app target خاص.
+- `12:00:00.080`: app يفتح اتصال database على private IP.
+- `12:00:00.210`: response يرجع على الاتصالات القائمة.
 
-<Flow items={[
-  { t: "طالب", s: "طلب البوابة", c: 1 }, "→",
-  { t: "Public subnet", s: "route للـ IGW", c: 2 }, "→",
-  { t: "الإنترنت", c: 4 },
-]} />
+الـ route table تختار next hop بأكثر route تحديدًا؛ هي مش firewall. Security Groups وNACLs تتحكم في السماح والمنع.
 
-الـ route بتحدد **فين** الباكت تروح، لكنها مش firewall. السماح والمنع شغل Security Groups وNACLs اللي جايين.
+<Box type="warn" title="اسم subnet مش control">
 
-## 🧪 تمرين ورقي آمن
-
-ارسم VPC باسم `school-prod` ومدى `10.0.0.0/16`. جوهها ارسم public subnet للـ load balancer وprivate subnet للـ app وprivate subnet للداتا. اكتب جنب كل واحدة هل تحتاج طريق مباشر للإنترنت وليه.
-
-متنشئش موارد فعلية عشان التمرين؛ الـ VPC نفسها قد لا تكلّف، لكن NAT Gateway وعناوين وخدمات تانية ممكن تعمل تكلفة.
-
-<Box type="interview" title="اختيار الامتحان">
-
-قاعدة بيانات الطلبة لا تستقبل من الإنترنت: اختار private subnet. كلمة "private" لوحدها مش ضمان؛ راجع routes وقواعد الشبكة.
+Subnet اسمها `private-db` وعندها route مباشر لـ IGW ليست خاصة وظيفيًا. راجع routes وpublic addressing وقواعد الأمان، مش tags فقط.
 
 </Box>
 
-الفصل الجاي هنركّب بوابات الخروج وطبقات الحماية على نفس شبكة المدرسة.
+## Tradeoff التخطيط
 
-<Checklist id="aws-cp-22" title="خلّصت الفصل لما" items={["تشرح الـ VPC كسياج شبكة منطقي", "تعرف إن `/24` أصغر من `/16`", "تميّز public subnet من وجود route للـ IGW", "تعرف إن route table مش firewall", "ترسم تقسيم بوابة المدرسة من غير إنشاء موارد"]} />
+`/28` صغيرة قد تستنفد IPs وقت autoscaling أو load balancer operations؛ `/20` واسعة قد تهدر address space وتعمل overlap مستقبلًا. اختار مساحة من توقع عدد ENIs والنمو، واعرف إن AWS تحجز عناوين داخل كل subnet.
+
+## 🧪 تمرين: صمم شبكة SaaS
+
+عندك `120` app task اليوم وقد تصل `600`، وقاعدتا بيانات، و2 AZs. اقترح VPC/subnet CIDRs، route table لكل tier، ومسار request. بعدها افترض فشل AZ-A: حدد الموارد والمسارات المطلوبة لاستمرار الخدمة، واكتب نقطة فشل لو كل NAT أو app في AZ واحدة.
+
+<Checklist id="aws-cp-22" title="خلّصت الفصل لما" items={["تشرح VPC كحد شبكة منطقي", "تعرف إن `/24` أصغر من `/16`", "تميّز public subnet من route للـ IGW", "تعرف إن route table مش firewall", "تقسم production tiers على أكتر من AZ"]} />
 
 <Quiz>
-<Q n={1} q="Subnet اسمها private لكن عندها route مباشر للـ Internet Gateway؛ هي private فعلًا؟">لأ. السلوك بيتحدد بالـ routes، والاسم مجرد label.</Q>
-<Q n={2} q="أنهي أكبر: `10.0.0.0/16` ولا `10.0.1.0/24`؟">الـ `/16` أكبر، والـ `/24` ممكن تبقى subnet جواه.</Q>
-<Q n={3} q="هل route للإنترنت لوحده يسمح لأي حد يدخل على السيرفر؟">لأ؛ لسه محتاج public addressing وقواعد أمان تسمح.</Q>
+<Q n={1} q="Subnet اسمها private وعندها `0.0.0.0/0 → IGW`؛ الحكم؟">الاسم لا يهم؛ route تجعلها public من ناحية المسار، مع احتياج public addressing وقواعد سماح.</Q>
+<Q n={2} q="أنهي نطاق أكبر: `/16` ولا `/24`؟">`/16` أكبر، والـ `/24` ممكن تكون subnet داخله.</Q>
+<Q n={3} q="هل route للـ IGW تفتح inbound تلقائيًا؟">لأ؛ routing غير authorization، ولسه public address وSecurity Group/NACL لازم يتراجعوا.</Q>
 </Quiz>

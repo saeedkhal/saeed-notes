@@ -1,85 +1,76 @@
 ---
-title: من اسم الموقع لأقرب باب — DNS والـ Edge
+title: DNS والـ Edge لتطبيق عالمي
 short: DNS والـ Edge
 order: 24
 label: فصل ٢٤
 badge: Networking · فصل ٢٤
 en: Route 53 · CloudFront · edge locations · Global Accelerator
 keywords: DNS · CDN · edge · accelerator
-goal: تفرق بين حل الاسم وكاش المحتوى وتسريع اتصال التطبيق العالمي.
+goal: تتبع request عالمي وتختار DNS أو CDN أو network acceleration من الـ SLA.
 part: Networking
 color: c4
 ---
 
-## Route 53: دليل التليفونات
+## المثال الأول: متجر في 3 قارات
 
-<En>Amazon Route 53</En> خدمة DNS بتترجم `portal.school.example` لوجهة يفهمها الجهاز. تقدر تسجل domain، تدير records، تعمل health checks، وتستخدم routing policies.
+الـ origin في Frankfurt، وصورة المنتج حجمها `1.8 MB`. مستخدم القاهرة يشوف أول تحميل في `420 ms`، والمطلوب أقل من `150 ms` للصور المتكررة، مع تحويل لو الـ Region الأساسية فشلت.
 
-<Box type="story" icon="📒" title="دليل المدرسة">
+١. `Route 53` يحل `shop.example.com` إلى CloudFront distribution.
+٢. CloudFront edge تستقبل الطلب؛ cache hit ترجع الصورة من مكان قريب.
+٣. cache miss تذهب للـ origin، تحفظ response حسب cache policy، ثم ترجعها.
+٤. health/routing strategy تتعامل مع origin أو Region failure حسب architecture.
 
-Route 53 يقول للطالب عنوان البوابة، لكنه مش البوابة ولا بيخزن صفحة الموقع. زي دليل تليفونات يديك الرقم، مش هو اللي يرد على المكالمة.
+## Route 53: DNS وقرارات توجيه
 
-</Box>
+Route 53 تدير records وhealth checks وسياسات:
 
-سياسات مشهورة في مستوى الامتحان:
+- Simple لوجهة عادية.
+- Weighted لتوزيع `95/5` في canary مثلًا.
+- Latency-based لاختيار Region بأقل latency قياسية.
+- Failover لـ primary/secondary مع health evaluation.
+- Geolocation لقرار حسب موقع المستخدم.
 
-- Simple: وجهة عادية.
-- Weighted: توزّع بنسبة، مفيدة لتجربة إصدار.
-- Latency-based: تبعت المستخدم للـ Region الأقل latency.
-- Failover: primary وsecondary مع health check.
-- Geolocation: قرار حسب مكان المستخدم.
+DNS لا ينقل ملف ولا يضمن instant failover؛ resolvers قد تحتفظ بالإجابة حسب TTL، والـ health check لازم يقيس حاجة تمثل صحة التطبيق.
 
-## CloudFront: نسخة قريبة
+## CloudFront: cache وسياسة محتوى
 
-<En>Amazon CloudFront</En> شبكة توصيل محتوى <En>CDN</En>. بتجيب المحتوى من origin زي S3 أو load balancer أو API، وتخزن المناسب في edge locations قريبة من المستخدمين.
+`CloudFront` CDN للـ HTTP/HTTPS. cache key وTTL وheaders/cookies/query strings بيحددوا hit ratio وصحة المحتوى. لو ضفت user token كامل للـ cache key بلا داعٍ، hit ratio ممكن ينهار؛ ولو cached response خاص غلط، ممكن تعمل data exposure.
 
-<Flow items={[
-  { t: "الطالب", s: "القاهرة", c: 1 }, "→",
-  { t: "CloudFront Edge", s: "cache hit؟", c: 4 }, "→",
-  { t: "Origin", s: "S3 أو API", c: 2 },
-]} />
+Edge location نقطة حضور لخدمات edge، مش Region كاملة لتشغيل أي AWS service.
 
-لو cache hit، الرد يطلع من الـ edge. لو miss، CloudFront تروح للـ origin وترجع الرد حسب cache policy.
+## Global Accelerator
 
-Edge location مش Region جديدة تشغّل فيها كل خدماتك؛ هي نقطة حضور لخدمات edge.
-
-## Global Accelerator: طريق أسرع للتطبيق
-
-<En>AWS Global Accelerator</En> يدي static anycast IPs ويدخل TCP/UDP traffic على شبكة AWS العالمية ويوجهه لـ healthy regional endpoints.
+`AWS Global Accelerator` يوفّر static anycast IPs ويوجه TCP/UDP إلى healthy regional endpoints عبر شبكة AWS العالمية. لا يعمل content cache.
 
 <Grid2>
 <Card title="CloudFront" c={4}>
 
-CDN وcache على مستوى HTTP/HTTPS، مناسب للصور والملفات والويب والـ APIs القابلة للتسريع.
+HTTP/HTTPS، cache، static/dynamic web delivery، وتقليل origin load.
 
 </Card>
 <Card title="Global Accelerator" c={5}>
 
-توجيه شبكة لـ TCP/UDP، static IPs، وhealth-based regional routing. مش cache للمحتوى.
+TCP/UDP، static global IPs، وتحسين network path وregional endpoint routing من غير cache.
 
 </Card>
 </Grid2>
 
-<Hl c="y">Route 53 يحل الاسم، CloudFront يقرّب نسخة محتوى، Global Accelerator يحسّن طريق الاتصال.</Hl>
+## Production incident
 
-ممكن تستخدم Route 53 قدام CloudFront أو Global Accelerator؛ الخدمات مش دايمًا بدائل مباشرة.
+- `18:00`: release تضبط TTL للصورة على `24 ساعة` رغم إن الأسعار مضمّنة داخل الصورة.
+- `18:20`: origin اتصلح، لكن edge ما زالت تعرض النسخة القديمة.
+- الحل: versioned filenames أفضل للمحتوى المتغير، أو invalidation مدروسة؛ invalidations والـ cache policy لهم تكلفة وأثر تشغيل.
 
-## سيناريو بوابة المدرسة
+<Hl c="y">Route 53 يحل الاسم، CloudFront يكيّش ويوزع HTTP، وGlobal Accelerator يحسن مسار TCP/UDP.</Hl>
 
-ملفات CSS وصور الكتب على S3 وCloudFront. Route 53 يربط اسم البوابة بتوزيعة CloudFront. لو عندنا لعبة امتحان realtime على TCP في Regions متعددة، Global Accelerator مرشح أقوى.
+## 🧪 تمرين: اختار واثبت
 
-## 🧪 تمرين ورقي آمن
+عندك static images، API personalized لا تُكيّش، ولعبة realtime UDP في Regions متعددة. ارسم flow لكل واحد، وحدد TTL/cache key، وفشل Region الساعة `10:00`. اكتب إمتى المستخدمين يتحولوا، وإيه اللي ممكن يتأخر بسبب DNS caching.
 
-اكتب أربع بطاقات: "حل اسم"، "كاش صورة"، "static IP عالمي لتطبيق TCP"، "تحويل عند عطل Region". وصلهم بـ Route 53 أو CloudFront أو Global Accelerator، وممكن أكتر من إجابة في التحويل حسب التصميم.
-
-لو أنشأت CloudFront أو Global Accelerator فعليًا، راجع التسعير ونقل البيانات واحذف الموارد بعد التجربة. التسجيل والـ hosted zones والـ health checks قد تحمل تكلفة.
-
-الفصل الجاي هنوصل شبكة المدرسة بالمقر والفروع وشبكات AWS التانية.
-
-<Checklist id="aws-cp-24" title="خلّصت الفصل لما" items={["تعرف إن Route 53 DNS مش CDN", "تشرح cache hit وorigin في CloudFront", "تعرف إن edge location مش Region", "تقول Global Accelerator لا يكيّش المحتوى", "تختار الخدمة حسب DNS أو content أو network path"]} />
+<Checklist id="aws-cp-24" title="خلّصت الفصل لما" items={["تعرف إن Route 53 DNS مش CDN", "تتبع cache hit وmiss في CloudFront", "تعرف إن edge location مش Region", "تقول Global Accelerator لا يكيّش", "تربط الاختيار بالـ protocol والـ SLA"]} />
 
 <Quiz>
-<Q n={1} q="عايز صور المنهج تتحمل من مكان قريب للطالب؛ تختار إيه؟">CloudFront قدام origin زي S3.</Q>
-<Q n={2} q="عايز static IPs عالمية لتطبيق TCP متعدد الـ Regions؟">AWS Global Accelerator.</Q>
-<Q n={3} q="هل Route 53 بيخزن نسخة من ملف PDF؟">لأ، هو DNS؛ CloudFront هي خدمة الكاش والتوصيل المناسبة.</Q>
+<Q n={1} q="صور عامة متكررة لازم تتحمل قريب من المستخدم؛ المرشح؟">CloudFront قدام origin زي S3.</Q>
+<Q n={2} q="تطبيق UDP محتاج static IPs عالمية وmulti-Region routing؟">AWS Global Accelerator.</Q>
+<Q n={3} q="ليه Route 53 failover ممكن مايبقاش لحظي لكل عميل؟">بسبب DNS TTL والـ resolver caching، بجانب وقت اكتشاف الصحة.</Q>
 </Quiz>
