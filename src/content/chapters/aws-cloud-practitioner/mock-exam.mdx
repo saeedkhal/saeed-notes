@@ -1,0 +1,167 @@
+---
+title: اختبار تجريبي أصلي — ٣٠ سؤال
+short: Mock Exam
+order: 42
+label: اختبار
+badge: التكلفة والامتحان · اختبار
+en: CLF-C02 mock · 30 original questions · explained answers
+keywords: Cloud · Security · Services · Billing · Practice
+goal: تقيس فهمك بسيناريوهات أصلية قريبة من توزيع المجالات، وتتعلم من تفسير الإجابة.
+part: التكلفة والامتحان
+color: dark
+---
+
+## قبل ما تبدأ
+
+الأسئلة دي مكتوبة من الصفر للتعلّم، مش من امتحان AWS ولا certification dump. التوزيع قريب من أوزان CLF-C02: ٧ Cloud Concepts، ٩ Security، ١٠ Technology، و٤ Billing/Support.
+
+<Box type="tip" title="طريقة الحل">
+
+خصص حوالي ٣٥ دقيقة. جاوب قبل ما تكشف الشرح، وعلّم السؤال اللي استبعدت فيه إجابتين بالعافية. في الآخر راجع **سبب** الغلط، مش حرف الإجابة.
+
+</Box>
+
+## Cloud Concepts — ٧ أسئلة
+
+<Quiz>
+<Q n={1} q="مدرسة بتشغّل portal وقت التقديم فقط، وعايزة تزود السعة وقت الزحمة وتقللها بعدها. أنهي فائدة cloud أوضح؟">
+`Elasticity`. الموارد تتوافق مع الطلب بدل شراء peak capacity طول السنة. High availability مفهوم مختلف يركز على استمرار الخدمة.
+</Q>
+
+<Q n={2} q="فريق اشترى servers مقدمًا لخمس سنين، وعايز ينتقل للدفع حسب الاستخدام. التحول المالي الأشهر اسمه إيه؟">
+من `CapEx` إلى نموذج أقرب لـ `OpEx` وpay-as-you-go. ده لا يعني إن كل تكلفة cloud متغيرة أو إن مفيش commitments اختيارية.
+</Q>
+
+<Q n={3} q="تطبيق لازم يفضل شغال لو data center واحد داخل Region وقع. أبسط مبدأ معماري؟">
+وزّع المكونات على أكتر من `Availability Zone`. AZs معزولة نسبيًا داخل Region ومتصلة بشبكات سريعة.
+</Q>
+
+<Q n={4} q="مين مسؤول عن patching لنظام التشغيل على EC2 instance؟">
+العميل. AWS تدير البنية المادية والـ hypervisor، لكن العميل يدير guest OS والـ applications على EC2.
+</Q>
+
+<Q n={5} q="شركة عايزة تقلل زمن تجربة فكرة جديدة من شهور لأيام. أنهي قيمة cloud تدعم ده؟">
+`Agility`: توفير موارد بسرعة وتجربة وتغيير الحل من غير دورة شراء hardware طويلة.
+</Q>
+
+<Q n={6} q="Architect اختار managed database بدل database على EC2. إيه اللي اتغير في shared responsibility؟">
+AWS أخذت مهام أكتر زي إدارة البنية وعمليات engine محددة، لكن العميل لسه مسؤول عن data وaccess والإعدادات اللي تحت تحكمه.
+</Q>
+
+<Q n={7} q="فريق عايز يراجع workload عبر الأمن والموثوقية والتكلفة والاستدامة. يستخدم إيه؟">
+`AWS Well-Architected Framework` وركائزه الست. هو guidance للمراجعة، مش خدمة تنقل التطبيق تلقائيًا.
+</Q>
+
+## Security and Compliance — ٩ أسئلة
+
+<Q n={8} q="تطبيق على EC2 محتاج يقرأ bucket من غير access keys ثابتة. الحل الأفضل؟">
+اربط `IAM role` بالـ instance وامنحه أقل صلاحية. الـ temporary credentials أفضل من تخزين long-term keys.
+</Q>
+
+<Q n={9} q="شركة عايزة تمنع member accounts في Organization من استخدام Regions معينة، حتى لو admin محلي سمح. تستخدم؟">
+`Service Control Policy (SCP)`. هي guardrail للحد الأقصى للصلاحيات، لكنها لا تمنح permission بنفسها.
+</Q>
+
+<Q n={10} q="المطلوب معرفة مين حذف security group الساعة ٣. أنهي خدمة؟">
+`AWS CloudTrail` لأنه يسجل API activity والهوية والوقت. CloudWatch يراقب metrics وlogs لكنه مش سجل audit الأساسي للـ API.
+</Q>
+
+<Q n={11} q="موقع بيتعرض لمحاولات SQL injection في HTTP requests. تختار إيه؟">
+`AWS WAF` بقواعد مناسبة أمام CloudFront أو ALB أو خدمة مدعومة. Shield يركز على DDoS، مش فلترة patterns التطبيقية دي.
+</Q>
+
+<Q n={12} q="مطلوب اكتشاف access وسلوك مشبوه في حسابات وworkloads AWS. الخدمة الأقرب؟">
+`Amazon GuardDuty` للـ threat detection من مصادر signals متعددة. Inspector يركز على vulnerabilities، وMacie على sensitive data في S3.
+</Q>
+
+<Q n={13} q="فريق عايز يخزن database password ويدوره تلقائيًا. يستخدم؟">
+`AWS Secrets Manager`. KMS يدير encryption keys؛ ممكن Secrets Manager يستخدم KMS للتشفير لكن الدورين مختلفين.
+</Q>
+
+<Q n={14} q="Auditor طلب تقرير compliance صادر عن AWS. يروح فين؟">
+`AWS Artifact`. التقرير يغطي نطاق AWS المحدد، ولا يثبت تلقائيًا إن workload العميل compliant.
+</Q>
+
+<Q n={15} q="Security team عايز يكتشف ملفات فيها بيانات شخصية حساسة داخل S3. أنهي خدمة؟">
+`Amazon Macie`، لأنها تكتشف وتصنف sensitive data في S3. راجع التغطية والتكلفة قبل التفعيل الواسع.
+</Q>
+
+<Q n={16} q="إيه الإجراء الأصح لحساب root بعد إنشاء الحساب؟">
+فعّل MFA، امنع الاستخدام اليومي، متعملش root access keys، واستخدم identities إدارية منفصلة. احتفظ بوسيلة recovery مؤمنة.
+</Q>
+
+## Cloud Technology and Services — ١٠ أسئلة
+
+<Q n={17} q="ملفات CSV في S3 والمحلل عايز SQL سريع من غير cluster. يستخدم؟">
+`Amazon Athena`. هو serverless query service؛ تنسيق columnar وpartitioning يقللوا الـ scan والتكلفة.
+</Q>
+
+<Q n={18} q="تطبيق event-driven يعالج صورة عند رفعها، والمهمة قصيرة وstateless. compute مناسب؟">
+`AWS Lambda`. الحدث يشغل function من غير إدارة server؛ لازم تراجع limits والوقت والذاكرة للحالة الفعلية.
+</Q>
+
+<Q n={19} q="Linux servers متعددة محتاجة نفس file system في أكتر من AZ. تختار؟">
+`Amazon EFS`. EBS block volume مرتبط بنمط استخدام مختلف، وS3 object storage مش POSIX file share مباشر.
+</Q>
+
+<Q n={20} q="Relational database محتاجة failover تلقائي داخل Region، والقراءة مش هي المشكلة. تعمل؟">
+فعّل `Multi-AZ` deployment مناسب في RDS. Read replica هدفها الأساسي read scaling، مش بديل مطابق للـ Multi-AZ failover.
+</Q>
+
+<Q n={21} q="Orders service لازم تفصل نفسها عن worker وتحتفظ بالرسائل لحد المعالجة. تستخدم؟">
+`Amazon SQS`. الـ queue تعمل buffering وdecoupling؛ صمّم consumer للـ retries والـ duplicate delivery حسب النوع.
+</Q>
+
+<Q n={22} q="عايز توصل content عالمي من edge locations وتقلل latency على origin. تختار؟">
+`Amazon CloudFront`. Route 53 يحل DNS ويوجه، لكنه مش CDN cache للمحتوى.
+</Q>
+
+<Q n={23} q="شركة هتنقل Oracle إلى Aurora PostgreSQL مع استمرار تغييرات المصدر أثناء النقل. إيه الأدوات؟">
+`AWS DMS` لنقل data وCDC، و`DMS Schema Conversion` لتحويل وتقييم الـ schema. راجع العناصر اللي تحتاج تعديل يدوي.
+</Q>
+
+<Q n={24} q="المطلوب chatbot generative AI باستخدام foundation models مُدارة من غير بناء training cluster. تستخدم؟">
+`Amazon Bedrock`. SageMaker AI أنسب لما تحتاج بناء وتدريب وتخصيص وتحكم أعمق في ML lifecycle.
+</Q>
+
+<Q n={25} q="مورد خارجي لن يغير برنامجه وبيبعث ملفات SFTP كل ليلة إلى storage في AWS. تختار؟">
+`AWS Transfer Family` مع S3 أو EFS كوجهة مدعومة. DataSync مناسب أكثر لنقل file/object storage المُدار والـ bulk workflows.
+</Q>
+
+<Q n={26} q="فريق عايز metrics وlogs وalarm لما CPU يعدي threshold. يستخدم؟">
+`Amazon CloudWatch`. CloudTrail للـ API audit، وAWS Config لتاريخ configuration والـ compliance.
+</Q>
+
+## Billing, Pricing, and Support — ٤ أسئلة
+
+<Q n={27} q="Workload batch يستحمل interruption ويعمل checkpoint. أنهي purchase option يوفر غالبًا أكبر خصم؟">
+`EC2 Spot Instances`. لازم التصميم يتعامل مع الاسترجاع؛ الخصم لا يجعلها مناسبة لخدمة وحيدة لا تحتمل القطع.
+</Q>
+
+<Q n={28} q="Architecture لسه متنفذتش والفريق عايز estimate قابل للمشاركة. يستخدم؟">
+`AWS Pricing Calculator`. Cost Explorer يحلل cost and usage حصلوا فعلًا ويقدم forecast.
+</Q>
+
+<Q n={29} q="مدير عايز alert عند توقع تجاوز ميزانية الشهر. يستخدم؟">
+`AWS Budgets` مع forecasted-cost alert. التنبيه مش hard cap، وبيانات billing ممكن تتأخر.
+</Q>
+
+<Q n={30} q="الشركة محتاجة تحمل تقرير audit من AWS، وتشتري security product من vendor. أنهي خدمتين؟">
+`AWS Artifact` للتقارير والاتفاقيات المتاحة، و`AWS Marketplace` لشراء ونشر عروض vendors. APN شبكة partners للاستشارة والتقنية.
+</Q>
+</Quiz>
+
+## قيّم النتيجة
+
+- **٢٦–٣٠**: أساس قوي؛ راجع بس أسباب التردد وتغييرات ٢٠٢٦.
+- **٢١–٢٥**: كويس، لكن ارجع للمقارنات اللي غلطت فيها.
+- **١٥–٢٠**: أعد service chooser والـ cheat sheet، وبعدها حل تاني.
+- **أقل من ١٥**: ارجع للفصول حسب المجال، واعمل flashcards للفروق مش للتعريفات.
+
+<Box type="interview" title="قاعدة آخر مراجعة">
+
+متذاكرش من dumps. اقرأ دليل CLF-C02 الرسمي، صفحات الخدمات الحالية، ونطاق الامتحان. السؤال الحقيقي يقيس اختيارًا في سياق، مش حفظ صياغة مسربة.
+
+</Box>
+
+<Checklist id="aws-cp-42" title="خلصت المسار لما" items={["تحل الـ ٣٠ سؤال قبل كشف الشرح", "تصنف كل غلطة حسب domain", "ترجع للمقارنة مش لحرف الإجابة", "تراجع exam guide والـ docs الرسمية وقت الحجز"]} />

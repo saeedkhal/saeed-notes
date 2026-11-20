@@ -1,0 +1,90 @@
+---
+title: بوابات الشبكة والحراسة
+short: اتصال وحماية VPC
+order: 23
+label: فصل ٢٣
+badge: Networking · فصل ٢٣
+en: Internet Gateway · NAT Gateway · Security Group · NACL · VPC endpoint
+keywords: IGW · NAT Gateway · SG · NACL · endpoints
+goal: تختار طريق الاتصال وطبقة الحماية الصح من غير ما تفتح شبكة المدرسة زيادة.
+part: Networking
+color: c3
+---
+
+## Internet Gateway
+
+الـ <En>Internet Gateway (IGW)</En> بيتوصل بالـ VPC ويديها طريق للإنترنت. الـ public subnet تحط في route table بتاعتها `0.0.0.0/0 → IGW`.
+
+ده طريق، مش تصريح شامل. المورد محتاج public IPv4 أو IPv6 مناسب، والـ Security Group لازم تسمح.
+
+## NAT Gateway
+
+سيرفر الـ app في private subnet محتاج ينزّل تحديث، بس مش عايزين الإنترنت يبدأ اتصال ناحيته. <En>NAT Gateway</En> تسمح باتصال خروج وتستقبل الرد المرتبط به.
+
+<Flow items={[
+  { t: "App خاص", s: "يبدأ الطلب", c: 3 }, "→",
+  { t: "NAT Gateway", s: "في public subnet", c: 2 }, "→",
+  { t: "Internet Gateway", c: 4 },
+]} />
+
+الـ public NAT Gateway بتتحط في public subnet ولها Elastic IP، والـ private subnet توجه الطريق الافتراضي لها.
+
+<Box type="warn" title="NAT Gateway مش مجانية">
+
+عليها تكلفة بالساعة ومعالجة بيانات، وقد توجد رسوم نقل بيانات. في lab فعلي امسحها أول ما تخلص وراجع Pricing؛ متسيبهاش شغالة.
+
+</Box>
+
+## Security Group ضد NACL
+
+<Grid2>
+<Card title="Security Group" c={3}>
+
+- على مستوى resource أو network interface.
+- قواعد **allow فقط**.
+- <Hl c="g">Stateful</Hl>: لو الطلب مسموح، الرد مسموح تلقائيًا.
+- كل القواعد تتقيّم مع بعض.
+
+</Card>
+<Card title="Network ACL" c={4}>
+
+- على مستوى subnet.
+- قواعد allow وdeny.
+- <Hl c="o">Stateless</Hl>: لازم تسمح للذهاب والرد منفصلين.
+- أول rule مطابقة حسب الرقم هي اللي تكسب.
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🛂" title="بواب الفصل وبواب الدور">
+
+Security Group بواب فاكر إن الطالب دخل بإذن، فيسيبه يخرج. NACL بواب الدور مش بيفتكر؛ لازم ورقة للدخول وورقة للخروج.
+
+</Box>
+
+استخدم Security Groups كتحكم أساسي دقيق، وNACL كحاجز subnet إضافي. متتعاملش مع NACL كبديل دائم للـ SG.
+
+## VPC Endpoints
+
+الـ <En>VPC endpoint</En> يخلي مواردك توصل لخدمة مدعومة من غير المرور بالـ public internet أو NAT.
+
+- Gateway endpoints لـ S3 وDynamoDB، ومش مبنية على PrivateLink.
+- Interface endpoints بتعمل private network interfaces وبتستخدم AWS PrivateLink.
+
+الـ endpoint مش معناه سماح تلقائي؛ راجع endpoint policy وIAM والـ Security Groups حسب النوع.
+
+## 🧪 تمرين ورقي آمن
+
+ارسم private app عايز S3 وتحديثات عامة. حط طريق S3 على Gateway endpoint، والطريق العام على NAT. اكتب SG تسمح HTTPS خروج، واكتب جنب NACL: "الرد لازم rule".
+
+لو جرّبت في حساب فعلي، راجع تكلفة NAT والـ interface endpoint وامسحهم بعد التجربة. Gateway endpoints لـ S3 وDynamoDB لا تحمل رسمًا بحد ذاتها حاليًا، لكن راجع الـ docs وبيانات الخدمة.
+
+الفصل الجاي هنطلع من حدود الـ VPC للـ DNS والـ edge العالمي.
+
+<Checklist id="aws-cp-23" title="خلّصت الفصل لما" items={["تشرح دور IGW كطريق", "تعرف إن NAT للخروج وليها تكلفة", "تقول SG stateful وallow فقط", "تقول NACL stateless وallow/deny", "تميّز Gateway endpoint من Interface endpoint"]} />
+
+<Quiz>
+<Q n={1} q="سمحت inbound في Security Group؛ لازم rule منفصلة للرد outbound؟">لأ، لأنها stateful والرد المرتبط مسموح تلقائيًا.</Q>
+<Q n={2} q="ليه نفس الفكرة محتاجة اتجاهين في NACL؟">لأن NACL stateless ومبتفتكرش الاتصال.</Q>
+<Q n={3} q="App خاص بيقرأ S3: أنهي اختيار يقلل الاعتماد على NAT؟">Gateway VPC endpoint لـ S3 مع policies مناسبة.</Q>
+</Quiz>

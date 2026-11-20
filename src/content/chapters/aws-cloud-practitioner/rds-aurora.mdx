@@ -1,0 +1,93 @@
+---
+title: "RDS وAurora: قواعد بيانات علائقية مُدارة"
+short: RDS وAurora
+order: 19
+label: فصل ١٩
+badge: Storage وDatabases · فصل ١٩
+en: RDS · Aurora · Multi-AZ · Read Replica · automated backups
+keywords: relational · SQL · high availability · read scaling · point-in-time restore
+goal: تفهم قيمة database managed وتفرق high availability عن read scaling والنسخ الاحتياطي.
+part: Storage وDatabases
+color: c4
+---
+
+## Managed مش معناها AWS تعمل كل حاجة
+
+`Amazon RDS` تدير شغل زي provisioning والـ patching والـ backups والفشل حسب إعدادك. إنت لسه مسؤول عن schema والـ queries والمستخدمين والصلاحيات واختيار الحجم.
+
+محركات RDS المشهورة تشمل PostgreSQL وMySQL وMariaDB وOracle وSQL Server وDb2، مع اختلاف التوفر والخصائص والترخيص حسب الـ Region.
+
+<Box type="story" icon="📒" title="دفتر شؤون الطلبة">
+
+الداتا العلائقية زي جداول طالب وفصل ودرجة بينهم علاقات وقواعد. RDS توفر موظف يدير الخزنة والنسخ والصيانة، لكن المدرسة هي اللي تصمم الدفاتر وتحدد مين يشوف إيه.
+
+</Box>
+
+## ليه relational؟
+
+لما عندك tables وعلاقات وtransactions وSQL joins: تسجيل طالب في فصل، دفع مصروفات، ورصد درجات بطريقة متسقة. المفتاح مش إن الداتا «منظمة» بس؛ المطلوب كمان integrity واستعلامات علائقية.
+
+## Amazon Aurora
+
+`Aurora` relational engine من AWS، compatible مع MySQL أو PostgreSQL. تخزين الـ cluster موزع عبر ثلاث Availability Zones، وبيكبر تلقائيًا ضمن حدود الخدمة.
+
+Aurora لها writer وAurora Replicas للقراءة والـ failover. هي جزء من عيلة RDS في الإدارة، لكن معماريتها وخصائصها مش مجرد MySQL instance عادية.
+
+<Hl c="p">اختيار Aurora مش لمجرد إن اسمها أسرع؛ اختارها لو خصائصها وأداؤها وتكلفتها تناسب الحمل.</Hl>
+
+## Multi-AZ ولا Read Replica؟
+
+<Grid2>
+<Card title="Multi-AZ" c={2}>
+
+هدفه الأساسي high availability وfailover. في Multi-AZ DB instance التقليدي، standby متزامنة مش endpoint للقراءة العادية. AWS تبدّل للـ standby عند مشكلة.
+
+</Card>
+<Card title="Read Replica" c={4}>
+
+هدفها read scaling، والـ replication غالبًا asynchronous. التطبيق يوجه queries قراءة للـ replica، ويمكن promotion عند سيناريوهات معينة.
+
+</Card>
+</Grid2>
+
+AWS عندها كمان **Multi-AZ DB clusters** فيها reader instances قابلة للقراءة؛ دي صيغة مختلفة عن Multi-AZ DB instance التقليدية. في سؤال الامتحان اقرأ الاسم والسياق، ومترددش قاعدة «Multi-AZ لا تُقرأ» على كل منتج جديد.
+
+## Backups وSnapshots
+
+`Automated backups` تدعم point-in-time restore داخل retention period المحددة. `Manual snapshots` تفضل لحد ما تحذفها، وبتتحاسب على التخزين.
+
+الاسترجاع عادةً ينشئ DB/cluster جديدة؛ مش زر rewind يعدّل نفس production database. حدّد backup window وretention واختبر restore.
+
+Aurora تعمل backups مستمرة incremental للـ cluster volume، وتدعم restore داخل retention. Replica مش بديل عن backup: replication ممكن تنقل delete أو corruption منطقي.
+
+## تصميم بوابة المدرسة
+
+قاعدة PostgreSQL على RDS تخزّن الطلاب والفصول والدرجات. لو availability مطلوبة، فعّل Multi-AZ المناسب. لو تقارير القراءة تقيلة، قيّم Read Replica أو Aurora Replica.
+
+خلي التطبيق يستخدم DNS endpoint مش IP ثابت، وخزّن credentials في خدمة أسرار. اقفل database عن الإنترنت العام لو مفيش سبب، واسمح من app security group فقط.
+
+<Box type="warn" title="أغلب قواعد البيانات بتتكلف وهي فاضية">
+
+DB instances والتخزين والـ I/O والـ backups الزائدة والنقل والـ replicas لها تكلفة. Multi-AZ وRead Replicas يضيفوا موارد. راجع التسعير قبل الإنشاء ومتعتمدش على وعد Free Tier.
+
+</Box>
+
+## 🧪 Lab ورقي: availability ولا performance؟
+
+صنّف: «عايز failover تلقائي لو AZ وقعت» → Multi-AZ. «صفحة التقارير القراءة فيها تقيلة» → Read Replica. «رجوع للحالة قبل حذف الساعة 10:05» → point-in-time restore.
+
+التمرين بلا موارد. لو نفذت قاعدة تجريبية، استخدم داتا وهمية، راجع deletion protection والـ final snapshot، وبعدها احذف instance والـ snapshots اللي مش محتاجها.
+
+## متخلطش الأدوات
+
+Multi-AZ مش scaling writes. Read Replica مش backup مضمون. Backup مش high availability فورية. كل واحدة بتحل failure أو load مختلف.
+
+الفصل الجاي هنشوف DynamoDB وباقي قواعد البيانات purpose-built: cache وdocument وgraph وwarehouse.
+
+<Checklist id="aws-cp-19" title="خلّصت الفصل لما" items={["تعرف مسؤوليتك رغم إن RDS managed", "تربط relational بالـ transactions والعلاقات", "تميز Multi-AZ التقليدي عن Read Replica", "تشرح Aurora على مستوى عالي", "تختبر restore ومتعتبرش replica backup"]} />
+
+<Quiz>
+<Q n={1} q="عايز تقلل downtime عند عطل الـ primary؛ تختار إيه غالبًا؟">Multi-AZ deployment مناسب للـ high availability والـ failover.</Q>
+<Q n={2} q="عايز توسّع استعلامات القراءة؛ تفكر في إيه؟">Read Replica أو Aurora Replica حسب المحرك والتصميم.</Q>
+<Q n={3} q="ليه replication مش backup؟">لأن حذف أو خطأ منطقي ممكن يتنسخ للـ replica؛ backup بتاريخ وretention يدي نقطة استرجاع.</Q>
+</Quiz>

@@ -1,0 +1,94 @@
+---
+title: خدمات الـ AI الجاهزة والبناء المخصوص
+short: AI Services
+order: 34
+label: فصل ٣٤
+badge: Data وAI والهجرة · فصل ٣٤
+en: SageMaker AI · Bedrock · Amazon Q · Rekognition · Textract · Comprehend · Lex · Polly · Transcribe · Translate
+keywords: ML مخصص · Generative AI · مساعد · صورة · مستند · نص · Bot · صوت · ترجمة
+goal: تختار خدمة AI من نوع المدخل والمخرج، وتفرق Bedrock عن SageMaker AI.
+part: Data وAI والهجرة
+color: c4
+---
+
+## جاهز ولا هتبني؟
+
+خدمات AWS هنا تلات رفوف: خدمة API لمهمة محددة، منصة generative AI، أو أدوات تبني وتدرّب بيها model مخصوص.
+
+<Box type="story" title="مدرس خصوصي ولا كتاب جاهز؟">
+
+لو عايز تسمع نص بصوت، مش لازم تدرّب model من الصفر؛ استخدم خدمة جاهزة. لو المدرسة عندها نمط درجات خاص وعايزة model تتنبأ بيه، ساعتها أدوات التدريب والتجارب أهم.
+
+</Box>
+
+## SageMaker AI
+
+`Amazon SageMaker AI` هو الاسم الحالي للخدمة اللي كانت اسمها Amazon SageMaker قبل ديسمبر ٢٠٢٤. بيخدم بناء وتدريب وتخصيص ونشر models للـ ML التقليدي والـ AI.
+
+فكّر فيه لما data scientists محتاجين notebooks، training jobs، pipelines، model registry، وmanaged endpoints.
+
+<Hl c="p">SageMaker AI للبناء والتحكم العميق؛ مش مجرد استدعاء مهمة جاهزة.</Hl>
+
+AWS عندها دلوقتي منصة أوسع باسم `Amazon SageMaker` بتجمع data وanalytics وAI، وجواها SageMaker AI. الاسم في مواد الامتحان ممكن يكون أقصر، فاقرأ سياق السؤال.
+
+## Amazon Bedrock
+
+`Amazon Bedrock` خدمة fully managed وserverless لبناء generative AI apps باستخدام foundation models من Amazon ومزودين تانيين.
+
+فيها قدرات زي Knowledge Bases للـ RAG، Guardrails، Agents، وmodel evaluation. تختارها لما عايز تبني chatbot أو تلخيص أو agent من foundation model من غير إدارة training infrastructure.
+
+<Box type="idea" title="Bedrock ولا SageMaker AI؟">
+
+ابدأ بـ Bedrock لتطبيق generative AI مُدار واختيار foundation models. اختار SageMaker AI لو محتاج تدريب أو customization وتحكم في الـ ML lifecycle والـ infrastructure. ممكن المشروع يستخدم الاتنين.
+
+</Box>
+
+## Amazon Q
+
+`Amazon Q` مساعد generative AI جاهز للعمل. `Amazon Q Developer` يساعد في بناء وتشغيل وتحويل software والتعامل مع AWS؛ وفيه تجارب Q متخصصة لسيناريوهات business.
+
+الفرق: Bedrock منصة المطور يبني فوقها app، بينما Q assistant جاهز للمستخدم. Q نفسه مبني باستخدام Bedrock، لكنهم مش نفس المنتج.
+
+## صورة ومستند
+
+`Amazon Rekognition` يحلل الصور والفيديو: objects، labels، faces، ومحتوى غير مناسب حسب الميزة والسياسة.
+
+`Amazon Textract` يستخرج text وforms وtables من documents وscans. لو صورة فيها طالب وشنطة: Rekognition. لو صورة استمارة تقديم وعايز الخانات: Textract.
+
+<Box type="warn" title="الوجه مش قرار">
+
+التعرف الآلي ممكن يخطئ ويتأثر بجودة الداتا. متخليش نتيجة حساسة زي قبول طالب أو عقوبة تعتمد عليه لوحده؛ استخدم human review وسياسات الخصوصية.
+
+</Box>
+
+## لغة مكتوبة
+
+`Amazon Comprehend` يستخدم NLP لاستخراج entities وkey phrases وsentiment واللغة من النص.
+
+`Amazon Translate` يترجم النصوص بين اللغات. Comprehend يفهم خصائص النص؛ Translate يغير لغته.
+
+## كلام وصوت ومحادثة
+
+- `Amazon Transcribe`: speech → text.
+- `Amazon Polly`: text → lifelike speech.
+- `Amazon Lex`: conversational bots بالصوت أو النص.
+
+بوابة المدرسة تستقبل سؤال منطوق: Transcribe يحوله كتابة، Lex يدير الحوار، وPolly ينطق الرد. Translate ممكن يترجم المحتوى، وComprehend يحلل المعنى أو sentiment.
+
+## خريطة في سطر
+
+<Chips items={["custom ML → SageMaker AI", "foundation models → Bedrock", "AI assistant → Amazon Q", "image/video → Rekognition", "forms/tables → Textract", "NLP → Comprehend", "bot → Lex", "text to speech → Polly", "speech to text → Transcribe", "languages → Translate"]} />
+
+## 🧪 Lab آمن
+
+ارسم flow لخدمة استقبال صوتية: الطالب يسأل، الكلام يتحول text، bot يفهم intent، الرد يترجم عند اللزوم، وبعدين يتحول صوت. اكتب اسم الخدمة فوق كل سهم من غير تشغيل موارد.
+
+الفصل الجاي هنسيب بناء الحل ونشوف إزاي مؤسسة كاملة تخطط للهجرة للـ cloud.
+
+<Checklist id="aws-cp-34" title="خلّصت الفصل لما" items={["تفرق بين Bedrock وSageMaker AI وAmazon Q", "تختار Rekognition أو Textract من نوع الصورة", "تحفظ اتجاه Polly وTranscribe وتعرف دور Lex"]} />
+
+<Quiz>
+<Q n={1} q="عايز foundation model جاهز لتطبيق generative AI من غير إدارة servers. تختار؟">`Amazon Bedrock`.</Q>
+<Q n={2} q="عندك scan لفاتورة وعايز الجداول والخانات. Rekognition ولا Textract؟">`Textract` لأنه مخصص لاستخراج النص والـ forms والـ tables من المستندات.</Q>
+<Q n={3} q="النص داخل والصوت خارج. Polly ولا Transcribe؟">`Polly`. Transcribe يعمل العكس: الكلام إلى نص.</Q>
+</Quiz>

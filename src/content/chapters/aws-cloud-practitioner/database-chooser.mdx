@@ -1,0 +1,124 @@
+---
+title: تختار Database إزاي؟
+short: Database Chooser
+order: 21
+label: فصل ٢١
+badge: Storage وDatabases · فصل ٢١
+en: SQL · NoSQL · cache · graph · warehouse · access patterns
+keywords: decision tree · RDS · DynamoDB · ElastiCache · Neptune · Redshift
+goal: تحول متطلبات بوابة المدرسة لقرار database عملي من غير اختيار خدمة بالشهرة.
+part: Storage وDatabases
+color: c1
+---
+
+## ابدأ بالسؤال مش بالخدمة
+
+قبل ما تقول RDS أو DynamoDB، اكتب:
+
+1. شكل الداتا والعلاقات؟
+2. أهم access patterns؟
+3. محتاج transaction أو joins؟
+4. read/write volume والـ latency؟
+5. availability وrecovery المطلوبين؟
+6. مين عنده خبرة يشغّل ويصمم الحل؟
+
+<Box type="story" icon="🧑‍🏫" title="المدرس مش بيوزع نفس الكشكول">
+
+مسألة حساب، خريطة علاقات، كشف حضور، وتقرير سنوي مش نفس نوع الورقة. اختيار database قبل فهم السؤال زي ما توزع كشكول رسم في امتحان رياضيات عشان غلافه حلو.
+
+</Box>
+
+## شجرة القرار العملية
+
+<Flow items={[
+  { t: "علاقات + SQL + transactions؟", s: "RDS / Aurora", c: 1 },
+  "→",
+  { t: "Lookup بمفتاح وعلى scale؟", s: "DynamoDB", c: 2 },
+  "→",
+  { t: "تسريع مصدر موجود؟", s: "ElastiCache", c: 3 },
+  "→",
+  { t: "العلاقات نفسها هي الاستعلام؟", s: "Neptune", c: 4 },
+  "→",
+  { t: "BI وتحليلات تاريخية؟", s: "Redshift", c: 5 },
+]} />
+
+لو الداتا documents مرنة واستعلاماتها على الحقول، قيّم DocumentDB. دي شجرة بداية؛ الحجم وحده مش كفاية، لأن قواعد SQL وNoSQL الاتنين ممكن تكبر بطرق مختلفة.
+
+## سيناريوهات بوابة المدرسة
+
+<Grid2>
+<Card title="الطلاب والفصول والدرجات" c={1}>
+
+علاقات واضحة، constraints، وtransactions عند تسجيل الدرجة. `RDS PostgreSQL` أو Aurora PostgreSQL-compatible بداية مفهومة.
+
+</Card>
+<Card title="Session وطلب سريع بالمفتاح" c={2}>
+
+`DynamoDB` لما الوصول الأساسي بـ session ID والـ scale متغير. صمّم TTL والـ key والـ capacity.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="جدول حصص مطلوب كل ثانية" c={3}>
+
+المصدر يفضل database، و`ElastiCache` تحتفظ بنسخة ساخنة بمدة قصيرة. لازم خطة invalidation وماذا يحدث عند cache miss.
+
+</Card>
+<Card title="مين يدرّس مين؟" c={4}>
+
+لو المنتج محتاج traversals عميقة واقتراح علاقات بين مدرسين ومواد وطلاب، `Neptune` يستحق التقييم.
+
+</Card>
+</Grid2>
+
+<Card title="تقرير الوزارة السنوي" c={5}>
+
+نجمع داتا تاريخية للتحليل في `Redshift` بدل ما التقارير الثقيلة تضغط على قاعدة التشغيل.
+
+</Card>
+
+## Polyglot مش معناها زوّد خدمات
+
+ممكن نظام واحد يستخدم أكتر من database، لكن كل خدمة جديدة تضيف تكلفة وpermissions وmonitoring وbackup ومهارة تشغيل. ابدأ بأبسط حل يحقق المتطلبات، وافصل لما القياس يثبت المشكلة.
+
+<Hl c="y">الاختيار الصح أقل خدمة تحقق access patterns والموثوقية المطلوبة، مش أكبر رسمة معمارية.</Hl>
+
+## أسئلة تفضح الاختيار الغلط
+
+- لو cache وقعت، هل النظام يفقد الحقيقة؟ لو أيوه، تصميمك محتاج مراجعة.
+- لو DynamoDB query محتاجة scan لكل table، هل الـ key بيدعم السؤال؟
+- لو كل request تشغيلية رايحة Redshift، هل خلطت OLTP وOLAP؟
+- لو graph query مجرد `get by id`، هل Neptune ضرورة؟
+- لو relational schema بلا علاقات أو transactions، هل SQL اختير بالعادات بس؟
+
+## 🧪 Lab ورقي: صمّم المدرسة
+
+ارسم خمس صناديق: `Portal API`, `RDS`, `DynamoDB`, `ElastiCache`, `Redshift`. وصل:
+
+- التسجيل والدرجات إلى RDS.
+- sessions إلى DynamoDB.
+- القراءات الساخنة إلى ElastiCache مع سهم رجوع لـ RDS.
+- نسخة تحليلية دورية إلى Redshift.
+
+دلوقتي احذف أي صندوق مش عندك requirement حقيقي له. التمرين مجاني. لو عملت prototype فعلي، استخدم داتا وهمية، حط budget، وامسح clusters/tables/backups والـ networking المدفوع بعد القياس.
+
+<Box type="warn" title="التكلفة جزء من القرار">
+
+قارن compute أو capacity، storage، requests، I/O، backup، data transfer، والحد الأدنى للتشغيل. راجع pricing calculator والـ docs الحالية؛ مفيش خدمة مضمونة مجانية لمجرد إنها serverless.
+
+</Box>
+
+## ورقة قرار من سطر واحد
+
+اكتب: «هنختار **الخدمة** لأن أهم access pattern هو **النمط**، ونحتاج **availability/recovery**، والبديل **الخدمة الأخرى** اترفض بسبب **سبب قابل للقياس**».
+
+الفصل الجاي هنخرج من التخزين ونبني شبكة VPC تحمي وتوصل مكونات بوابة المدرسة.
+
+<Checklist id="aws-cp-21" title="خلّصت الفصل لما" items={["تبدأ من access patterns لا اسم الخدمة", "تختار SQL للعلاقات والـ transactions", "تختار DynamoDB للـ key access المصمم صح", "تفصل cache وgraph وwarehouse عن مصدر التشغيل", "تكتب قرار فيه سبب وتكلفة وخطة recovery"]} />
+
+<Quiz>
+<Q n={1} q="درجات وطلاب وفصول بعلاقات وtransactions؛ تبدأ بإيه؟">RDS أو Aurora بمحرك relational مناسب، لأن العلاقات والاتساق هم الأساس.</Q>
+<Q n={2} q="هل إضافة ElastiCache تعني حذف قاعدة البيانات الأصلية؟">لأ. غالبًا هي طبقة تسريع، والمصدر الدائم يفضل database مناسبة.</Q>
+<Q n={3} q="إيه أول معلومة قبل اختيار DynamoDB؟">الـ access patterns والمفاتيح؛ لأن تصميم الـ partition/sort keys يحدد كفاءة الوصول.</Q>
+</Quiz>

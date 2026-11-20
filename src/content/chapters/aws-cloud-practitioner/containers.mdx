@@ -1,0 +1,99 @@
+---
+title: "Containers على AWS: ECR وECS وFargate وEKS"
+short: Containers
+order: 16
+label: فصل ١٦
+badge: Compute · فصل ١٦
+en: image · container · ECR · ECS · Fargate · EKS
+keywords: registry · orchestration · task · serverless containers · Kubernetes
+goal: تفرّق image وcontainer وتختار registry وorchestrator وcompute capacity بشكل صحيح.
+part: Compute
+color: c1
+---
+
+## Image وصفة، container تنفيذ
+
+الـ <En>container image</En> package ثابت فيه التطبيق واعتماداته. الـ <En>container</En> عملية شغالة من الـ image. نفس الصورة تقدر تشغّل منها نسخ كتير.
+
+<Box type="story" icon="🥪" title="سندوتشات الرحلة">
+
+الـ image هي الوصفة والعلبة القياسية. كل container سندوتش اتعمل من الوصفة. `ECR` مخزن الوصفات، و`ECS` أو `EKS` مدير الرحلة اللي يقرر كام علبة تخرج وفين.
+
+</Box>
+
+## طبقات القرار الثلاثة
+
+<Flow items={[
+  { t: "ECR", s: "خزّن الـ images", c: 1 },
+  "→",
+  { t: "ECS أو EKS", s: "نظّم التشغيل", c: 3 },
+  "→",
+  { t: "Fargate أو EC2", s: "وفّر compute", c: 5 },
+]} />
+
+`Amazon ECR` registry مُدار للـ images، فيه permissions وفحص وlifecycle policies. هو مش مكان تشغيل الـ container.
+
+## ECS ولا EKS؟
+
+<Grid2>
+<Card title="Amazon ECS" c={2}>
+
+Orchestrator AWS-native أبسط نسبيًا. بتعرّف task definition، وتشغّل tasks أو service تحافظ على العدد وتتكامل مع load balancing.
+
+</Card>
+<Card title="Amazon EKS" c={4}>
+
+Kubernetes مُدار: AWS تدير control plane، وإنت تستخدم Kubernetes APIs والـ ecosystem. مناسب لو عندك احتياج أو خبرة Kubernetes، لكنه أعقد تشغيليًا.
+
+</Card>
+</Grid2>
+
+متختارش EKS لمجرد إن Kubernetes مشهور. لو فريق المدرسة صغير ومش محتاج portability أو Kubernetes tooling، ECS غالبًا بداية أبسط.
+
+## Fargate مش orchestrator
+
+`AWS Fargate` compute engine serverless للـ containers: يشغّل ECS tasks أو EKS pods من غير ما تدير EC2 nodes. إنت تحدد CPU وmemory والـ networking، وAWS تدير hosts.
+
+لو اخترت EC2 capacity، عندك تحكّم أوسع في instances وقدرة على تحسين التكلفة، لكن عليك patching وcapacity planning والـ scaling للـ nodes. Fargate يقلل الإدارة، مش المسؤولية عن الصورة أو التطبيق أو التكلفة.
+
+<Hl c="p">ECS/EKS يجاوبوا «مين ينظّم؟»؛ Fargate/EC2 يجاوبوا «هينظّم فوق compute إيه؟».</Hl>
+
+## بوابة المدرسة كـ container
+
+نحط نسخة API في image، نرفعها لـ ECR، ونشغّل ECS service على Fargate. الـ service يحافظ على عدد tasks، وALB يوزع الطلبات.
+
+لو المدرسة عندها platform team شغال Kubernetes أصلًا ومحتاجة نفس الأدوات والسياسات، EKS يبقى اختيار مفهوم. غير كده التعقيد الإضافي محتاج مبرر.
+
+## الأمان والتشغيل
+
+- متحطش secrets داخل image؛ استخدم خدمة أسرار وصلاحيات task/pod.
+- استخدم image tags بعناية، ويفضل مرجع ثابت للـ deployment.
+- افحص vulnerabilities وحدّث base images.
+- الـ container ephemeral؛ حط الداتا الدائمة في storage/database مناسبة.
+- راقب logs وhealth checks، وحدد CPU وmemory.
+
+<Box type="warn" title="Fargate مش Free Tier سحري">
+
+الـ tasks بتتحاسب حسب الموارد والمدة، وEKS له تكاليف مرتبطة بالـ cluster وموارد أخرى، وECR له تخزين ونقل وطلبات حسب الاستخدام. راجع صفحات السعر الحالية والـ Region.
+
+</Box>
+
+## 🧪 Lab ورقي: ركّب الطبقات
+
+اكتب خمس كروت: `Image`, `ECR`, `ECS`, `Fargate`, `ALB`. رتّبهم: المطور يبني image، يرفعها ECR، ECS service يطلب tasks على Fargate، وALB يوجّه لها.
+
+جنب كل كارت اكتب مسؤوليته. مفيش تكلفة. لو نفذت لاحقًا، احذف service والـ tasks والـ load balancer والصور غير المطلوبة، وتأكد إن مفيش cluster resource مدفوعة باقية.
+
+## قرار سريع
+
+عايز AWS-native orchestration بسيط نسبيًا → ECS. عايز Kubernetes API/ecosystem → EKS. مش عايز تدير nodes → Fargate. عايز registry خاص → ECR.
+
+الفصل الجاي هنبدأ تخزين الداتا بـ S3 ونحط عليه static assets بوابة المدرسة.
+
+<Checklist id="aws-cp-16" title="خلّصت الفصل لما" items={["تفرق image عن container", "تعرف إن ECR registry مش runtime", "تختار ECS للبساطة النسبية وEKS لاحتياج Kubernetes", "تعرف إن Fargate capacity مش orchestrator", "تخرج الداتا والأسرار من image"]} />
+
+<Quiz>
+<Q n={1} q="مين يخزّن image خاصة: ECS ولا ECR؟">ECR. ECS ينظم تشغيل containers.</Q>
+<Q n={2} q="هل Fargate بديل مباشر لـ ECS؟">لأ. ECS orchestrator، وFargate اختيار compute يشغّل عليه ECS tasks.</Q>
+<Q n={3} q="إمتى EKS يبقى مبرر؟">لما تحتاج Kubernetes APIs أو ecosystem أو عندك خبرة وسياسات Kubernetes قائمة.</Q>
+</Quiz>

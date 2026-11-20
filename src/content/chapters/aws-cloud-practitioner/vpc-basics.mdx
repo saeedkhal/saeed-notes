@@ -1,0 +1,91 @@
+---
+title: شبكة المدرسة جوه AWS — أساسيات VPC
+short: أساسيات VPC
+order: 22
+label: فصل ٢٢
+badge: Networking · فصل ٢٢
+en: VPC · CIDR · public subnet · private subnet · route table
+keywords: VPC · CIDR · subnets · route tables
+goal: تفهم إزاي تقسّم شبكة بوابة المدرسة وتحدد مين له طريق للإنترنت.
+part: Networking
+color: c2
+---
+
+## الـ VPC هي أرضك
+
+<En>Amazon VPC</En> شبكة افتراضية معزولة منطقيًا جوه AWS. إنت بتختار مدى عناوينها، تقسيمها، والطرق اللي الترافيك يمشي فيها.
+
+<Box type="story" icon="🏫" title="سور المدرسة">
+
+الـ VPC هي أرض المدرسة بسورها. الفصول جوه السور هي الـ subnets، والممرات والبوابات هي الـ routes. السور مش معناه إن كل أوضة آمنة تلقائيًا؛ لسه محتاج قواعد دخول.
+
+</Box>
+
+## CIDR من غير وجع حساب
+
+`10.0.0.0/16` معناه مساحة عناوين كبيرة تبدأ بـ `10.0`. كل ما الرقم بعد `/` يكبر، المساحة تصغر: `/24` أصغر من `/16`.
+
+- VPC: `10.0.0.0/16`
+- public subnet: `10.0.1.0/24`
+- private subnet: `10.0.2.0/24`
+
+الـ subnet لازم تبقى جزء من مدى الـ VPC، ومبتتمدّش على أكتر من <En>Availability Zone</En> واحدة.
+
+<Box type="tip" title="فكّر في CIDR كعنوان عمارة">
+
+`/16` حي كامل، و`/24` عمارة جوه الحي. مش لازم تحسب عدد كل IP في الامتحان؛ المهم تعرف إن prefix أكبر يعني نطاق أصغر.
+
+</Box>
+
+## Public وPrivate مش أسماء
+
+الـ public subnet عندها route للـ <En>Internet Gateway</En>. والـ resource نفسه محتاج public IP مناسب وقواعد تسمح بالترافيك.
+
+الـ private subnet مافيهاش route مباشر للـ Internet Gateway. ممكن مواردها تخرج للإنترنت عن طريق NAT، لكن الإنترنت ما يبدأش اتصال مباشر بيها.
+
+<Grid2>
+<Card title="Public subnet" c={2}>
+
+مناسبة لحاجة لازم تستقبل من الإنترنت، زي public load balancer. قلّل اللي بتحطه فيها.
+
+</Card>
+<Card title="Private subnet" c={3}>
+
+مناسبة للـ application والـ database لما مش محتاجين دخول مباشر من الإنترنت.
+
+</Card>
+</Grid2>
+
+## الـ Route Table هي اليافطة
+
+كل subnet مرتبطة بـ route table. السطر `10.0.0.0/16 → local` يخلي أجزاء الـ VPC تكلم بعض، و`0.0.0.0/0` هو الطريق الافتراضي لأي عنوان IPv4 مش موجود في طريق أدق.
+
+<Flow items={[
+  { t: "طالب", s: "طلب البوابة", c: 1 }, "→",
+  { t: "Public subnet", s: "route للـ IGW", c: 2 }, "→",
+  { t: "الإنترنت", c: 4 },
+]} />
+
+الـ route بتحدد **فين** الباكت تروح، لكنها مش firewall. السماح والمنع شغل Security Groups وNACLs اللي جايين.
+
+## 🧪 تمرين ورقي آمن
+
+ارسم VPC باسم `school-prod` ومدى `10.0.0.0/16`. جوهها ارسم public subnet للـ load balancer وprivate subnet للـ app وprivate subnet للداتا. اكتب جنب كل واحدة هل تحتاج طريق مباشر للإنترنت وليه.
+
+متنشئش موارد فعلية عشان التمرين؛ الـ VPC نفسها قد لا تكلّف، لكن NAT Gateway وعناوين وخدمات تانية ممكن تعمل تكلفة.
+
+<Box type="interview" title="اختيار الامتحان">
+
+قاعدة بيانات الطلبة لا تستقبل من الإنترنت: اختار private subnet. كلمة "private" لوحدها مش ضمان؛ راجع routes وقواعد الشبكة.
+
+</Box>
+
+الفصل الجاي هنركّب بوابات الخروج وطبقات الحماية على نفس شبكة المدرسة.
+
+<Checklist id="aws-cp-22" title="خلّصت الفصل لما" items={["تشرح الـ VPC كسياج شبكة منطقي", "تعرف إن `/24` أصغر من `/16`", "تميّز public subnet من وجود route للـ IGW", "تعرف إن route table مش firewall", "ترسم تقسيم بوابة المدرسة من غير إنشاء موارد"]} />
+
+<Quiz>
+<Q n={1} q="Subnet اسمها private لكن عندها route مباشر للـ Internet Gateway؛ هي private فعلًا؟">لأ. السلوك بيتحدد بالـ routes، والاسم مجرد label.</Q>
+<Q n={2} q="أنهي أكبر: `10.0.0.0/16` ولا `10.0.1.0/24`؟">الـ `/16` أكبر، والـ `/24` ممكن تبقى subnet جواه.</Q>
+<Q n={3} q="هل route للإنترنت لوحده يسمح لأي حد يدخل على السيرفر؟">لأ؛ لسه محتاج public addressing وقواعد أمان تسمح.</Q>
+</Quiz>

@@ -1,0 +1,101 @@
+---
+title: "Serverless: Lambda وAPI Gateway"
+short: Serverless
+order: 15
+label: فصل ١٥
+badge: Compute · فصل ١٥
+en: Lambda · API Gateway · event-driven · concurrency · cold start
+keywords: function · trigger · managed scaling · quotas · short-lived
+goal: تفهم serverless كمسؤولية أقل، وتربط API Gateway وevents بـ Lambda مع حدودها.
+part: Compute
+color: c5
+---
+
+## Serverless مش معناها مفيش servers
+
+السيرفرات موجودة، لكن AWS بتدير provisioning والـ OS والـ scaling. إنت تركز في الكود والـ permissions والـ observability والتكلفة.
+
+`AWS Lambda` تشغّل function لما event يحصل. كل invocation مستقلة، وLambda تقدر تعمل scale أفقي حسب الحمل والـ quotas.
+
+<Box type="story" icon="🔔" title="جرس الحصة">
+
+بدل ما مدرس يفضل واقف مستني طول اليوم، الجرس يناديه وقت الحصة. الـ event هو الجرس، والـ function هي الشغل المحدد. لو أجراس كتير رنّت، محتاج تعرف كام مدرس يقدر يشتغل في نفس الوقت.
+
+</Box>
+
+## Event-driven في بوابة المدرسة
+
+أمثلة triggers:
+
+- `API Gateway` يستقبل HTTP request وينادي Lambda.
+- `S3` يرسل event بعد رفع صورة واجب.
+- `EventBridge` يشغّل وظيفة بجدول أو event.
+- Lambda تسحب batches من `SQS` أو stream عن طريق event source mapping.
+
+الـ event غالبًا JSON، وشكله بيعتمد على المصدر. صمّم function تتعامل مع retry من غير ما تكرر أثر خطر؛ ده اسمه <En>idempotency</En>.
+
+## API Gateway دوره إيه؟
+
+API Gateway هو front door للـ APIs: routes، authorization options، throttling، monitoring، وتحويل الطلب للتكامل الخلفي. Lambda هي compute اللي تنفذ المنطق.
+
+<Flow items={[
+  { t: "POST /homework", s: "طالب", c: 1 },
+  "→",
+  { t: "API Gateway", s: "route + auth + throttle", c: 2 },
+  "→",
+  { t: "Lambda", s: "تحقق وسجّل", c: 5 },
+  "→",
+  { t: "Database", s: "داتا دائمة", c: 3 },
+]} />
+
+## الحدود اللي لازم تفضل في دماغك
+
+Lambda مناسبة لشغل محدود المدة، مش process لا نهائية؛ الحد المعروف لتنفيذ function التقليدية يصل إلى 15 دقيقة. وفيه quotas للـ concurrency والـ payload والذاكرة والتخزين المؤقت، وبعضها قابل للزيادة.
+
+<Grid2>
+<Card title="Concurrency" c={2}>
+
+عدد executions اللي شغالة في نفس اللحظة. لو downstream database تستحمل 50 connection بس، scale سريع ممكن يخنقها؛ استخدم limits وتصميم مناسب.
+
+</Card>
+<Card title="Cold start" c={4}>
+
+وقت إضافي لما Lambda تجهز execution environment جديدة. مش كل request باردة، وتأثيرها يختلف حسب runtime والحجم والشبكة.
+
+</Card>
+</Grid2>
+
+`Provisioned concurrency` تجهّز environments مسبقًا لتقليل latency، لكنها بتضيف تكلفة. متستخدمهاش تلقائيًا قبل القياس.
+
+## إمتى Lambda مش أنسب؟
+
+- عملية طويلة عن الحد أو محتاجة process عايشة باستمرار.
+- تحكّم عميق في OS أو hardware.
+- latency ثابتة جدًا من غير ما تقبل إدارة mitigations.
+- workload ثابتة ضخمة وقد يكون نموذج تاني أوفر بعد الحساب.
+
+<Box type="warn" title="Pay per use برضه محتاج حواجز">
+
+خطأ أو event loop ممكن يعمل invocations كتير. حط budgets وalarms وreserved concurrency عند اللزوم، وراجع تسعير Lambda وAPI Gateway والـ logs. متفترضش إن تجربة صغيرة مجانية.
+
+</Box>
+
+## 🧪 Lab ورقي: من event لنتيجة
+
+ارسم رفع صورة إلى S3، event إلى Lambda، ثم thumbnail إلى prefix مختلف. اكتب شرطين: function متكررش نفس النتيجة بشكل مؤذٍ، والفشل يطلع log أو يروح لمسار retry/DLQ مناسب.
+
+التمرين بلا موارد. لو نفذته لاحقًا، استخدم ملف تجريبي غير حساس، راجع التكاليف، واحذف function والـ API والـ logs والموارد التجريبية بعد الانتهاء.
+
+## جملة الامتحان
+
+`No server management + event + automatic scaling` يشاور على Lambda. `Managed front door for REST/HTTP APIs` يشاور على API Gateway. الاتنين ممكن يشتغلوا سوا لكن مش بدلاء.
+
+الفصل الجاي هنحزم التطبيق كله في container ونقارن ECS وEKS وFargate.
+
+<Checklist id="aws-cp-15" title="خلّصت الفصل لما" items={["تشرح serverless من غير ما تقول مفيش servers", "تربط API Gateway بالـ HTTP وLambda بالتنفيذ", "تعرف معنى concurrency وcold start", "تذكر حد التنفيذ والـ quotas بشكل عالي", "تحط تكلفة وretry وidempotency في التصميم"]} />
+
+<Quiz>
+<Q n={1} q="مين يعمل route وthrottling للـ API غالبًا؟">API Gateway؛ وLambda ممكن تنفذ business logic وراه.</Q>
+<Q n={2} q="هل كل استدعاء Lambda فيه cold start؟">لأ. يحصل لما تحتاج execution environment جديدة؛ البيئات الدافئة ممكن تعيد الاستخدام.</Q>
+<Q n={3} q="ليه نحط concurrency limit قدام database صغيرة؟">عشان التوسّع السريع ما يفتحش اتصالات أكتر من قدرتها ويوقعها.</Q>
+</Quiz>

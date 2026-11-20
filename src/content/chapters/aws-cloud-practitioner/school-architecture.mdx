@@ -1,0 +1,91 @@
+---
+title: نجمع بوابة المدرسة قطعة قطعة
+short: معمارية بوابة المدرسة
+order: 28
+label: فصل ٢٨
+badge: ربط الأنظمة · فصل ٢٨
+en: CloudFront · S3 · API Gateway · Lambda · DynamoDB · Cognito · SQS · SNS
+keywords: serverless portal · request flow · event flow
+goal: تتبع request متزامن وevent غير متزامن عبر معمارية بوابة المدرسة.
+part: ربط الأنظمة
+color: c3
+---
+
+## الصورة الكبيرة
+
+هنركّب نموذج تعليمي، مش وصفة إلزامية. الاختيار الحقيقي يتغير حسب المتطلبات والأمان والتكلفة.
+
+<Diagram
+  title="بوابة المدرسة"
+  height={360}
+  mheight={720}
+  nodes={[
+    { id: "u", t: "الطالب", c: 1, x: 8, y: 45, mx: 50, my: 6 },
+    { id: "cf", t: "CloudFront", s: "edge", c: 4, x: 25, y: 45, mx: 50, my: 20 },
+    { id: "s3", t: "S3", s: "واجهة", c: 2, x: 43, y: 20, mx: 50, my: 34 },
+    { id: "api", t: "API Gateway", c: 3, x: 43, y: 70, mx: 50, my: 48 },
+    { id: "l", t: "Lambda", c: 1, x: 62, y: 70, mx: 50, my: 62 },
+    { id: "db", t: "DynamoDB", c: 5, x: 82, y: 50, mx: 50, my: 76 },
+    { id: "q", t: "SQS / SNS", c: 2, x: 82, y: 83, mx: 50, my: 90 },
+  ]}
+  edges={[
+    { from: "u", to: "cf" },
+    { from: "cf", to: "s3", t: "static" },
+    { from: "cf", to: "api", t: "API" },
+    { from: "api", to: "l" },
+    { from: "l", to: "db" },
+    { from: "l", to: "q", t: "event" },
+  ]}
+/>
+
+## وظيفة كل قطعة
+
+- CloudFront يقرب الواجهة ويحمي origin بإعداد مناسب.
+- S3 يخزن ملفات HTML وCSS والصور؛ خليه private ووصل CloudFront بصلاحية مخصصة.
+- API Gateway هو باب HTTPS للـ API.
+- Lambda تشغّل منطق قصير من غير إدارة servers.
+- DynamoDB يخزن records بالمفاتيح اللي التصميم محتاجها.
+- Cognito يدير sign-up/sign-in وtokens للمستخدمين.
+- SQS تمسك شغل خلفي، وSNS تنشر خبر لعدة مشتركين.
+
+## Request flow: فتح الدرجات
+
+١. الطالب يطلب الموقع؛ Route 53 ممكن يحل الاسم إلى CloudFront.
+٢. CloudFront ترجع ملفات الواجهة من cache أو تجيبها من S3.
+٣. الطالب يسجّل الدخول عبر Cognito ويحصل على token.
+٤. الواجهة تطلب `/grades` عبر API Gateway بالـ token.
+٥. authorizer يتحقق، ثم Lambda تقرأ درجات الطالب المسموح بها من DynamoDB.
+٦. الرد يرجع عبر API Gateway. متحطش صلاحيات الطالب في الواجهة وحدها؛ التحقق الحقيقي على الـ backend.
+
+## Event flow: رفع واجب
+
+١. Lambda تسجل metadata بأمان.
+٢. تبعت message إلى SQS لمعالجة الملف.
+٣. worker يعالج ويرجع النتيجة، مع retry وDLQ للفشل.
+٤. SNS تنشر `AssignmentProcessed` للإشعارات والتحليلات.
+
+<Hl c="g">الـ request flow مستني رد؛ الـ event flow بيفصل الشغل اللي ينفع يحصل بعدين.</Hl>
+
+## حدود مهمة
+
+Cognito مش database للدرجات، وCloudFront مش authorization بديل، وSQS مش broadcast لكل مستهلك لوحده. استخدم أقل IAM permissions، encryption، logs، وlimits.
+
+<Box type="warn" title="Serverless مش معناها مجاني">
+
+كل خدمة لها meter وحدود وFree Tier متغير. CloudFront data transfer وrequests، API calls، Lambda duration، DynamoDB capacity، والرسائل ممكن تعمل فاتورة. اعمل budget وامسح التجارب.
+
+</Box>
+
+## 🧪 تمرين ورقي آمن
+
+بلونين، تتبّع خط "عرض الدرجات" وخط "معالجة واجب". حط قفل عند Cognito/IAM، ساعة عند SQS، وجرس عند SNS. اكتب نقطة فشل وخطة retry لكل خط.
+
+الفصل الجاي هنراقب المعمارية ونعرف مين غيّر إيه.
+
+<Checklist id="aws-cp-28" title="خلّصت الفصل لما" items={["تشرح دور كل خدمة من غير خلط", "تتبع request الدرجات", "تتبع event رفع الواجب", "تحط auth على backend", "تذكر DLQ والتكلفة والـ least privilege"]} />
+
+<Quiz>
+<Q n={1} q="ملفات الواجهة الثابتة تتحط فين وتتوزع بإيه؟">S3 كـ origin خاص وCloudFront للتوصيل والكاش.</Q>
+<Q n={2} q="معالجة PDF طويلة مش لازم المستخدم يستناها؛ نحط بينها إيه؟">SQS queue تفصل الطلب عن العامل.</Q>
+<Q n={3} q="هل وجود Cognito في الواجهة يغني عن فحص الصلاحية في API؟">لأ، الـ backend لازم يتحقق من الـ token والصلاحيات.</Q>
+</Quiz>

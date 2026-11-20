@@ -1,0 +1,100 @@
+---
+title: File Storage والحلول الهجينة
+short: EFS وFSx وHybrid
+order: 18
+label: فصل ١٨
+badge: Storage وDatabases · فصل ١٨
+en: EFS · FSx · Storage Gateway · AWS Backup · Snow Family
+keywords: shared file system · hybrid storage · centralized backup · offline transfer
+goal: تختار block أو file أو object وتعرف دور EFS وFSx وStorage Gateway وBackup وخيارات النقل الحالية.
+part: Storage وDatabases
+color: c3
+---
+
+## أول قرار: block ولا file ولا object؟
+
+<Grid2>
+<Card title="Block" c={1}>
+
+قرص للـ OS أو database: blocks تتعمل لها filesystem. المثال الأشهر `EBS` مع EC2.
+
+</Card>
+<Card title="File" c={3}>
+
+ملفات ومجلدات وmount مشترك ببروتوكول مألوف. الأمثلة `EFS` و`FSx`.
+
+</Card>
+</Grid2>
+
+<Card title="Object" c={5}>
+
+Objects بالـ key وAPI، مناسب للـ static content والنسخ والـ data lakes. المثال `S3`.
+
+</Card>
+
+<Box type="story" icon="🗃️" title="مكتب المدرسة">
+
+Block زي هارد جهاز السكرتير. File زي فولدر الشبكة اللي كذا موظف يفتحه. Object زي أرشيف مركزي تطلب منه ملف برقم؛ مش بتتعامل معاه كهارد.
+
+</Box>
+
+## Amazon EFS
+
+`Elastic File System` filesystem مُدار ومرن لأحمال Linux، يدعم `NFS` ومشاركة نفس الملفات بين instances متعددة وعبر Availability Zones. حجمه يكبر ويصغر تلقائيًا حسب الملفات.
+
+في بوابة المدرسة، instances متعددة ممكن تشارك uploads قديمة محتاجة file interface. لكن لو التطبيق يقدر يستخدم object API، S3 قد يكون أبسط وأوفر حسب النمط.
+
+## Amazon FSx
+
+`FSx` عيلة filesystems مُدارة لاستخدامات مخصوصة:
+
+- `FSx for Windows File Server`: Windows وSMB وActive Directory scenarios.
+- `FSx for Lustre`: high-performance computing والـ analytics.
+- `FSx for NetApp ONTAP`: خصائص وواجهات NetApp متعددة.
+- `FSx for OpenZFS`: workloads محتاجة خصائص ZFS وNFS.
+
+<Hl c="b">EFS اختيار Linux عام ومرن؛ FSx لما تحتاج filesystem أو compatibility أو performance مخصوصة.</Hl>
+
+## Storage Gateway
+
+`AWS Storage Gateway` يربط on-premises بالـ cloud من خلال appliance وواجهات مألوفة، مع local cache لبعض الأنماط. عيلته تشمل file وvolume وtape scenarios حسب المنتج الحالي.
+
+مثال: سيرفر المدرسة المحلي يفضل يستخدم file share، والـ gateway يربطه بتخزين AWS. ده hybrid access، مش VPN ولا backup policy لوحده.
+
+## AWS Backup
+
+خدمة مركزية تعمل backup plans وschedules وretention لعدة خدمات مدعومة زي EBS وRDS وEFS وDynamoDB وS3 وغيرها حسب الـ Region والميزة.
+
+AWS Backup تسهّل الإدارة والسياسات، لكن إنت لسه تختار الموارد والمدة والنسخ عبر Regions/accounts وتختبر restore. الـ backup vault والنسخ ليهم تكلفة.
+
+## Snow Family: معلومة امتحان مع تنبيه زمني
+
+مواد CLF-C02 القديمة تذكر أجهزة `AWS Snow Family` لنقل داتا offline أو edge compute لما الشبكة محدودة. لكن حسب AWS Decision Guide الحالي في أكتوبر 2026، Snow Family **مش متاحة لعملاء جدد**، ودعم أجهزة Snowball في الـ commercial Regions مقرر ينتهي 31 ديسمبر 2026.
+
+للتصميم الحالي، راجع AWS DataSync للنقل online، وAWS Data Transfer Terminal أو partner options للنقل الفيزيائي حسب التوفر. في الامتحان، افهم الفكرة التاريخية، لكن متقترحش طلب Snow جديد من غير docs حديثة.
+
+<Box type="warn" title="النقل والنسخ لهم فاتورة">
+
+File systems، backup storage، requests، data transfer، والـ gateway resources كلها ممكن تتكلف. راجع السعر والمنطقة قبل أي Lab، ومفيش وعد بـ Free Tier.
+
+</Box>
+
+## 🧪 تمرين ورقة: اختار التخزين
+
+صنّف: boot disk → EBS؛ فولدر Linux مشترك → EFS؛ Windows share → FSx for Windows؛ صور عامة بالـ key → S3؛ مكتب محلي محتاج cloud-backed share → Storage Gateway.
+
+بعدها ارسم backup plan للـ EFS واكتب `restore test`. التمرين بلا موارد. لو جرّبت خدمة، احذف filesystem والـ backups والـ gateway resources بعد التأكد إن الداتا تجريبية وغير مطلوبة.
+
+## قرار من سؤال واحد
+
+هل التطبيق محتاج mount وfolders مشتركة؟ File. محتاج disk blocks لسيرفر؟ Block. محتاج API وkeys على scale؟ Object. محتاج يفضل on-premises ومتصل بالسحابة؟ فكر hybrid.
+
+الفصل الجاي هنحط داتا الطلاب المترابطة في RDS ونفهم Multi-AZ وRead Replicas.
+
+<Checklist id="aws-cp-18" title="خلّصت الفصل لما" items={["تفرق block وfile وobject", "تربط EFS بـ Linux NFS المشترك", "تختار FSx لاحتياج filesystem مخصوص", "تشرح Storage Gateway كحل hybrid", "تعرف تحديث حالة Snow Family وتختبر restore للـ backups"]} />
+
+<Quiz>
+<Q n={1} q="خمس EC2 Linux محتاجة نفس الـ folders؛ تبدأ تفكر في إيه؟">Amazon EFS لأنه shared managed NFS filesystem.</Q>
+<Q n={2} q="AWS Backup هل تختار retention بدلًا عنك؟">لأ. هي تدير التنفيذ والسياسات، لكن إنت تحدد الخطة والاحتفاظ وتختبر الاسترجاع.</Q>
+<Q n={3} q="هل Snow Family اختيار جديد مضمون في أكتوبر 2026؟">لأ. AWS تقول إنها غير متاحة لعملاء جدد؛ لازم تراجع بدائل النقل والـ docs الحالية.</Q>
+</Quiz>

@@ -1,0 +1,90 @@
+---
+title: "EBS: الهارد الدائم بتاع EC2"
+short: EBS والـ snapshots
+order: 13
+label: فصل ١٣
+badge: Compute · فصل ١٣
+en: block storage · EBS · instance store · snapshots · volume types
+keywords: persistent block · ephemeral disk · incremental snapshot · SSD · HDD
+goal: تميّز EBS الدائم عن instance store المؤقت وتختار نوع volume مبدئيًا وتفهم snapshot صح.
+part: Compute
+color: c3
+---
+
+## Block storage يعني إيه؟
+
+`Amazon EBS` بيدي EC2 volume على مستوى الـ blocks، كأنه هارد يتعمل له format ويتحط عليه filesystem. الـ volume مورد مستقل يقدر يفضل موجود بعد ما الـ instance تقف.
+
+<Box type="story" icon="🗄️" title="دولاب الملفات">
+
+الـ EBS دولاب المدرسة المنفصل عن مكتب الموظف: الموظف يروح والدولاب يفضل. الـ instance store درج جوّه المكتب نفسه: سريع وقريب، بس لو المكتب اتشال محتواه مش ضمان.
+
+</Box>
+
+## EBS ولا instance store؟
+
+<Grid2>
+<Card title="EBS" c={3}>
+
+تخزين block دائم نسبيًا، منفصل عن عمر الـ instance. مناسب للـ boot volume، ملفات تطبيق بتتغير، أو database محتاجة disk. الـ volume موجود في Availability Zone معينة.
+
+</Card>
+<Card title="Instance store" c={4}>
+
+تخزين محلي على host ومؤقت. البيانات تفضل مع reboot، لكنها تضيع عند stop أو hibernate أو terminate أو فشل الـ host. استخدمه cache أو scratch data قابلة للبناء.
+
+</Card>
+</Grid2>
+
+<Hl c="o">لو فقدان الداتا يعمل أزمة، متعتبرش instance store نسخة دائمة.</Hl>
+
+## الـ snapshot مش copy عادية
+
+`EBS snapshot` نسخة point-in-time من volume. أول snapshot تحفظ blocks المستخدمة، واللاحقة incremental: تحفظ التغييرات، مع إن الاسترجاع يبان لك snapshot كاملة.
+
+الـ snapshots بتتخزن عبر عدة AZs داخل الـ Region في بنية S3 تديرها AWS؛ مش bucket تفتحه من S3 Console. تقدر تعمل منها volume جديدة، حتى في AZ مختلفة داخل نفس الـ Region.
+
+<Box type="warn" title="Snapshot مش backup plan لوحدها">
+
+EBS مش بيعمل snapshot تلقائي لمجرد إنك أنشأت volume. حدد schedule وretention واختبر restore، باستخدام Data Lifecycle Manager أو AWS Backup عند الحاجة. الـ snapshots نفسها ليها تكلفة.
+
+</Box>
+
+## أنواع EBS على مستوى CLF-C02
+
+- `gp3` و`gp2`: General Purpose SSD لأحمال كتير؛ `gp3` اختيار حديث شائع ويفصل الحجم عن إعدادات أداء معينة.
+- `io2` و`io1`: Provisioned IOPS SSD لقواعد بيانات وأحمال محتاجة IOPS ثابتة وعالية.
+- `st1`: Throughput Optimized HDD للـ streaming والـ logs والـ big data، مش boot volume.
+- `sc1`: Cold HDD لداتا قليلة الاستخدام وتكلفة أقل، ومش boot volume.
+- `standard` magnetic جيل قديم، مش نقطة بداية لتصميم جديد.
+
+SSD يناسب عمليات صغيرة ومتكررة حيث الـ IOPS مهمة. HDD يناسب تدفق blocks كبيرة حيث الـ throughput أهم.
+
+## بوابة المدرسة
+
+قرص نظام EC2 وملفات التطبيق المتغيرة ممكن يبقوا على `gp3`. ملفات صور الطلبة العامة مش لازم تتحول لـ EBS؛ غالبًا object storage زي S3 أنسب، وهنوصله.
+
+لو فيه ملفات مؤقتة أثناء تحويل فيديو، instance store ممكن ينفع **فقط** لو العملية تقدر تبدأ من جديد والداتا الأصلية محفوظة في مكان دائم.
+
+## 🧪 Lab ورقي: خطة رجوع
+
+اكتب السيناريو ده: «EBS عليها نظام بوابة المدرسة». ارسم سهم كل ليلة إلى snapshot، واكتب retention افتراضي للمناقشة، ثم سهم restore إلى **volume جديدة**.
+
+اسأل نفسك: مين يراقب نجاح النسخ؟ وإمتى اختبرنا الاسترجاع؟ الورقة مجانية. لو أنشأت volume أو snapshot حقيقية، راجع أسعار الحجم والطلبات واحذف التجربة بعد التأكد إنك مش محتاجها.
+
+## نقط امتحان صغيرة
+
+- Stop للـ instance لا يعني حذف EBS.
+- Terminate قد يحذف root volume حسب الإعداد، فلا تفترض.
+- Snapshot incremental في التخزين، وتقدر تسترجع منها volume.
+- EBS عادةً لاحتياج block مرتبط بـ EC2، مش shared folder لكل السيرفرات.
+
+الفصل الجاي هنشوف إزاي أكتر من instance يستقبلوا الطلبات ويكبروا ويصغروا مع الضغط.
+
+<Checklist id="aws-cp-13" title="خلّصت الفصل لما" items={["تشرح block storage بمثال", "تميّز ديمومة EBS عن instance store", "تعرف إن snapshots incremental وليها تكلفة", "تختار SSD للـ IOPS وHDD للـ throughput على مستوى عالي", "تضيف restore test لخطة النسخ"]} />
+
+<Quiz>
+<Q n={1} q="Cache قابلة لإعادة البناء ومحتاجة disk محلي سريع؛ ممكن تستخدم إيه؟">Instance store، بشرط إن فقدانها مقبول والداتا الأصلية محفوظة.</Q>
+<Q n={2} q="هل snapshot تظهر في bucket تملكه على S3؟">لأ. AWS تدير تخزينها، وإنت تتعامل معاها من EC2/EBS APIs والـ Console.</Q>
+<Q n={3} q="قاعدة بيانات محتاجة IOPS عالية ثابتة؛ أي عائلة تفكر فيها؟">Provisioned IOPS SSD زي io2، بعد قياس الحمل ومراجعة التكلفة.</Q>
+</Quiz>

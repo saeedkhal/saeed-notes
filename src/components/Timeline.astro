@@ -134,8 +134,9 @@ const { groups } = Astro.props;
   @media (max-width: 640px) {
     .timeline { padding: 14px 10px; }
     .tl-row { grid-template-columns: 74px 26px minmax(0, 1fr); }
+    .tl-head { grid-template-columns: minmax(0, 1fr) 26px auto; }
     .tl-tags { display: none; }
-    .tl-big { font-size: 1rem; overflow: visible; }
+    .tl-big { font-size: 1rem; }
     .tl-title { white-space: normal; line-height: 1.6; padding-block: 6px; }
   }
 </style>

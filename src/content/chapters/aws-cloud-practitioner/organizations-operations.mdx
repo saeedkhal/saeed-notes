@@ -1,0 +1,78 @@
+---
+title: إدارة الحسابات والتشغيل من مكان واحد
+short: Organizations والتشغيل
+order: 32
+label: فصل ٣٢
+badge: التشغيل والحوكمة · فصل ٣٢
+en: Organizations · OUs · SCPs · Control Tower · Systems Manager · AWS Health · Trusted Advisor · Service Quotas
+keywords: multi-account · guardrails · operations · health · quotas
+goal: تفرق بين حوكمة الحسابات وتشغيل الموارد ونصائح AWS وحدود الخدمات.
+part: التشغيل والحوكمة
+color: c2
+---
+
+## Organizations: شجرة الحسابات
+
+<En>AWS Organizations</En> تدير حسابات متعددة مركزيًا، تجمع billing، وتطبق سياسات. الحسابات تتجمع في <En>Organizational Units (OUs)</En> زي Production وSchools وSandbox.
+
+<En>Service Control Policies (SCPs)</En> تحط أقصى permissions متاحة للحسابات أو الـ OUs. هي **مش grant** لصلاحية؛ IAM لسه لازم يسمح، والـ SCP لازم ما تمنعش.
+
+<Box type="story" icon="🏫" title="لائحة الوزارة">
+
+الـ SCP لائحة تقول "ممنوع شراء جهاز من النوع ده" لكل المدارس في الإدارة. مش تصريح للمدرس يشتري؛ لسه محتاج موافقة داخل المدرسة، زي IAM.
+
+</Box>
+
+خلي management account للحوكمة فقط قدر الإمكان، واستخدم حسابات منفصلة لتقليل blast radius.
+
+## Control Tower: landing zone
+
+<En>AWS Control Tower</En> يساعد ينشئ ويحكم بيئة multi-account مبنية على Organizations، بهيكل accounts وcontrols وaccount factory.
+
+هو مش بديل لـ Organizations؛ بيستخدمها وخدمات تانية لتقديم landing zone مُدارة.
+
+## Systems Manager: تشغيل الأسطول
+
+<En>AWS Systems Manager</En> يجمع قدرات تشغيل وإدارة آمنة للـ nodes والموارد: inventory، patching، automation، Run Command، Session Manager وParameter Store حسب الحاجة.
+
+Session Manager يقلل الحاجة لفتح SSH inbound، لكن محتاج agent/configuration وIAM صح. Systems Manager مش monitoring بديل لـ CloudWatch.
+
+## Health Dashboard
+
+<En>AWS Health Dashboard</En> يعرض events وتنبيهات شخصية قد تؤثر على مواردك، مع guidance؛ يختلف عن صفحة الصحة العامة اللي تعرض حالة خدمات AWS عمومًا.
+
+لو AWS عندها maintenance لموردك، Health هو المكان الطبيعي. لو CPU عالي بسبب كودك، راجع CloudWatch.
+
+## Trusted Advisor
+
+<En>AWS Trusted Advisor</En> يعمل checks وتوصيات عبر مجالات زي cost optimization وperformance وsecurity وfault tolerance وservice limits. توافر checks يعتمد على support plan والخدمة.
+
+هو مستشار، مش زر يصلح كل شيء تلقائيًا، ومش بديل لتصميم ومراجعة الأمان.
+
+## Service Quotas
+
+<En>Service Quotas</En> مكان تشوف وتدير quotas لخدمات AWS المدعومة وتطلب زيادة للـ adjustable quotas.
+
+Quota حد حساب أو Region لخدمة، مش budget مالي. قبل موسم النتيجة راجع quotas بدري؛ طلب الزيادة مش مضمون وفوري.
+
+<Flow items={[
+  { t: "Organizations", s: "accounts + OUs + SCPs", c: 2 }, "→",
+  { t: "Control Tower", s: "landing zone + controls", c: 3 }, "→",
+  { t: "Systems Manager", s: "تشغيل الموارد", c: 4 },
+]} />
+
+## 🧪 تمرين ورقي آمن
+
+ارسم OU للإنتاج وOU للتجارب. اكتب SCP تمنع Regions غير معتمدة **كمفهوم فقط**، ثم بطاقات: patch fleet، event من AWS، recommendation، quota increase. وصلها بـ Systems Manager وHealth وTrusted Advisor وService Quotas.
+
+متطبقش SCP تجريبية على production؛ خطأ ممكن يمنع الإدارة. الخدمات والـ support plans والـ automation قد تحمل تكلفة، فراجع Pricing ونطاق التأثير واعمل rollback plan.
+
+كده معاك خريطة CLF-C02 متصلة؛ راجع الفصول بسيناريوهات اختيار الخدمة، مش بحفظ الأسماء لوحدها.
+
+<Checklist id="aws-cp-32" title="خلّصت الفصل لما" items={["تشرح accounts وOUs", "تعرف إن SCP guardrail لا يمنح permission", "تربط Control Tower بالـ landing zone", "تميز Systems Manager وHealth وTrusted Advisor", "تعرف إن Service Quotas حدود تشغيل مش ميزانية"]} />
+
+<Quiz>
+<Q n={1} q="SCP سمحت S3 لكن IAM ما سمحتش؛ المستخدم يقدر يقرأ؟">لأ. SCP لا تمنح permission؛ IAM لازم يسمح ومايبقاش فيه منع آخر.</Q>
+<Q n={2} q="AWS مخططة maintenance يؤثر على موردك؛ تراجع إيه؟">AWS Health Dashboard الشخصي.</Q>
+<Q n={3} q="قرب موسم النتائج ومحتاج عدد موارد أعلى من الحد؛ تبدأ فين؟">Service Quotas لمراجعة الحد وطلب زيادة لو adjustable، وابدأ بدري.</Q>
+</Quiz>

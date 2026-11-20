@@ -1,0 +1,103 @@
+---
+title: DynamoDB وقواعد البيانات المتخصصة
+short: DynamoDB والمزيد
+order: 20
+label: فصل ٢٠
+badge: Storage وDatabases · فصل ٢٠
+en: DynamoDB · ElastiCache · DocumentDB · Neptune · Redshift
+keywords: key-value · cache · document · graph · data warehouse
+goal: تميّز قواعد البيانات purpose-built وتعرف المشكلة اللي كل خدمة معمولة عشانها.
+part: Storage وDatabases
+color: c5
+---
+
+## مفيش database تكسب كل السباقات
+
+AWS بتشجع <En>purpose-built databases</En>: اختار model حسب شكل الداتا والاستعلامات والـ scale، مش حسب الاسم الأشهر.
+
+<Box type="story" icon="🏫" title="خمس دواليب في المدرسة">
+
+كشف سريع برقم الطالب غير شبكة «مين قريب مين». نسخة ورقة كاملة غير تقرير سنوي على ملايين السجلات. لو حطيت كل حاجة في نفس الدولاب، هتدفع تعقيد أو بطء في مكان مش لازم.
+
+</Box>
+
+## DynamoDB: key-value وdocument
+
+`Amazon DynamoDB` قاعدة NoSQL serverless مُدارة، معمولة لأداء single-digit milliseconds على أي scale عند تصميم المفاتيح صح.
+
+كل item له primary key. ممكن يكون partition key فقط، أو partition + sort key. طريقة الوصول لازم تأثر على التصميم من الأول؛ مش هننقل SQL schema زي ما هي.
+
+في بوابة المدرسة: session برقم عشوائي، أو إعدادات طالب نجيبها بـ `studentId`. لكن تقارير joins مرنة بين طلاب وفصول ومواد ممكن تكون أسهل في relational database.
+
+خصائص عالية المستوى:
+
+- On-demand أو provisioned capacity modes.
+- Global Secondary Index لمسارات وصول إضافية.
+- DynamoDB Streams لتغييرات items.
+- Global Tables لنسخ multi-Region active-active حسب التصميم.
+- backup وpoint-in-time recovery كخيارات حماية.
+
+## ElastiCache: سرعة فوق مصدر الحقيقة
+
+`Amazon ElastiCache` cache مُدارة تدعم Valkey وMemcached وRedis OSS حسب الاختيار الحالي. تخزن داتا ساخنة في الذاكرة لتقلل latency والضغط على database.
+
+<Hl c="o">Cache عادية مش مصدر الحقيقة: لازم التطبيق يستحمل miss أو eviction ويرجع للـ database.</Hl>
+
+مثال: جدول الحصص الأكثر طلبًا يتخزن لدقائق. لما يتغير المصدر، تحتاج invalidation أو TTL واضح.
+
+## DocumentDB: مستندات JSON-like
+
+`Amazon DocumentDB (with MongoDB compatibility)` لبيانات شبه منظمة كـ documents واستعلام حقولها. مناسب لكتالوج محتوى أو profiles متغيرة البنية.
+
+التوافق مش معناه تطابق كل ميزة وسلوك وإصدار MongoDB؛ راجع compatibility docs قبل migration.
+
+## Neptune: العلاقات هي السؤال
+
+`Amazon Neptune` graph database. مفيد لما الاستعلام يمشي عبر علاقات كتير: شبكة معلمين ومواد وفصول، recommendation، أو fraud detection.
+
+لو كل اللي محتاجه lookup بمفتاح، graph database غالبًا تعقيد زيادة.
+
+## Redshift: warehouse للتحليلات
+
+`Amazon Redshift` data warehouse للـ OLAP والتحليلات والتقارير على داتا كبيرة. مناسب لسؤال زي «اتجاه الغياب عبر السنين والمدارس».
+
+مش بديل OLTP افتراضي لتسجيل حضور طالب لحظيًا. ممكن تجمع له داتا من الأنظمة التشغيلية عشان التحليل.
+
+<Grid2>
+<Card title="تشغيل يومي OLTP" c={2}>
+
+RDS/Aurora أو DynamoDB حسب model والاستعلامات.
+
+</Card>
+<Card title="تحليل تاريخي OLAP" c={5}>
+
+Redshift لما الهدف aggregation وBI على نطاق كبير.
+
+</Card>
+</Grid2>
+
+## 🧪 تمرين ورقة: وصّل المشكلة بالخدمة
+
+وصّل: session by ID → DynamoDB؛ نتيجة query متكررة → ElastiCache؛ profile مرن JSON-like → DocumentDB؛ مسارات علاقات → Neptune؛ dashboard سنوية ضخمة → Redshift.
+
+اكتب جنب كل اختيار «مصدر حقيقة ولا cache ولا analytics». التمرين بلا تكلفة. الخدمات الفعلية قد تتكلف بمجرد provisioning أو الاستخدام؛ راجع السعر واحذف clusters/tables التجريبية والنسخ بعد الانتهاء.
+
+<Box type="warn" title="Serverless لا يلغي التصميم">
+
+DynamoDB تشيل servers من إيدك، لكن partition key سيئة أو scan واسع ممكن يرفع latency والتكلفة. راقب access patterns والـ capacity والـ indexes.
+
+</Box>
+
+## ملخص الفروق
+
+Key-value سريع بمفتاح → DynamoDB. نسخة مؤقتة سريعة → ElastiCache. document fields → DocumentDB. علاقات عميقة → Neptune. تحليلات warehouse → Redshift.
+
+الفصل الجاي هنحوّل الفروق دي لشجرة قرار ونصمم داتا بوابة المدرسة كاملة.
+
+<Checklist id="aws-cp-20" title="خلّصت الفصل لما" items={["تربط DynamoDB بالـ access patterns والمفاتيح", "متعتبرش ElastiCache مصدر الحقيقة تلقائيًا", "تفرق document عن graph", "تفرق OLTP عن Redshift OLAP", "تعرف إن managed وserverless لسه محتاجين تصميم وتكلفة"]} />
+
+<Quiz>
+<Q n={1} q="عايز تخزن session وتجيبها بمفتاح فريد بسرعة؛ تبدأ بإيه؟">DynamoDB اختيار منطقي لـ key-value access pattern.</Q>
+<Q n={2} q="ليه ElastiCache مش بديل مباشر دائم للـ database؟">لأن cache قد تفقد أو تطرد بيانات، والتطبيق لازم يرجع لمصدر الحقيقة.</Q>
+<Q n={3} q="تحليل اتجاه الدرجات لخمس سنين على حجم ضخم؛ أنهي خدمة؟">Redshift كـ data warehouse للتحليلات، مش مسار التسجيل التشغيلي الأساسي.</Q>
+</Quiz>

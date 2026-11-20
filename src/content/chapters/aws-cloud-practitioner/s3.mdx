@@ -1,0 +1,85 @@
+---
+title: "Amazon S3: مخزن الـ objects"
+short: S3
+order: 17
+label: فصل ١٧
+badge: Storage وDatabases · فصل ١٧
+en: object storage · bucket · key · versioning · lifecycle · replication
+keywords: S3 · storage classes · static assets · CRR · SRR
+goal: تفهم نموذج S3 وتحمي الـ objects وتختار storage class وlifecycle وreplication حسب الاحتياج.
+part: Storage وDatabases
+color: c2
+---
+
+## S3 مش هارد افتراضي
+
+`Amazon S3` object storage. كل object فيه bytes وmetadata، وموجود في `bucket` تحت `key` فريد. الـ key ممكن شكله يبقى `assets/logo.png`، لكن `/` جزء من الاسم وواجهة الإدارة بتعرضه كـ folders.
+
+<Box type="story" icon="📚" title="مخزن ملفات المدرسة">
+
+الـ bucket هو المخزن، والـ key رقم الرف الكامل، والـ object هو الملف نفسه. الموظف يطلب الملف باسمه؛ مش بيفتح block ويعدّل نصه زي هارد EBS.
+
+</Box>
+
+S3 إقليمي، واسم الـ bucket لازم يكون فريد عالميًا ضمن partition. البيانات الخاصة تبدأ private؛ الوصول العام محتاج قرار وسياسات واضحة، مش checkbox عشوائي.
+
+## Versioning: رجّع النسخة القديمة
+
+لما تفعّل `S3 Versioning`، overwrite يعمل version جديدة، وdelete العادي يضيف delete marker بدل إزالة كل النسخ. تقدر تسترجع version أقدم.
+
+Versioning حماية من خطأ منطقي، لكنها تزود التخزين والتكلفة. استخدم lifecycle للـ noncurrent versions لو مش محتاج تحتفظ بيها للأبد.
+
+<Hl c="g">Versioning يساعدك ترجع، لكنه مش بديل عن permissions وbackup/replication strategy.</Hl>
+
+## Storage classes من غير حفظ أسعار
+
+- `S3 Standard`: وصول متكرر وlatency منخفضة عبر عدة AZs.
+- `S3 Intelligent-Tiering`: نمط وصول مش معروف؛ ينقل objects بين access tiers وله monitoring/automation considerations.
+- `Standard-IA`: وصول قليل لكن محتاج استرجاع سريع؛ فيه minimums ورسوم retrieval.
+- `One Zone-IA`: أقل resilience لأنه في AZ واحدة؛ لداتا قابلة لإعادة الإنشاء.
+- `Glacier Instant Retrieval`: archive قليل الاستخدام مع استرجاع سريع.
+- `Glacier Flexible Retrieval`: archive بوقت استرجاع من دقائق لساعات.
+- `Glacier Deep Archive`: أرخص archive طويل الأجل عادةً، والاسترجاع أبطأ.
+
+راجع الأسعار والحد الأدنى للمدة والحجم ورسوم الاسترجاع قبل الاختيار؛ «أرخص لكل GB» مش معناها أرخص إجماليًا.
+
+## Lifecycle وReplication
+
+`S3 Lifecycle` يعمل transition بعد مدة أو expiration. مثال: واجبات قديمة من Standard إلى archive، ثم حذف قانوني بعد مدة معتمدة.
+
+`S3 Replication` ينسخ objects تلقائيًا إلى bucket أخرى:
+
+- `SRR`: داخل نفس Region.
+- `CRR`: إلى Region مختلفة.
+
+المصدر والوجهة لازم versioning يكون enabled. Replication لها permissions وتكلفة، ومش معناها إن lifecycle أو deletes كلها تتكرر بالطريقة اللي متخيلها؛ راجع الإعدادات.
+
+## Static assets للبوابة
+
+صور الشعار وCSS وملفات عامة تناسب S3، وغالبًا تتقدم بأمان عبر CloudFront بدل فتح bucket كلها public. بيانات الطلبة الحساسة تفضل private ومشفرة وبـ least privilege.
+
+<Box type="warn" title="التشفير مش تصريح وصول">
+
+S3 يدعم encryption، لكن التشفير لا يصلّح bucket policy مفتوحة. طبّق Block Public Access حيث مناسب، وراجع IAM والـ bucket policy والـ logs.
+
+</Box>
+
+## 🧪 Lab ورقي: دورة حياة واجب
+
+ارسم object اسمه `homework/2026/lesson-1.pdf`: يوم الرفع في Standard، بعد انتهاء السنة إلى archive، وبعد مدة retention معتمدة إلى expiration. أضف versioning وسؤال: هل النسخ القديمة لها rule منفصلة؟
+
+ده تمرين بلا تكلفة. لو جرّبت bucket حقيقية، استخدم بيانات وهمية، راجع رسوم التخزين والطلبات والنقل، واحذف **كل versions وdelete markers** ثم bucket بعد التجربة.
+
+## اختار صح
+
+S3 للـ objects والـ static assets والنسخ والأرشيف، مش لتشغيل filesystem تقليدي ولا block disk لـ EC2. storage class قرار access pattern، وlifecycle automation، وreplication نسخة في bucket أخرى.
+
+الفصل الجاي هنقارن object بـ block وfile، وندخل EFS وFSx والحلول الهجينة.
+
+<Checklist id="aws-cp-17" title="خلّصت الفصل لما" items={["تشرح bucket وkey وobject", "تعرف أثر versioning على overwrite وdelete", "تختار storage class حسب الوصول لا الاسم", "تفرق lifecycle عن replication", "تحمي static assets من غير فتح داتا حساسة"]} />
+
+<Quiz>
+<Q n={1} q="هل `reports/a.pdf` معناها folder حقيقية جوّه S3؟">لأ. ده key، والـ slash جزء من الاسم وتعرضه الواجهة كأنه hierarchy.</Q>
+<Q n={2} q="عايز نقل ملفات قديمة للأرشيف تلقائيًا؛ تستخدم إيه؟">S3 Lifecycle transition rule.</Q>
+<Q n={3} q="إيه شرط أساسي لـ S3 Replication؟">تفعيل versioning على source وdestination buckets مع permissions مناسبة.</Q>
+</Quiz>

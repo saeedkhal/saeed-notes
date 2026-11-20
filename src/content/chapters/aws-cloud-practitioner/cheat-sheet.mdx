@@ -1,0 +1,93 @@
+---
+title: Cheat Sheet — AWS Cloud Practitioner
+short: Cheat Sheet
+order: 41
+label: الآخر
+badge: التكلفة والامتحان · الآخر
+en: CLF-C02 · Cloud Concepts · Security · Technology · Billing
+keywords: Domains · Comparisons · Architecture · Cost · Final review
+goal: تراجع الفروق الحاسمة والـ architecture والتكلفة في صفحة واحدة قبل الاختبار.
+part: التكلفة والامتحان
+color: dark
+---
+
+## وزن الخريطة
+
+دليل `CLF-C02` الرسمي يقسم الامتحان تقريبًا: Cloud Concepts **٢٤٪**، Security and Compliance **٣٠٪**، Cloud Technology and Services **٣٤٪**، Billing/Pricing/Support **١٢٪**.
+
+<Box type="warn" title="راجع قبل الحجز">
+
+الأوزان وأسماء الخدمات دي مبنية على CLF-C02 والـ docs المتاحة في أكتوبر ٢٠٢٦. AWS بتغير المنتجات، ودليل الامتحان الرسمي وقت الحجز هو الحكم.
+
+</Box>
+
+## الزبدة
+
+<Cheat items={[
+  ["Cloud value", "بدّل CapEx بـ OpEx نسبيًا، زوّد السرعة والمرونة، واستفيد من economies of scale"],
+  ["Elasticity", "السعة تكبر وتصغر مع الطلب؛ scalability قدرة النظام يكبر"],
+  ["High availability", "وزّع على أكتر من AZ؛ multi-Region قرار DR أعقد وأغلى"],
+  ["Shared responsibility", "AWS مسؤولة عن security **of** cloud؛ العميل عن security **in** cloud حسب الخدمة"],
+  ["Region / AZ / Edge", "Region منطقة جغرافية، AZ موقع معزول نسبيًا، edge قريب من المستخدم"],
+  ["Well-Architected", "Operational Excellence · Security · Reliability · Performance Efficiency · Cost Optimization · Sustainability"],
+  ["IAM", "least privilege، roles بدل long-term keys، MFA للـ root، ومتستخدمش root يوميًا"],
+  ["IAM Identity Center", "وصول workforce مركزي لعدة accounts وتطبيقات"],
+  ["Cognito", "هوية مستخدمي التطبيق، مش بديل IAM للـ admins"],
+  ["KMS / Secrets", "KMS يدير keys؛ Secrets Manager يخزن ويدور secrets؛ ACM للشهادات"],
+  ["WAF / Shield", "WAF يمنع web patterns؛ Shield لـ DDoS"],
+  ["GuardDuty / Inspector / Macie", "تهديدات · vulnerabilities · sensitive data في S3"],
+  ["CloudWatch / CloudTrail / Config", "metrics/logs/alarms · API audit · configuration/compliance"],
+  ["EC2 / Lambda", "تحكم في server · function event-driven serverless"],
+  ["ECS / EKS / Fargate", "containers من AWS · Kubernetes · compute serverless للـ containers"],
+  ["Auto Scaling / ELB", "غيّر عدد الموارد · وزّع traffic"],
+  ["S3 / EBS / EFS", "object · block لـ EC2 · shared Linux files"],
+  ["S3 classes", "Frequent → Standard؛ unknown → Intelligent-Tiering؛ archive → Glacier classes"],
+  ["RDS / Aurora", "relational managed · MySQL/PostgreSQL-compatible cloud-native relational"],
+  ["DynamoDB / ElastiCache", "key-value/document serverless · in-memory cache"],
+  ["Multi-AZ / Read replica", "availability/failover · read scaling"],
+  ["VPC", "subnets وroutes؛ security group stateful، NACL stateless"],
+  ["Route 53 / CloudFront / ELB", "DNS · CDN · traffic distribution"],
+  ["VPN / Direct Connect", "encrypted عبر الإنترنت · private dedicated connection"],
+  ["SQS / SNS / EventBridge", "queue · pub/sub · event routing"],
+  ["Athena / Glue / EMR", "SQL على S3 · catalog/ETL · open-source Big Data"],
+  ["Kinesis / Redshift", "streaming · data warehouse"],
+  ["QuickSight / OpenSearch", "BI dashboard · search/log analytics"],
+  ["SageMaker AI / Bedrock / Q", "custom ML · foundation-model apps · assistant جاهز"],
+  ["Rekognition / Textract", "صور وفيديو · مستندات وforms/tables"],
+  ["Polly / Transcribe", "text→speech · speech→text"],
+  ["7 Rs", "rehost · replatform · refactor · repurchase · relocate · retain · retire"],
+  ["Migration tools", "Evaluator للتقييم؛ Transform للتخطيط الحديث؛ MGN للـ rehost"],
+  ["DMS / Schema Conversion", "حرّك database data وCDC · حوّل schema"],
+  ["DataSync / Transfer Family", "online bulk files · managed SFTP/FTPS/FTP"],
+  ["Storage Gateway", "واجهة hybrid مستمرة؛ Snow Family legacy للعملاء الجدد في ٢٠٢٦"],
+  ["On-Demand / Spot", "مرونة بلا التزام · spare capacity قابلة للقطع"],
+  ["Savings Plans / RI", "commitment discount؛ مش ضمان capacity"],
+  ["Calculator / Explorer", "estimate قبل البناء · تحليل وforecast بعد الاستخدام"],
+  ["Budgets / CUR 2.0", "alerts مش hard cap · billing line items تفصيلية عبر Data Exports"],
+  ["Organizations", "accounts وSCPs وconsolidated billing؛ SCP مش permission grant"],
+  ["Support sources", "re:Post معرفة · Artifact compliance · Marketplace software · APN partners"],
+  ["Support 2026", "Basic · Business Support+ · Enterprise · Unified Operations؛ خطط قديمة تنتهي ١ يناير ٢٠٢٧"],
+]} />
+
+## Architecture في نفس واحد
+
+`Route 53` يوجه، `CloudFront` يقرب، `WAF` يفلتر، `ALB` يوزع، compute يشغل، database تخزن، `CloudWatch` يراقب، `CloudTrail` يسجل الأفعال، و`AWS Backup` يحمي النسخ.
+
+<Hl c="y">في السؤال، دور على المطلوب الأساسي وبعدين استبعد الخدمة اللي بتحل مشكلة مختلفة.</Hl>
+
+## قبل ما تجاوب
+
+- كلمة **most cost-effective** لا تلغي security وavailability requirements.
+- `managed` يقلل شغل العميل، لكنه مش يلغي مسؤوليته عن data وaccess.
+- serverless لا يعني مجاني ولا يعني مفيش limits.
+- اختر إجابة تحقق كل القيود بأقل تعقيد، مش أكتر architecture فيها خدمات.
+
+الفصل الجاي اختبار أصلي من ٣٠ سؤال؛ حله من غير فتح الـ Cheat الأول، وبعدين اقرأ تفسير كل إجابة.
+
+<Checklist id="aws-cp-41" title="جاهز للاختبار لما" items={["تشرح الفروق من غير حفظ كلمة منفردة", "ترسم request path وتحدد مسؤولية كل خدمة", "تراجع تغييرات ٢٠٢٦ في migration وtransfer وsupport", "تحل بالاستبعاد وتقرأ كل القيود"]} />
+
+<Quiz>
+<Q n={1} q="مين يسجل API call ومين يعمل alarm على CPU؟">`CloudTrail` يسجل الـ API call، و`CloudWatch` يراقب CPU ويعمل alarm.</Q>
+<Q n={2} q="Multi-AZ وread replica نفس الهدف؟">لأ. Multi-AZ أساسه availability وfailover؛ read replica أساسها توسيع القراءة.</Q>
+<Q n={3} q="Budget يضمن الفاتورة متعديش الرقم؟">لأ. هو alert وأحيانًا actions محددة؛ billing data مش لحظية ومش hard cap عام.</Q>
+</Quiz>

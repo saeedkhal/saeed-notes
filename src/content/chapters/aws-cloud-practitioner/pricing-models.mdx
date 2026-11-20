@@ -1,0 +1,97 @@
+---
+title: نماذج التسعير والـ Commitments
+short: Pricing Models
+order: 37
+label: فصل ٣٧
+badge: التكلفة والامتحان · فصل ٣٧
+en: pay-as-you-go · On-Demand · Reserved Instances · Savings Plans · Spot · Dedicated Hosts · data transfer
+keywords: مرونة · التزام · سعة فائضة · سيرفر مخصص · نقل البيانات
+goal: تختار purchase option من ثبات الحمل وقدرته على الانقطاع، من غير خلط الخصم بحجز السعة.
+part: التكلفة والامتحان
+color: c2
+---
+
+## الدفع حسب الاستخدام
+
+فكرة AWS الأساسية `pay-as-you-go`: مفيش شراء داتا سنتر مقدمًا، وتدفع حسب أبعاد الخدمة؛ compute بالوقت، storage بالـ GB، requests بعددها، ونقل data حسب الاتجاه والمكان.
+
+ده مش معناه إن كل خدمة ليها نفس الوحدة أو إن كل traffic مجاني. صفحة pricing الخاصة بالخدمة هي الحكم.
+
+## On-Demand
+
+`EC2 On-Demand Instances` من غير التزام طويل أو دفع مقدم، ومناسبة للحمل الجديد أو المتغير أو القصير. المرونة أعلى، لكن السعر للوحدة عادة أعلى من commitment مناسب.
+
+<Box type="story" title="أتوبيس الرحلة">
+
+تأجير أتوبيس يوم واحد مرن لكنه أغلى في اليوم. عقد ثابت أرخص لو متأكد إنك محتاجه كل يوم. كرسي standby رخيص، بس ممكن يطلبوا منك تقوم.
+
+</Box>
+
+## Savings Plans
+
+`Savings Plans` خصم مقابل commitment لمقدار استخدام محسوب بـ **دولار في الساعة** لمدة سنة أو ٣ سنين. لو استهلاكك أقل من الالتزام، بتدفع الالتزام برضه.
+
+- `Compute Savings Plans`: مرونة واسعة عبر EC2 وFargate وLambda، وبتفاصيل أوسع راجع docs.
+- `EC2 Instance Savings Plans`: التزام أضيق بعيلة instance في Region، وخصم ممكن يكون أكبر.
+- AWS أضافت أنواعًا لخدمات أخرى، منها Database وSageMaker AI؛ التغطية تتغير، فلا تعمم.
+
+<Hl c="y">Savings Plan خصم مالي على استخدام مؤهل؛ مش Capacity Reservation.</Hl>
+
+## Reserved Instances
+
+`Reserved Instances (RIs)` نموذج commitment أقدم، مشهور في مواد CLF-C02، لمدة سنة أو ٣ سنين وبخيارات دفع. في EC2 هو billing discount على استخدام مطابق، مش server ملموس باسمك.
+
+في قرارات EC2 الجديدة، AWS بتوصي غالبًا بمقارنة Savings Plans أولًا، وبعض العائلات الجديدة قد لا تدعم RI pricing. خدمات مختلفة لها reservations خاصة، زي Redshift Reserved Nodes.
+
+<Box type="warn" title="خصم ولا سعة؟">
+
+`RI` و`Savings Plans` يجاوبوا: هتتحاسب إزاي؟ `On-Demand Capacity Reservation` يجاوب: هل السعة متحجوزة وقت ما أحتاجها؟ المفهومين مستقلين.
+
+</Box>
+
+## Spot Instances
+
+`EC2 Spot Instances` تستخدم spare capacity بخصم كبير، لكن AWS ممكن تسترجع الـ instance بإشعار قصير. مناسبة لـ batch، CI، rendering، analytics، وstateless workers اللي تستحمل interruption.
+
+مش مناسبة لو server وحيد لبوابة الامتحان ومفيش failover أو checkpoint. صمّم workload للانقطاع؛ متعتبرش الخصم ضمان.
+
+## Dedicated Hosts
+
+`Dedicated Hosts` physical EC2 server مخصص لاستخدام عميل واحد، مع visibility على sockets وcores. يفيد في compliance أو تراخيص software مرتبطة بسيرفر.
+
+هو مختلف عن `Dedicated Instances`، وممكن يبقى أغلى لو utilization قليل. اختاره لمتطلب واضح، مش لمجرد كلمة security.
+
+## نقل البيانات
+
+قاعدة مذاكرة مفيدة، لكن مش مطلقة:
+
+- Data transfer **إلى** AWS من الإنترنت غالبًا بلا رسوم.
+- Data transfer **خارج** AWS للإنترنت غالبًا عليه تكلفة بعد أي allowance.
+- بين Regions غالبًا تكلفة، وتتحسب عادة ناحية المصدر الخارج.
+- بين Availability Zones ممكن يكلف حتى داخل نفس Region.
+- نفس AZ أو بين خدمات معينة ممكن يكون مجاني، لكن فيه استثناءات.
+
+`CloudFront` وcaching وتقريب المحتوى من المستخدم ممكن يقلل data transfer وتكلفة origin، لكن راجع الأسعار الحالية.
+
+## قرار من أربع أسئلة
+
+<Flow items={[{t:"Predictable?",s:"ثابت ولا متغير",c:1},"→",{t:"Interruptible?",s:"يستحمل قطع",c:2},"→",{t:"Dedicated?",s:"ترخيص أو compliance",c:3},"→",{t:"Transfer?",s:"داخل ولا خارج وفين",c:4}]} />
+
+- جديد أو غير متوقع: On-Demand.
+- ثابت ومؤهل: قارن Savings Plans والـ reservations.
+- مرن ويتحمل القطع: Spot.
+- عتاد فعلي مخصص: Dedicated Host.
+
+## 🧪 Lab آمن
+
+صنّف على ورق: portal تجريبي أسبوع، worker يحول 10,000 صورة، baseline ثابت سنة، وsoftware رخصته per-socket. متشتريش commitment للتجربة.
+
+الفصل الجاي هنستخدم Calculator للتقدير، وExplorer للفهم، وBudgets للتحذير، وData Exports للتفاصيل.
+
+<Checklist id="aws-cp-37" title="خلّصت الفصل لما" items={["تختار On-Demand أو Spot من طبيعة الحمل", "تفرق بين Savings Plans وRI وحجز السعة", "تعرف سبب Dedicated Host", "تراجع اتجاه ومكان data transfer"]} />
+
+<Quiz>
+<Q n={1} q="Batch job يعمل checkpoint ويستحمل قطع. أرخص اختيار محتمل؟">`Spot Instances`، بشرط تصميمه لاسترجاع العمل عند interruption.</Q>
+<Q n={2} q="Savings Plan معناه AWS ضامنة EC2 capacity؟">لأ. ده pricing commitment؛ ضمان السعة موضوع Capacity Reservation.</Q>
+<Q n={3} q="نقلت data بين AZs في نفس Region؛ أعتبره مجاني؟">لأ. ممكن تكون فيه رسوم regional data transfer؛ راجع pricing للخدمات والمسار.</Q>
+</Quiz>

@@ -1,0 +1,97 @@
+---
+title: مين يعمل إيه على أنهي مورد؟
+short: أساس IAM
+order: 7
+label: فصل ٧
+badge: الأمان والحساب · فصل ٧
+en: IAM user · group · role · policy · identity-based policy · resource-based policy
+keywords: users · groups · roles · policies · allow · deny
+goal: تفهم مكونات IAM وتقرأ قرار صلاحية بسيط من الهوية والفعل والمورد.
+part: الأمان والحساب
+color: c2
+---
+
+## IAM هو بواب AWS
+
+AWS Identity and Access Management يحدد **مين** يقدر يعمل **إيه** على **أنهي resource** وتحت **أنهي شروط**. IAM خدمة عالمية للحساب، لكن الموارد اللي بتتحكم فيها قد تكون إقليمية.
+
+بوابة المدرسة فيها مدير، مدرس، طالب، وتطبيق. مش منطقي كلهم ياخدوا نفس المفتاح.
+
+## أربع قطع أساسية
+
+<Grid2>
+<Card title="User" c={1}>
+
+هوية طويلة العمر داخل IAM لشخص أو حالة خاصة. AWS حاليًا توصي البشر بالاتحاد وtemporary credentials بدل تكثير IAM users.
+
+</Card>
+<Card title="Group" c={2}>
+
+تجميع IAM users لتسهيل منح policy مشتركة، زي مجموعة دعم. الـ group مش بيتعمل له sign-in ومش بيحتوي groups تانية.
+
+</Card>
+<Card title="Role" c={3}>
+
+هوية بصلاحيات قابلة للـ assume. ملهاش password أو long-term access key خاص بيها؛ الجلسة تاخد temporary credentials.
+
+</Card>
+<Card title="Policy" c={4}>
+
+وثيقة JSON بتوصف Effect وAction وResource وقد تحتوي Condition. تتربط بهوية أو resource حسب النوع.
+
+</Card>
+</Grid2>
+
+<Box type="story" icon="🎫" title="كارنيه المدرسة">
+
+الاسم على الكارنيه هو principal، المكتوب إنه مسموح يدخل المعمل هو permission، وباب المعمل هو resource. الكارنيه المؤقت لزائر أقرب للـ role session من مفتاح دائم.
+
+</Box>
+
+## Identity-based policy
+
+تتربط بـ user أو group أو role، وتقول الهوية دي تقدر تعمل إيه. مثلًا role تطبيق البوابة يقرأ ملفات من bucket محدد.
+
+الـ managed policy كيان مستقل ممكن يتربط بأكتر من هوية. الـ inline policy جزء مباشر من هوية واحدة. الاختيار له أثر في الإدارة وإعادة الاستخدام.
+
+## Resource-based policy
+
+تتربط بالمورد نفسه وتحدد مين يقدر يوصل له، زي S3 bucket policy. مفيدة خصوصًا للوصول بين حسابات أو لتجميع قواعد المورد في مكانه.
+
+مش كل خدمة تدعم resource-based policies، وسلوك جمع السياسات يختلف مع cross-account وOrganizations. للمبتدئ: اجمع كل السياسات المؤثرة قبل ما تحكم.
+
+## منطق القرار ببساطة
+
+<Flow items={[
+  { t: "Default", s: "Implicit deny", c: 4 },
+  "→",
+  { t: "Allow مناسب", s: "هوية أو مورد", c: 3 },
+  "→",
+  { t: "Explicit deny؟", s: "يكسب", c: 5 },
+]} />
+
+الأصل إن الطلب مرفوض. يحتاج `Allow` ينطبق عليه، وأي `Deny` صريح مؤثر يغلب الـ allow. بعد كده فيه طبقات إضافية زي permissions boundaries وSCPs.
+
+<Hl c="b">Policy مش معناها مستخدم؛ هي ورقة قواعد. والـ role مش group؛ هو هوية بتتعمل لها جلسة مؤقتة.</Hl>
+
+## 🧪 تمرين آمن: اقرأ الجملة
+
+اكتب من غير Console: «تطبيق البوابة يقرأ صورًا من bucket المدرسة فقط». حدد principal وaction وresource، واقترح role للتطبيق. متكتبش wildcard شامل.
+
+<Box type="warn" title="Console access غير API access">
+
+Password للـ Console وaccess keys للـ API نوعان مختلفان من credentials. وجود واحد لا يعني وجود التاني، والأفضل تجنب الطويلة العمر متى توفر role.
+
+</Box>
+
+## قبل الفصل الجاي
+
+عرفنا قطع IAM. الفصل الجاي هنضيق الصلاحيات عمليًا: temporary credentials وIAM Identity Center وpermissions boundaries، من غير ما نحولها لأختام سحرية.
+
+<Checklist id="aws-cp-07" title="خلّصت الفصل لما" items={["تفرّق بين user وgroup وrole", "تعرف مكونات policy الأساسية", "تفرّق بين identity-based وresource-based policy", "تفهم implicit deny وexplicit deny"]} />
+
+<Quiz>
+<Q n={1} q="هل IAM group يقدر التطبيق يعمل له assume؟">لأ. الـ role هو الهوية القابلة للـ assume؛ group مجرد تجميع users.</Q>
+<Q n={2} q="Allow وexplicit Deny بينطبقوا على نفس الطلب. النتيجة؟">الطلب مرفوض، لأن الـ explicit deny يغلب الـ allow.</Q>
+<Q n={3} q="Bucket policy نوعها إيه؟">Resource-based policy لأنها متعلقة بالـ S3 bucket نفسه.</Q>
+</Quiz>

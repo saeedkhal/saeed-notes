@@ -1,0 +1,99 @@
+---
+title: اختار خدمة الـ Analytics الصح
+short: Analytics
+order: 33
+label: فصل ٣٣
+badge: Data وAI والهجرة · فصل ٣٣
+en: Athena · Glue · EMR · Kinesis · Redshift · QuickSight · OpenSearch
+keywords: SQL على S3 · تجهيز · Big Data · Streaming · Warehouse · Dashboard · Search
+goal: تميّز خدمات التحليل من كلمة المشكلة بدل ما تحفظ قايمة أسماء.
+part: Data وAI والهجرة
+color: c3
+---
+
+## السؤال الأول: الداتا واقفة ولا ماشية؟
+
+قبل اسم الخدمة، اسأل: الداتا ملفات في `S3`؟ ولا أحداث جاية دلوقتي؟ ولا جداول تحليلية كبيرة؟ ولا المطلوب شاشة للإدارة؟
+
+<Box type="story" title="بوابة المدرسة">
+
+أرشيف حضور السنة في مخزن، لكن دخول الطلبة من البوابة stream لحظي. أمين المخزن، عامل النظافة، والمراقب اللي قدام البوابة كل واحد شغلته مختلفة؛ خدمات الـ analytics كده برضه.
+
+</Box>
+
+<Hl c="g">اختار من نوع الشغل: query، prepare، process، stream، warehouse، visualize، أو search.</Hl>
+
+## Athena: SQL من غير سيرفر
+
+`Amazon Athena` بيعمل queries بـ SQL مباشرة على بيانات في `S3` ومصادر مدعومة. هو `serverless`، والدفع غالبًا حسب حجم الداتا اللي اتعملها scan.
+
+- سؤال سريع أو ad-hoc على logs وملفات: Athena.
+- `Parquet` وpartitioning يقللوا الداتا المقروءة والتكلفة.
+- هو مش database تشغيلية للتطبيق، ومش أداة ETL أساسية.
+
+## Glue: الفهرس ومطبخ التجهيز
+
+`AWS Glue` خدمة data integration و`ETL`: تكتشف schema بـ crawlers، تحفظ metadata في `Glue Data Catalog`، وتنضف وتحول الداتا.
+
+Athena وEMR وRedshift Spectrum يقدروا يستفيدوا من الـ Catalog. لو السؤال فيه **discover schema** أو **catalog** أو **transform data**، فكّر في Glue.
+
+## EMR: مصنع الـ Big Data
+
+`Amazon EMR` يشغّل frameworks مفتوحة زي Spark وHive وFlink لمعالجة أحجام ضخمة. عندك اختيارات managed clusters و`EMR Serverless` حسب الـ workload.
+
+<Box type="idea" title="Glue ولا EMR؟">
+
+Glue مناسب لـ ETL مُدار وتجهيز الداتا بأقل إدارة. EMR مناسب لما الفريق محتاج ecosystem وأدوات open source وتحكم أوسع في معالجة Big Data.
+
+</Box>
+
+## Kinesis: الأحداث وهي داخلة
+
+`Amazon Kinesis` عيلة للـ real-time streaming:
+
+- `Kinesis Data Streams`: تستقبل stream وتسيب consumers يعالجوه.
+- `Amazon Data Firehose`: توصل streams لوجهات زي S3 وRedshift وOpenSearch بإدارة أقل.
+- `Kinesis Video Streams`: فيديو وبيانات مرتبطة بيه.
+- `Managed Service for Apache Flink`: معالجة stream بكود Flink.
+
+مثال: عدد الطلبة اللي عدّوا من البوابة آخر دقيقة، مش تقرير آخر السنة.
+
+## Redshift: مخزن التحليلات
+
+`Amazon Redshift` data warehouse للـ SQL analytics المعقدة على بيانات كبيرة. ينفع provisioned أو serverless، ومصمم لتحليل مجموعات بيانات، مش لتسجيل كل click كـ transaction صغير.
+
+لو الإدارة بتجمع بيانات الحضور والمصروفات والنتائج وعايزة تقارير متكررة ومعقدة: Redshift أقرب من Athena.
+
+## QuickSight: الرسمة مش المخزن
+
+`Amazon QuickSight` خدمة BI للـ dashboards والـ visualizations، وتوصل لمصادر زي Athena وRedshift وRDS. هي تعرض insight؛ مش مكان تخزين الداتا ولا محرك ETL.
+
+<Box type="warn" title="الاسم بيتغير">
+
+في صفحات AWS الحديثة ممكن تقابل اسم `Amazon Quick` ضمن تجربة أعمال أوسع، بينما مواد CLF-C02 وأسئلة كتير ما زالت تقول `Amazon QuickSight`. راجع دليل الامتحان والـ docs وقت الحجز.
+
+</Box>
+
+## OpenSearch: دور وابحث في logs
+
+`Amazon OpenSearch Service` خدمة مُدارة للبحث النصي، log analytics، monitoring، وclickstream analytics شبه اللحظي. لو المطلوب search box في portal أو استكشاف logs بسرعة، دي إشارة قوية.
+
+هو مش بديل عام لـ Redshift: البحث في documents والـ logs غير SQL warehouse للتقارير المؤسسية.
+
+## خريطة الاختيار
+
+<Chips items={["SQL على S3 → Athena", "Catalog وETL → Glue", "Spark وBig Data → EMR", "real-time stream → Kinesis", "data warehouse → Redshift", "dashboard → QuickSight", "search وlogs → OpenSearch"]} />
+
+## 🧪 Lab آمن على الورق
+
+اكتب سبع كروت بأسماء الخدمات. وزّع عليهم: ملف CSV في S3، تنظيف أعمدة، Spark job، clicks لحظية، تقرير مبيعات سنوي، dashboard للمدير، والبحث في logs. مفيش حساب AWS ولا تكلفة.
+
+الفصل الجاي هننقل من تحليل الداتا لخدمات الـ AI، وهنفرّق بين model جاهز وبناء model مخصوص.
+
+<Checklist id="aws-cp-33" title="خلّصت الفصل لما" items={["تفرّق بين data at rest والـ streaming", "تختار Athena وGlue وEMR من نوع المهمة", "تفرق بين Redshift وQuickSight وOpenSearch"]} />
+
+<Quiz>
+<Q n={1} q="ملفات logs في S3 وعايز SQL سريع من غير cluster. تختار إيه؟">`Athena`؛ query serverless على الداتا في S3، مع الانتباه لحجم الـ scan.</Q>
+<Q n={2} q="عايز crawler يكتشف schema ويحطه في catalog. مين؟">`AWS Glue`، وبالذات Glue Data Catalog مع crawler.</Q>
+<Q n={3} q="Dashboard للإدارة فوق بيانات Redshift. QuickSight ولا OpenSearch؟">`QuickSight` للـ BI والـ visualization؛ OpenSearch للبحث والـ log analytics.</Q>
+</Quiz>

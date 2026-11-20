@@ -1,0 +1,197 @@
+---
+title: من المشكلة للخدمة
+short: Service Chooser
+order: 40
+label: فصل ٤٠
+badge: التكلفة والامتحان · فصل ٤٠
+en: compute · storage · database · networking · security · operations · analytics · migration · cost
+keywords: Decision guide · Keywords · Managed · Serverless · Resilience · Cost
+goal: تحول وصف المشكلة لاختيار مبرر، وتستبعد الخدمات القريبة بدل حفظ كلمة واحدة.
+part: التكلفة والامتحان
+color: c5
+---
+
+## طريقة الحل
+
+متقفزش على أول keyword. استخرج: **نوع المهمة، شكل الداتا، مقدار الإدارة، زمن الاستجابة، نطاق التوفر، والأمان والتكلفة**.
+
+<Box type="story" title="مش كل طلب يتبعت للمدير">
+
+في المدرسة، جدول الحصص عند الوكيل، المفتاح عند البواب، والدرجات عند الكنترول. كلمة "مشكلة طالب" مش كفاية؛ لازم تعرف نوع المشكلة وصاحب المسؤولية.
+
+</Box>
+
+## Compute وتشغيل الكود
+
+<Grid2>
+<Card title="Server كامل" c={1}>
+
+تحكم في OS وinstance → `EC2`. اختار Auto Scaling للتغير، وElastic Load Balancing لتوزيع الطلبات.
+
+</Card>
+<Card title="Function قصيرة" c={2}>
+
+Event-driven ومن غير servers → `Lambda`. مناسبة للـ stateless tasks وحدودها الحالية تُراجع في docs.
+
+</Card>
+<Card title="Containers" c={3}>
+
+AWS-native orchestration → `ECS`. Kubernetes requirement → `EKS`. Serverless compute للـ containers → `Fargate`.
+
+</Card>
+<Card title="Deploy app بسهولة" c={4}>
+
+ارفع الكود والمنصة تدير البيئة → `Elastic Beanstalk`. Workflow بسيط للـ web apps → راجع `App Runner` و`Lightsail` حسب الحالة.
+
+</Card>
+</Grid2>
+
+## Storage
+
+- Object، data lake، static assets، backup → `S3`.
+- Block volume لـ EC2 → `EBS`.
+- Shared Linux file system عبر instances وAZs → `EFS`.
+- Managed file systems متخصصة أو Windows → `FSx`.
+- Archive نادر → S3 Glacier storage classes، مع retrieval time/cost.
+- Backup policies مركزيًا → `AWS Backup`.
+
+<Hl c="p">Object غير block غير file؛ نوع الوصول أهم من كلمة storage.</Hl>
+
+## Databases
+
+- Relational SQL مُدار → `RDS`.
+- MySQL/PostgreSQL-compatible بأداء وتوفر cloud-native → `Aurora`.
+- Key-value/document على scale وlatency منخفض → `DynamoDB`.
+- Cache in-memory → `ElastiCache`.
+- Data warehouse → `Redshift`.
+- Graph relationships → `Neptune`.
+- Ledger غير قابل للتغيير حسب use case → راجع `QLDB` وتوافره الحالي؛ الخدمات تتقاعد.
+
+Multi-AZ للتوفر، read replicas للقراءة والتوسع؛ مش نفس الغرض.
+
+## Networking وتسليم المحتوى
+
+- شبكة منطقية مع subnets وroute tables → `VPC`.
+- DNS وdomain routing وhealth checks → `Route 53`.
+- CDN وedge caching → `CloudFront`.
+- توزيع traffic على targets → `Elastic Load Balancing`.
+- Managed API front door → `API Gateway`.
+- اتصال مشفر عبر الإنترنت → `Site-to-Site VPN`.
+- وصلة private dedicated → `Direct Connect`.
+- ربط VPCs ببساطة → `VPC Peering`؛ شبكة مركزية واسعة → `Transit Gateway`.
+
+## الهوية والأمان
+
+<Grid2>
+<Card title="مين يعمل إيه؟" c={1}>
+
+Workforce وAWS permissions → `IAM` و`IAM Identity Center`. هوية مستخدم التطبيق → `Cognito`.
+
+</Card>
+<Card title="مفاتيح وأسرار" c={2}>
+
+Encryption keys → `KMS`. Secrets مع rotation → `Secrets Manager`. Parameters وإعدادات → `Systems Manager Parameter Store`.
+
+</Card>
+<Card title="تهديدات" c={3}>
+
+Threat detection → `GuardDuty`. Vulnerability scanning → `Inspector`. Sensitive data في S3 → `Macie`.
+
+</Card>
+<Card title="حماية وتجميع" c={4}>
+
+Web exploits → `WAF`. DDoS → `Shield`. Findings مركزيًا → `Security Hub`.
+
+</Card>
+</Grid2>
+
+Certificates → `ACM`. Audit reports من AWS → `Artifact`. Firewall rules للـ instances → security groups؛ subnet stateless rules → network ACLs.
+
+## Monitoring وGovernance
+
+- Metrics، logs، alarms، dashboards → `CloudWatch`.
+- مين عمل API call وإمتى → `CloudTrail`.
+- Resource configuration وcompliance history → `AWS Config`.
+- Fleet operations وpatching وSession Manager → `Systems Manager`.
+- Best-practice checks → `Trusted Advisor`.
+- Service events اللي تأثر عليك → `AWS Health`.
+- Multi-account hierarchy وSCPs وbilling → `Organizations`.
+- Landing zone وحسابات محكومة → `Control Tower`.
+- Infrastructure as code من AWS → `CloudFormation`.
+
+<Box type="idea" title="تلاتة بيتلخبطوا">
+
+CPU عالي؟ CloudWatch. مين حذف الـ bucket؟ CloudTrail. هل bucket configuration خالف rule؟ AWS Config.
+
+</Box>
+
+## Availability وRecovery
+
+حمل داخل أكتر من AZ = high availability داخل Region. نسخ عبر Region يساعد disaster recovery لكنه يزود تعقيد وتكلفة.
+
+- DNS failover → Route 53.
+- Replicate backups مركزيًا → AWS Backup.
+- Disaster recovery للـ servers مع continuous replication → `AWS Elastic Disaster Recovery`.
+- Queues تفصل المكونات → `SQS`.
+- Pub/sub لعدة subscribers → `SNS`.
+- Event routing بين services وSaaS → `EventBridge`.
+
+## Analytics وAI
+
+- SQL مباشر على S3 → Athena.
+- Catalog وETL → Glue.
+- Spark/Hadoop ecosystem → EMR.
+- Streaming → Kinesis.
+- Warehouse → Redshift.
+- BI dashboard → QuickSight، مع متابعة الاسم الحالي Amazon Quick.
+- Search وlogs → OpenSearch.
+- Custom ML → SageMaker AI.
+- Foundation models → Bedrock.
+- AI assistant → Amazon Q.
+- Image → Rekognition؛ document fields → Textract؛ NLP → Comprehend.
+- Bot → Lex؛ text-to-speech → Polly؛ speech-to-text → Transcribe؛ languages → Translate.
+
+## Migration وTransfer
+
+- Assessment وTCO → Migration Evaluator.
+- Planning حديث و7 Rs → AWS Transform؛ Migration Hub اسم legacy للعملاء الجدد.
+- Rehost servers → Application Migration Service / Transform MGN.
+- Database data وCDC → DMS.
+- Database schema → DMS Schema Conversion أو SCT في المواد القديمة.
+- Online files → DataSync.
+- SFTP/FTPS/FTP endpoint → Transfer Family.
+- Hybrid storage interface → Storage Gateway.
+- Physical transfer → Data Transfer Terminal/partners حاليًا؛ Snow Family معلومة امتحانية قديمة مع caveat.
+
+## Cost وSupport
+
+- Estimate → Pricing Calculator.
+- Analyze وforecast → Cost Explorer.
+- Alert → Budgets.
+- Detailed billing export → Data Exports وCUR 2.0.
+- Multi-account bill → Organizations.
+- General knowledge → re:Post.
+- Private technical case → Support plan.
+- Compliance documents → Artifact.
+- Third-party software → Marketplace.
+- Consulting partner → APN.
+
+## Pattern كامل للـ school portal
+
+<Flow items={[{t:"Route 53",s:"DNS",c:1},"→",{t:"CloudFront + WAF",s:"edge وحماية",c:2},"→",{t:"ALB",s:"توزيع",c:3},"→",{t:"ECS أو EC2",s:"app",c:4},"→",{t:"RDS Multi-AZ",s:"data",c:5}]} />
+
+حط static files في S3، secrets في Secrets Manager، metrics في CloudWatch، API activity في CloudTrail، وbackup policy في AWS Backup. ده مثال، مش template يصلح لكل workload.
+
+## 🧪 Lab آمن
+
+اختار خدمة لكل كلمة: object، block، DNS، DDoS، API audit، metric alarm، SQL database، cache، queue، ETL، chatbot، SFTP، estimate. بعدين اكتب ليه البديل القريب غلط.
+
+الفصل الجاي هنضغط المنهج كله في Cheat Sheet للمراجعة السريعة.
+
+<Checklist id="aws-cp-40" title="خلّصت الفصل لما" items={["تختار من نوع المهمة مش keyword وحيدة", "تفرق الخدمات المتشابهة في compute وstorage وdatabase", "تربط security وoperations بالسؤال", "تختار analytics وmigration وcost من النتيجة المطلوبة"]} />
+
+<Quiz>
+<Q n={1} q="عايز تعرف مين غيّر security group، مش CPU كام. تختار؟">`CloudTrail` لأنه يسجل API activity. CloudWatch للـ metrics والـ logs.</Q>
+<Q n={2} q="مستخدمين التطبيق يسجلوا بحساباتهم. IAM ولا Cognito؟">`Cognito` لهوية مستخدمي التطبيق؛ IAM لإدارة الوصول إلى موارد AWS.</Q>
+<Q n={3} q="مكون يبعث event لعدة مستلمين. SQS ولا SNS؟">`SNS` للـ pub/sub fanout. SQS queue يفصل producer عن consumer ويحتفظ بالرسائل للمعالجة.</Q>
+</Quiz>

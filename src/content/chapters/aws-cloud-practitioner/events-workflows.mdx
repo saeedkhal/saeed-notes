@@ -1,0 +1,82 @@
+---
+title: الحدث والخطوات والإيميل
+short: Events وWorkflows
+order: 27
+label: فصل ٢٧
+badge: ربط الأنظمة · فصل ٢٧
+en: Amazon EventBridge · AWS Step Functions · Amazon SES
+keywords: event bus · orchestration · state machine · email
+goal: تختار بين توجيه حدث وتشغيل رحلة متعددة الخطوات وإرسال بريد.
+part: ربط الأنظمة
+color: c2
+---
+
+## EventBridge: موزّع الأحداث
+
+<En>Amazon EventBridge</En> event bus مُدار. مصادر AWS أو تطبيقك أو SaaS تنشر events، والـ rules تطابق محتوى الحدث وتبعته إلى targets.
+
+مثال: حدث `StudentRegistered` فيه نوع المدرسة والمحافظة. Rule تبعته لـ Lambda تجهيز الحساب، وRule تانية تبعته لـ SQS التحليلات.
+
+<Box type="story" icon="🚦" title="غرفة الإذاعة">
+
+الحدث خبر داخل غرفة الإذاعة. كل rule ورقة مكتوب عليها: "لو الخبر عن الصف الأول ابعته للمرشد". الغرفة بتوجّه، مش بتنفذ كل رحلة بنفسها.
+
+</Box>
+
+EventBridge قوي في content-based filtering وتكامل أحداث خدمات مختلفة. SNS أبسط pub/sub push، وSQS طابور يسحبه مستهلك.
+
+## Step Functions: قائد الرحلة
+
+<En>AWS Step Functions</En> تنسّق workflow كـ state machine: خطوات، اختيار، انتظار، retry، وcatch. تعرض تاريخ التنفيذ بدل ما تخبي كل المنطق في Lambda واحدة.
+
+<Flow items={[
+  { t: "راجع البيانات", c: 2 }, "→",
+  { t: "اختار", s: "صحيحة؟", c: 3 }, "→",
+  { t: "أنشئ الحساب", c: 1 }, "→",
+  { t: "ابعت ترحيب", c: 4 },
+]} />
+
+استخدمها لما العملية نفسها لها ترتيب وحالة وقرارات. EventBridge يقول **مين يهتم بالحدث**؛ Step Functions تقول **الرحلة تمشي إزاي**.
+
+## SES: البريد نفسه
+
+<En>Amazon Simple Email Service (SES)</En> خدمة إرسال واستقبال email على نطاق واسع، مناسبة لرسائل زي تأكيد التسجيل وكشف النتيجة.
+
+SES مش workflow engine ولا event bus. ممكن Step Functions أو Lambda تطلب منها إرسال الرسالة.
+
+لازم تلتزم بسياسات مكافحة spam، تدير bounces وcomplaints، وتتحقق من identities. الحساب الجديد قد يبدأ في sandbox بقيود لحد طلب production access.
+
+<Grid2>
+<Card title="خبر حصل" c={2}>
+
+EventBridge: rules توجه event للtargets المناسبة.
+
+</Card>
+<Card title="خطوات مترتبة" c={3}>
+
+Step Functions: orchestration وحالة وretry وقرارات.
+
+</Card>
+</Grid2>
+
+## مثال المدرسة
+
+بعد نجاح الدفع، التطبيق ينشر `FeesPaid`. EventBridge يبعته لـ Step Functions: تأكد من الطالب، حدّث الحالة، ثم اطلب من SES إرسال إيصال. Rule تانية تبعت نسخة للتحليلات من غير ربط الرحلتين.
+
+صمّم الخطوات idempotent لأن retries ممكن تحصل. متبعتش بيانات حساسة زيادة داخل event.
+
+## 🧪 تمرين ورقي آمن
+
+ارسم رحلة قبول طالب: event يبدأها، اختيار لو الأوراق ناقصة، انتظار مراجعة، ثم SES. حط retry على خطوة مؤقتة وcatch لمسار تدخل بشري.
+
+التمرين ورقي. EventBridge وStep Functions وSES خدمات مدفوعة حسب الاستخدام وبها حدود وشروط؛ راجع Pricing ونظّف أي rule أو state machine تجريبية.
+
+الفصل الجاي هنجمع الخدمات في معمارية واحدة لبوابة المدرسة.
+
+<Checklist id="aws-cp-27" title="خلّصت الفصل لما" items={["تشرح rule وtarget في EventBridge", "تميز routing من orchestration", "تستخدم Step Functions للخطوات والحالة", "تعرف إن SES للبريد مش workflow", "تراعي retries والـ spam والسياسات"]} />
+
+<Quiz>
+<Q n={1} q="عايز توجّه events حسب حقل `schoolType`؛ تختار إيه؟">EventBridge rule بحدث مطابق.</Q>
+<Q n={2} q="عملية فيها انتظار وقرار وretry ومتابعة حالة؛ تختار إيه؟">AWS Step Functions.</Q>
+<Q n={3} q="هل SES ينظم خطوات قبول الطالب؟">لأ؛ SES يرسل البريد. Step Functions تنظم الخطوات.</Q>
+</Quiz>

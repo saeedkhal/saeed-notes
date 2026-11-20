@@ -1,0 +1,87 @@
+---
+title: تراقب التشغيل وتراجع التغييرات
+short: Observability وAudit
+order: 29
+label: فصل ٢٩
+badge: التشغيل والحوكمة · فصل ٢٩
+en: CloudWatch · CloudTrail · AWS Config · AWS X-Ray
+keywords: metrics · logs · alarms · audit · compliance · traces
+goal: تفرق بوضوح بين مراقبة التشغيل وسجل الـ API وحالة الإعداد وتتبع الطلب.
+part: التشغيل والحوكمة
+color: c4
+---
+
+## أربع أسئلة، أربع أدوات
+
+<Grid2>
+<Card title="CloudWatch" c={4}>
+
+النظام شغال إزاي دلوقتي؟ Metrics وlogs وalarms وdashboards.
+
+</Card>
+<Card title="CloudTrail" c={5}>
+
+مين عمل API action وإمتى ومنين؟ Event history وtrails للـ audit.
+
+</Card>
+<Card title="AWS Config" c={2}>
+
+المورد كان متظبط إزاي وهل يوافق rules؟ Inventory وconfiguration history وcompliance.
+
+</Card>
+<Card title="AWS X-Ray" c={3}>
+
+الـ request اتأخر فين بين مكونات التطبيق؟ Traces وservice map.
+
+</Card>
+</Grid2>
+
+## CloudWatch: نبض التشغيل
+
+الـ <En>metric</En> رقم عبر الزمن، زي Lambda errors أو API latency. الـ log تفاصيل أحداث التطبيق. الـ alarm يراقب metric أو expression ويغيّر حالته وقد يشغّل action.
+
+<Flow items={[
+  { t: "Metric", s: "Errors", c: 4 }, "→",
+  { t: "Alarm", s: "فوق الحد", c: 2 }, "→",
+  { t: "SNS", s: "إشعار الفريق", c: 1 },
+]} />
+
+الـ alarm مش ضمان إن السبب معروف؛ هو إشارة للتحقيق. اختار threshold ومدة يقللوا الضوضاء.
+
+## CloudTrail: كاميرا الـ API
+
+CloudTrail يسجل نشاط API من Console وCLI وSDK وخدمات AWS: principal، وقت، source IP، request وغيرها. مناسب لسؤال "مين حذف الـ bucket policy؟".
+
+مش بديل للـ application logs، ومش هو أداة CPU monitoring.
+
+## Config: صورة الإعداد عبر الزمن
+
+AWS Config يسجل تكوين الموارد المدعومة وتغيّراته. Config Rules تقيّم compliance، مثل "هل الـ bucket يمنع public access؟".
+
+Config يقول إن الحالة غير compliant؛ مش معناه إنه يمنع التغيير تلقائيًا أو يصلحه إلا لو ربطت remediation مناسبة.
+
+## X-Ray: رحلة الطلب
+
+X-Ray يجمع traces من تطبيق instrumented عشان يوضح أجزاء الطلب، latency والأخطاء بين services. لو API بطيئة بسبب call معين، trace تساعدك تحدده.
+
+<Box type="story" icon="🏥" title="مستشفى المدرسة">
+
+CloudWatch جهاز النبض، CloudTrail دفتر مين فتح باب غرفة الأدوية، Config صورة ترتيب الغرفة ومخالفتها للقواعد، وX-Ray أشعة تتبع المشكلة جوه الرحلة.
+
+</Box>
+
+## 🧪 تمرين ورقي آمن
+
+صنّف الأسئلة: "CPU عالية"، "مين غيّر SG"، "هل bucket خالف rule"، "أنهي service أخّرت request". اكتب CloudWatch، CloudTrail، Config، X-Ray بالترتيب.
+
+لو فعّلت trails أو Config recorders أو خزنت logs، قد تظهر تكاليف تخزين وتحليل وتسجيل. راجع Pricing وامسح التجارب؛ متوقفش audit production عشان التوفير.
+
+الفصل الجاي هنشفّر البيانات وندير المفاتيح والأسرار والشهادات.
+
+<Checklist id="aws-cp-29" title="خلّصت الفصل لما" items={["تربط metrics/logs/alarms بـ CloudWatch", "تربط API audit بـ CloudTrail", "تربط resource state/compliance بـ Config", "تربط request traces بـ X-Ray", "متفترضش إن alarm أو Config rule تصلح السبب وحدها"]} />
+
+<Quiz>
+<Q n={1} q="عايز تعرف مين نفذ `DeleteTable`؛ تفتح إيه؟">CloudTrail.</Q>
+<Q n={2} q="عايز إنذار لما Lambda errors تزيد؛ تستخدم إيه؟">CloudWatch metric وalarm، وممكن SNS للإشعار.</Q>
+<Q n={3} q="عايز تاريخ إعداد bucket وتقييمه ضد rule؛ تستخدم إيه؟">AWS Config.</Q>
+</Quiz>

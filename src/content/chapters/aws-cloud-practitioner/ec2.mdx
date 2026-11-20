@@ -1,0 +1,105 @@
+---
+title: "EC2: سيرفر افتراضي تحت إيدك"
+short: EC2
+order: 12
+label: فصل ١٢
+badge: Compute · فصل ١٢
+en: AMI · instance types · user data · security groups · lifecycle
+keywords: virtual server · AMI · instance family · purchase options
+goal: تفهم مكوّنات EC2 ودورة حياة الـ instance وتلمّح لاختيارات الشراء من غير ما تلخبطها بالحماية.
+part: Compute
+color: c2
+---
+
+## الـ instance مش «جهاز في حسابك»
+
+`Amazon EC2` بيديك compute capacity افتراضية. بتختار صورة بداية، حجم، شبكة، تخزين، وصلاحيات وصول؛ وبعدها AWS تطلع لك <En>instance</En>.
+
+<Box type="story" icon="🏫" title="معمل كمبيوتر جديد">
+
+الـ `AMI` هي نسخة الويندوز والبرامج اللي هتنزل على أجهزة المعمل. الـ instance type هو مواصفات الجهاز. الـ Security Group هو البواب اللي بيسمح لبورتات محددة، وuser data هي ورقة تعليمات أول تشغيل.
+
+</Box>
+
+## AMI + instance type
+
+الـ <En>Amazon Machine Image</En> قالب فيه نظام التشغيل ومعلومات الإقلاع، وممكن يكون AWS-provided أو من Marketplace أو معمول عندك. الـ AMI مرتبطة بـ Region، وتقدر تنسخها حسب احتياجك.
+
+عائلات الـ instances بتلمّح لطبيعة الموارد:
+
+- `T` و`M`: استخدام عام؛ بداية منطقية لتطبيق المدرسة.
+- `C`: compute optimized للحسابات الكثيفة.
+- `R` و`X`: memory optimized للأحمال اللي محتاجة RAM كبيرة.
+- `I` و`D`: storage optimized لأحمال I/O أو تخزين محلي مخصوص.
+- عائلات accelerated computing للـ GPU والـ ML والجرافيكس.
+
+<Hl c="g">اختار على قياس الـ workload والـ metrics، مش على أكبر رقم.</Hl>
+
+## User data والـ bootstrap
+
+`User data` تعليمات تتنفذ غالبًا وقت أول إقلاع عشان تثبّت web server أو تنزّل التطبيق. دي مش مكان مناسب لـ passwords أو access keys مكتوبة صراحة.
+
+<Box type="tip" title="خلّي البداية قابلة للإعادة">
+
+لو السيرفر وقع وAuto Scaling عمل واحد جديد، تعليمات الإعداد لازم توصّله لنفس الحالة. خزّن الأسرار في خدمة مخصصة، وادّي الـ instance IAM role بدل credentials ثابتة.
+
+</Box>
+
+## Security Group
+
+الـ Security Group firewall افتراضي مرتبط بالـ network interface. قواعده **stateful**: لو سمحت بطلب داخل، الرد مسموح من غير قاعدة عكسية منفصلة.
+
+لبوابة المدرسة، افتح `HTTPS` من الجمهور للـ web tier، وخلّي الإدارة من مصدر موثوق عند الضرورة. متفتحش كل البورتات لكل الإنترنت لمجرد إن التجربة «تشتغل».
+
+## دورة الحياة
+
+<Flow items={[
+  { t: "pending", s: "بيتجهّز", c: 1 },
+  "→",
+  { t: "running", s: "شغّال وبيتحاسب", c: 2 },
+  "→",
+  { t: "stopped", s: "الـ compute واقف", c: 3 },
+  "→",
+  { t: "terminated", s: "اتنهى", c: 5 },
+]} />
+
+`Reboot` يعيد تشغيل نفس الـ instance. `Stop/Start` يوقف compute ثم يبدأها، وقد تتغير public IPv4 غير الثابتة. `Terminate` إنهاء، وممكن الـ root EBS يتحذف حسب إعداد `DeleteOnTermination`.
+
+حتى لو instance واقفة، موارد زي EBS volume أو Elastic IP غير مستخدم ممكن تفضل بتتحاسب.
+
+## لمحة عن طرق الشراء
+
+<Grid2>
+<Card title="On-Demand" c={1}>
+
+مرن ومن غير التزام طويل؛ مناسب لحمل متغيّر أو بداية غير معروفة.
+
+</Card>
+<Card title="Savings Plans / Reserved" c={2}>
+
+خصم مقابل commitment أو خصائص حجز حسب النوع؛ مناسب لاستخدام متوقع، وراجع التفاصيل لأنهم مش نفس المنتج.
+
+</Card>
+</Grid2>
+
+`Spot` يستغل سعة فائضة بخصم، لكن AWS ممكن تقاطعها بإشعار قصير؛ مناسب لشغل قابل للإعادة، مش سيرفر المدرسة الوحيد. `Dedicated Hosts/Instances` للعزل أو متطلبات ترخيص مخصوصة، وتكلفتها أعلى عادةً.
+
+## 🧪 Lab ورقي آمن
+
+ارسم بطاقة instance للبوابة: `AMI: Linux`، `Family: general purpose`، inbound `443`، وrole لقراءة asset محدد. بعدين اكتب قدامها: On-Demand في البداية، ومراجعة metrics قبل تغيير الحجم.
+
+مفيش resource هيتعمل. لو طبّقت فعليًا، راجع السعر أولًا، اقفل المنافذ الزيادة، وبعد التجربة اعمل terminate واحذف volumes أو IPs غير المطلوبة.
+
+## متخلطش بينهم
+
+الـ AMI تحدد **البداية البرمجية**، والـ instance type يحدد **الموارد**، والـ purchase option يغيّر **طريقة السعر والتزامك**، والـ Security Group يتحكم في **الترافيك**.
+
+الفصل الجاي هنركّب هارد افتراضي دائم للـ instance ونفهم EBS والـ snapshots.
+
+<Checklist id="aws-cp-12" title="خلّصت الفصل لما" items={["تفرّق AMI عن instance type", "تشرح user data من غير ما تحط فيها أسرار", "تعرف إن Security Groups stateful", "تميّز On-Demand وSpot والالتزامات على مستوى مبتدئ", "تراجع موارد بتفضل مدفوعة بعد stop"]} />
+
+<Quiz>
+<Q n={1} q="إيه اللي يحدد صورة نظام التشغيل عند الإطلاق؟">الـ AMI.</Q>
+<Q n={2} q="Spot مناسبة لنسخة بوابة وحيدة لا تحتمل الانقطاع؟">لأ؛ Spot قابلة للمقاطعة، فتلائم شغل قابل للإعادة أو متحمّل للفشل.</Q>
+<Q n={3} q="وقفت instance؛ هل الفاتورة بقت صفر أكيد؟">لأ. compute المتوقف لا يُحاسب كتشغيل عادةً، لكن EBS وموارد أخرى ممكن تفضل مدفوعة.</Q>
+</Quiz>

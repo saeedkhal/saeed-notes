@@ -1,0 +1,104 @@
+---
+title: "ELB وAuto Scaling: البوابة تكبر بأمان"
+short: Scaling وLoad Balancing
+order: 14
+label: فصل ١٤
+badge: Compute · فصل ١٤
+en: Elastic Load Balancing · Auto Scaling · horizontal · vertical · health checks
+keywords: ALB · NLB · GWLB · target group · scale out · high availability
+goal: تفهم توزيع الترافيك والتوسّع الأفقي والرأسي ودور ELB مع EC2 Auto Scaling.
+part: Compute
+color: c4
+---
+
+## سيرفر أكبر ولا سيرفرات أكتر؟
+
+`Vertical scaling` يعني تزود CPU أو RAM لنفس السيرفر. بسيط، لكن له سقف وقد يحتاج توقف. `Horizontal scaling` يعني تزود instances وتوزع الحمل؛ أعقد، لكنه يساعد الـ availability والمرونة.
+
+<Box type="story" icon="🎫" title="شباك شؤون الطلبة">
+
+التوسّع الرأسي إنك تحط موظف أسرع على نفس الشباك. الأفقي إنك تفتح شبابيك زيادة. الـ load balancer هو موظف الاستقبال اللي يوزع الطابور على الشبابيك السليمة.
+
+</Box>
+
+## Elastic Load Balancing
+
+`ELB` اسم العيلة. الـ load balancer يستقبل الترافيك ويوجهه لـ targets سليمة في target groups، ويعمل health checks بدل ما يبعت الطلب لسيرفر تعبان.
+
+<Grid2>
+<Card title="Application Load Balancer" c={1}>
+
+للـ `HTTP/HTTPS` على Layer 7. يفهم host وpath؛ مثلًا `/api` لخدمة و`/images` لخدمة تانية.
+
+</Card>
+<Card title="Network Load Balancer" c={2}>
+
+للـ `TCP/UDP` وحالات الأداء العالي وLayer 4، ويدعم خصائص شبكة زي static IPs.
+
+</Card>
+</Grid2>
+
+<Grid2>
+<Card title="Gateway Load Balancer" c={3}>
+
+لتوزيع الترافيك على virtual appliances زي firewalls وأنظمة الفحص. مش الاختيار العادي لموقع المدرسة.
+
+</Card>
+<Card title="Classic Load Balancer" c={5}>
+
+الجيل السابق. موجود في أسئلة ومشاريع قديمة، لكن التصميم الجديد يبدأ غالبًا من ALB أو NLB حسب البروتوكول.
+
+</Card>
+</Grid2>
+
+## EC2 Auto Scaling
+
+الـ <En>Auto Scaling Group</En> ليها:
+
+- `minimum`: أقل عدد تحافظ عليه.
+- `desired`: العدد المطلوب حاليًا.
+- `maximum`: السقف اللي متعديهوش.
+- launch template يصف instance الجديدة.
+- scaling policies مبنية على metric أو schedule أو توقع.
+
+لو instance بقت unhealthy، المجموعة تقدر تستبدلها. ولما تربط target group، الـ instances الجديدة تتسجل والقديمة تتشال تلقائيًا.
+
+<Hl c="b">ELB يوزّع الطلبات؛ Auto Scaling يغيّر عدد الـ instances. الاتنين بيكملوا بعض، مش نفس الخدمة.</Hl>
+
+## شكل بوابة المدرسة
+
+<Flow items={[
+  { t: "الطلبة", c: 1 },
+  "→",
+  { t: "ALB", s: "HTTPS + health checks", c: 2 },
+  "→",
+  { t: "Auto Scaling Group", s: "instances عبر AZs", c: 4 },
+]} />
+
+وقت إعلان النتيجة، policy ممكن تعمل scale out. بعد الزحمة، تعمل scale in ضمن الحدود. التطبيق لازم يبقى مستعد: session مش متعلقة بقرص instance واحدة، والـ instances قابلة للاستبدال.
+
+## 🧪 تمرين ورقة: مطلوب كام؟
+
+اكتب `min=2`, `desired=2`, `max=6`. ارسم حالتين: ضغط يرفع average CPU فيضيف instances، وهدوء يقلله. بعدين اشطب instance مريضة وارسم replacement.
+
+ده تصميم ورقي بلا تكلفة. إنشاء ALB وinstances له تكلفة حتى لو الترافيك قليل؛ راجع التسعير، وبعد أي تجربة احذف الـ Auto Scaling Group والـ load balancer والـ launch resources المرتبطة.
+
+<Box type="warn" title="Scaling مش علاج لكل مشكلة">
+
+لو query قاعدة البيانات بطيئة، إضافة web servers ممكن تزود الضغط عليها. راقب bottleneck، وحط cooldown أو stabilization مناسب، ومتخليش policy تتأرجح.
+
+</Box>
+
+## اختار من كلمات السؤال
+
+`HTTP path routing` → ALB. `TCP/UDP أو Layer 4` → NLB. `fleet of security appliances` → GWLB. `يحافظ على العدد ويستبدل unhealthy` → EC2 Auto Scaling.
+
+الفصل الجاي هنسيب إدارة السيرفرات ونشغّل أجزاء البوابة كـ events على Lambda.
+
+<Checklist id="aws-cp-14" title="خلّصت الفصل لما" items={["تفرق vertical عن horizontal scaling", "تختار ALB للـ HTTP routing وNLB للـ Layer 4", "تشرح min وdesired وmax", "تفرق دور ELB عن Auto Scaling", "تذكر إن التطبيق لازم يستحمل استبدال instances"]} />
+
+<Quiz>
+<Q n={1} q="مين يضيف instance جديدة وقت الضغط: ALB ولا Auto Scaling؟">EC2 Auto Scaling. ALB يوزع الترافيك على الـ targets المتاحة.</Q>
+<Q n={2} q="عايز توجّه `/api` و`/admin` لمجموعتين؛ تختار إيه؟">Application Load Balancer لأنه يدعم path-based routing.</Q>
+<Q n={3} q="إيه خطر الاعتماد على session جوّه قرص instance واحدة؟">الطلب التالي قد يروح لinstance تانية أو الأولى تتشال، فتضيع الجلسة؛ الأفضل state مشتركة مناسبة.</Q>
+</Quiz>

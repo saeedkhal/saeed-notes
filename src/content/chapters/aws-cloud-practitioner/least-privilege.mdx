@@ -1,0 +1,88 @@
+---
+title: أقل صلاحية وأقصر مفتاح
+short: Least Privilege
+order: 8
+label: فصل ٨
+badge: الأمان والحساب · فصل ٨
+en: least privilege · temporary credentials · IAM Identity Center · permissions boundary
+keywords: temporary credentials · federation · Identity Center · boundary
+goal: تقلل الصلاحية ومدة الـ credentials، وتفهم دور Identity Center والـ permissions boundary.
+part: الأمان والحساب
+color: c3
+---
+
+## أقل صلاحية عملية مستمرة
+
+Principle of least privilege معناها تدي الصلاحيات المطلوبة للمهمة، على الموارد المطلوبة، وللمدة المطلوبة. مش معناها تبدأ بـ `AdministratorAccess` وتوعد إنك هتضيقها بعدين.
+
+بوابة المدرسة تقرأ صور الطلبة من bucket محدد؛ مش محتاجة تحذف كل buckets في الحساب.
+
+<Box type="story" icon="🗝️" title="مفتاح معمل الكمبيوتر">
+
+المدرس المناوب ياخد مفتاح المعمل وقت الحصة ويرجعه بعدها. منديهوش نسخة تفتح المدرسة كلها وتفضل معاه للأبد. ده جمع least privilege مع temporary access.
+
+</Box>
+
+## Temporary credentials أفضل
+
+الـ role session بتطلع access key وsecret وsession token لهم مدة صلاحية. لما المدة تنتهي، البيانات تبطل حتى لو نسخة منها اتسربت.
+
+ده يقلل الخطر مقارنة بـ long-term access keys، لكنه مش يلغيه: session مسروقة تشتغل لحد انتهاءها، فلازم صلاحياتها محدودة ومدة الجلسة مناسبة.
+
+للـ workloads على AWS، اربط role بالخدمة بدل تخزين keys في الكود أو ملف `.env`. للبشر، استخدم federation ومسار دخول مركزي.
+
+## IAM Identity Center للبشر
+
+AWS IAM Identity Center يدي إدارة مركزية لوصول workforce لأكتر من AWS account وتطبيق. تقدر تستخدم مخزن هويات داخلي أو تربطه بمزود هوية خارجي، وتوزع permission sets على users وgroups وحسابات.
+
+<Flow items={[
+  { t: "المستخدم", s: "دخول مركزي + MFA", c: 1 },
+  "→",
+  { t: "Identity Center", s: "Permission set", c: 2 },
+  "→",
+  { t: "Role session", s: "Credentials مؤقتة", c: 3 },
+  "→",
+  { t: "AWS account", s: "مهمة محددة", c: 4 },
+]} />
+
+Identity Center مش بديل عن تصميم الصلاحيات؛ هو ينظم الدخول والتوزيع. Permission set واسع يفضل واسع.
+
+## Permissions boundary: سقف مش منحة
+
+Permissions boundary هي managed policy بتحط **الحد الأقصى** اللي identity-based policies تقدر تمنحه لـ IAM user أو role. هي لا تمنح permission لوحدها.
+
+مثال: فريق المدرسة مسموح له ينشئ roles للتطبيقات، لكن boundary تمنع أي role جديد من الخروج عن خدمات أو حدود معينة. ده يفيد تفويض إدارة الصلاحيات.
+
+<Hl c="g">لو identity policy قالت Allow والـ boundary مش سامحة بالنطاق، الصلاحية الفعلية مش هتتمنح.</Hl>
+
+وفيه طبقات تانية زي AWS Organizations SCPs. الـ SCP يحدد أقصى صلاحيات متاحة لحسابات المؤسسة؛ مش هو كمان grant مباشر.
+
+## دورة تضييق الصلاحية
+
+1. ابدأ من task واضحة وصلاحيات قليلة.
+2. اختبر في بيئة غير إنتاجية.
+3. راقب الاستخدام والطلبات المرفوضة.
+4. استخدم أدوات زي IAM Access Analyzer ومعلومات last accessed كأدلة مساعدة.
+5. شيل الصلاحيات غير المستخدمة وراجع دوريًا.
+
+<Box type="warn" title="متصلحش AccessDenied بـ wildcard">
+
+إضافة `Action: *` و`Resource: *` سريعة، لكنها تخفي السبب وتوسع أثر أي اختراق. اقرأ الحدث وحدد action وresource وcondition المطلوبة.
+
+</Box>
+
+## 🧪 Lab آمن: صغّر الطلب
+
+حوّل جملة «التطبيق يدير S3» لثلاث جمل أدق: أفعال محددة، bucket محدد، ومدة session مقترحة. بعدين اكتب حاجة واحدة ممنوعة صراحة في تصميمك. التمرين من غير حساب.
+
+## قبل الفصل الجاي
+
+ضيّقنا الوصول، لكن مين مسؤول عن patching والتشفير والحماية؟ الفصل الجاي يقسم المسؤولية بين AWS والمدرسة حسب نوع الخدمة.
+
+<Checklist id="aws-cp-08" title="خلّصت الفصل لما" items={["تطبق least privilege على action وresource والمدة", "تشرح ميزة temporary credentials وحدودها", "تعرف دور IAM Identity Center للبشر", "تعرف إن permissions boundary سقف وليست grant"]} />
+
+<Quiz>
+<Q n={1} q="ليه temporary credentials أقل خطورة من key دائمة؟">لأنها تنتهي تلقائيًا، مع ضرورة تقييد صلاحياتها وحماية الجلسة أثناء عمرها.</Q>
+<Q n={2} q="هل permissions boundary تمنح قراءة S3 وحدها؟">لأ. هي تحدد الحد الأقصى؛ لازم policy أخرى تمنح القراءة.</Q>
+<Q n={3} q="Identity Center حل مشكلة الصلاحيات الواسعة تلقائيًا؟">لأ. ينظم الدخول والجلسات، لكن لازم permission sets نفسها تتصمم بأقل صلاحية.</Q>
+</Quiz>

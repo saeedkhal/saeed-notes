@@ -1,0 +1,85 @@
+---
+title: من اسم الموقع لأقرب باب — DNS والـ Edge
+short: DNS والـ Edge
+order: 24
+label: فصل ٢٤
+badge: Networking · فصل ٢٤
+en: Route 53 · CloudFront · edge locations · Global Accelerator
+keywords: DNS · CDN · edge · accelerator
+goal: تفرق بين حل الاسم وكاش المحتوى وتسريع اتصال التطبيق العالمي.
+part: Networking
+color: c4
+---
+
+## Route 53: دليل التليفونات
+
+<En>Amazon Route 53</En> خدمة DNS بتترجم `portal.school.example` لوجهة يفهمها الجهاز. تقدر تسجل domain، تدير records، تعمل health checks، وتستخدم routing policies.
+
+<Box type="story" icon="📒" title="دليل المدرسة">
+
+Route 53 يقول للطالب عنوان البوابة، لكنه مش البوابة ولا بيخزن صفحة الموقع. زي دليل تليفونات يديك الرقم، مش هو اللي يرد على المكالمة.
+
+</Box>
+
+سياسات مشهورة في مستوى الامتحان:
+
+- Simple: وجهة عادية.
+- Weighted: توزّع بنسبة، مفيدة لتجربة إصدار.
+- Latency-based: تبعت المستخدم للـ Region الأقل latency.
+- Failover: primary وsecondary مع health check.
+- Geolocation: قرار حسب مكان المستخدم.
+
+## CloudFront: نسخة قريبة
+
+<En>Amazon CloudFront</En> شبكة توصيل محتوى <En>CDN</En>. بتجيب المحتوى من origin زي S3 أو load balancer أو API، وتخزن المناسب في edge locations قريبة من المستخدمين.
+
+<Flow items={[
+  { t: "الطالب", s: "القاهرة", c: 1 }, "→",
+  { t: "CloudFront Edge", s: "cache hit؟", c: 4 }, "→",
+  { t: "Origin", s: "S3 أو API", c: 2 },
+]} />
+
+لو cache hit، الرد يطلع من الـ edge. لو miss، CloudFront تروح للـ origin وترجع الرد حسب cache policy.
+
+Edge location مش Region جديدة تشغّل فيها كل خدماتك؛ هي نقطة حضور لخدمات edge.
+
+## Global Accelerator: طريق أسرع للتطبيق
+
+<En>AWS Global Accelerator</En> يدي static anycast IPs ويدخل TCP/UDP traffic على شبكة AWS العالمية ويوجهه لـ healthy regional endpoints.
+
+<Grid2>
+<Card title="CloudFront" c={4}>
+
+CDN وcache على مستوى HTTP/HTTPS، مناسب للصور والملفات والويب والـ APIs القابلة للتسريع.
+
+</Card>
+<Card title="Global Accelerator" c={5}>
+
+توجيه شبكة لـ TCP/UDP، static IPs، وhealth-based regional routing. مش cache للمحتوى.
+
+</Card>
+</Grid2>
+
+<Hl c="y">Route 53 يحل الاسم، CloudFront يقرّب نسخة محتوى، Global Accelerator يحسّن طريق الاتصال.</Hl>
+
+ممكن تستخدم Route 53 قدام CloudFront أو Global Accelerator؛ الخدمات مش دايمًا بدائل مباشرة.
+
+## سيناريو بوابة المدرسة
+
+ملفات CSS وصور الكتب على S3 وCloudFront. Route 53 يربط اسم البوابة بتوزيعة CloudFront. لو عندنا لعبة امتحان realtime على TCP في Regions متعددة، Global Accelerator مرشح أقوى.
+
+## 🧪 تمرين ورقي آمن
+
+اكتب أربع بطاقات: "حل اسم"، "كاش صورة"، "static IP عالمي لتطبيق TCP"، "تحويل عند عطل Region". وصلهم بـ Route 53 أو CloudFront أو Global Accelerator، وممكن أكتر من إجابة في التحويل حسب التصميم.
+
+لو أنشأت CloudFront أو Global Accelerator فعليًا، راجع التسعير ونقل البيانات واحذف الموارد بعد التجربة. التسجيل والـ hosted zones والـ health checks قد تحمل تكلفة.
+
+الفصل الجاي هنوصل شبكة المدرسة بالمقر والفروع وشبكات AWS التانية.
+
+<Checklist id="aws-cp-24" title="خلّصت الفصل لما" items={["تعرف إن Route 53 DNS مش CDN", "تشرح cache hit وorigin في CloudFront", "تعرف إن edge location مش Region", "تقول Global Accelerator لا يكيّش المحتوى", "تختار الخدمة حسب DNS أو content أو network path"]} />
+
+<Quiz>
+<Q n={1} q="عايز صور المنهج تتحمل من مكان قريب للطالب؛ تختار إيه؟">CloudFront قدام origin زي S3.</Q>
+<Q n={2} q="عايز static IPs عالمية لتطبيق TCP متعدد الـ Regions؟">AWS Global Accelerator.</Q>
+<Q n={3} q="هل Route 53 بيخزن نسخة من ملف PDF؟">لأ، هو DNS؛ CloudFront هي خدمة الكاش والتوصيل المناسبة.</Q>
+</Quiz>
